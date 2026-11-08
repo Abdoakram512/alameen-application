@@ -310,6 +310,9 @@ const server = http.createServer((req, res) => {
   delete upstreamHeaders['proxy-connection'];
   delete upstreamHeaders['accept-encoding'];
   upstreamHeaders['accept-encoding'] = 'identity';
+  // The external gate has already authenticated the caller. Authenticate its
+  // private connection to serve-sim too; never expose the service token.
+  if (!agent) upstreamHeaders.authorization = `Bearer ${TOKEN}`;
 
   if (res.socket) {
     res.socket.setNoDelay(true);
@@ -405,6 +408,7 @@ server.on('upgrade', (req, socket, head) => {
     const { connection: _c, 'proxy-connection': _pc, te: _te, ...forwardHeaders } = req.headers;
     const headersStr = Object.entries({
       ...forwardHeaders,
+      ...(!isAgent && !isSignal ? { authorization: `Bearer ${TOKEN}` } : {}),
       // Hop-by-hop "Connection: Upgrade" must be re-sent upstream, otherwise
       // Node's HTTP parser on :3201 / serve-sim never sees a WebSocket upgrade
       // and answers 404 (no /signal, no /ws input).
