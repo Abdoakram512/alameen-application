@@ -29,6 +29,13 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+  use_modular_headers!
+
+  # Match firebase_core 5.1.0's CocoaPods SDK, using Firebase's documented
+  # precompiled distribution to avoid recompiling Firestore and gRPC.
+  pod 'FirebaseFirestore',
+    :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git',
+    :tag => '12.19.3'
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
