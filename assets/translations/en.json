@@ -1,0 +1,130 @@
+{
+  "app_name": "Elameen Center",
+  "app_tagline": "Encrypted & Secure Mux Streaming & Courses Platform",
+  "student_portal": "Student Portal • Encrypted Lectures Platform",
+  "security_shield_desc": "Hardware Encrypted Protection Against Screen Capture & Recording",
+  "splash_loading": "Initializing security & lecture resources...",
+  
+  "auth": {
+    "login_title": "Student Sign In",
+    "email": "Email Address",
+    "email_hint": "student@example.com",
+    "password": "Password",
+    "password_hint": "••••••••",
+    "confirm_password": "Confirm Password",
+    "full_name": "Student Full Name",
+    "full_name_hint": "Ahmed Mohamed Ali",
+    "phone": "Phone / WhatsApp",
+    "phone_hint": "01012345678",
+    "forgot_password": "Forgot Password?",
+    "login_btn": "Sign In",
+    "or_continue_with": "Or quick sign in with",
+    "google_login_btn": "Continue with Google Account",
+    "new_student": "New student at Elameen Center?",
+    "create_account": "Create New Account",
+    "already_have_account": "Already have an account?",
+    "register_title": "Create Student Account",
+    "register_subtitle": "Join Elameen Center Educational Platform to access protected courses",
+    "register_btn": "Create Account & Continue",
+    "back_to_login": "Back to Sign In",
+    "sign_out": "Sign Out",
+    "sign_out_confirm": "Are you sure you want to sign out from your account?",
+    "auth_footer_trust": "Secure & encrypted login via Firebase and Google Auth"
+  },
+
+  "validation": {
+    "email_required": "Please enter your email address",
+    "email_invalid": "Please enter a valid email address",
+    "password_required": "Please enter your password",
+    "password_min_length": "Password must be at least 6 characters",
+    "confirm_password_required": "Please confirm your password",
+    "passwords_mismatch": "Passwords do not match",
+    "name_required": "Please enter your full name",
+    "name_min_two_words": "Please enter at least first and last name",
+    "phone_required": "Please enter your phone number",
+    "phone_invalid": "Phone number is invalid"
+  },
+
+  "dialogs": {
+    "ok": "Got It",
+    "retry": "Try Again",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "yes_continue": "Yes, Continue",
+    "go_back": "Go Back",
+    "error_title": "Notice",
+    "success_title": "Success",
+    "forgot_password_title": "Reset Password",
+    "forgot_password_desc": "Enter your registered email and we will send you a password reset link immediately.",
+    "send_reset_link": "Send Reset Link",
+    "reset_link_sent_title": "Link Sent",
+    "reset_link_sent_desc": "Password reset instructions have been sent to your email. Please check your inbox or spam folder."
+  },
+
+  "courses": {
+    "all_courses": "All Available Courses",
+    "my_courses": "Enrolled Courses",
+    "curriculum_title": "Course Curriculum & Levels",
+    "levels_count": "Levels",
+    "lessons_count": "Lessons",
+    "progress_title": "Your Course Progress",
+    "progress_summary": "Completed {completed} of {total} lessons successfully",
+    "level_prefix": "Level",
+    "lesson_prefix": "Lesson",
+    "watch_now": "Watch",
+    "completed": "Completed",
+    "locked": "Locked",
+    "free_preview": "Free Preview 🎁",
+    "hls_hd": "HD Encrypted Stream",
+    "locked_lesson_msg": "This lesson is locked. Please request access and submit proof of payment to unlock.",
+    "no_levels": "No levels or lessons have been uploaded for this course yet",
+    "request_access_btn": "Request Access & Upload Payment Receipt",
+    "request_pending": "Your request is pending administrative review",
+    "request_approved": "Already enrolled in this course"
+  },
+
+  "assignments": {
+    "title": "Practical Tasks & Assignments",
+    "tasks_count": "Tasks",
+    "score": "Points",
+    "submit_solution": "Submit Solution to Admin",
+    "submission_sent": "Solution submitted successfully",
+    "status_pending": "Pending Grading",
+    "status_graded": "Graded"
+  },
+
+  "profile": {
+    "title": "Student Profile",
+    "student_id": "Student ID",
+    "total_watch_time": "Total Watch Time",
+    "completed_lessons": "Completed Lessons",
+    "enrolled_courses": "Enrolled Courses",
+    "app_settings": "App Settings",
+    "change_language": "Change App Language",
+    "current_lang": "English"
+  },
+
+  "security": {
+    "recording_detected_title": "🚨 Screen Recording Detected!",
+    "recording_detected_desc": "Elameen Center app is protected against recording and media copying.\nA screen recording tool is currently active. Playback has been halted to protect intellectual property.",
+    "stop_recording_hint": "Please stop screen recording completely, then tap 'Verify & Continue'.",
+    "verify_and_continue": "Verify & Continue",
+    "verified_success": "Verified successfully. Welcome back to Elameen Center!"
+  },
+
+  "requests": {
+    "sheet_title": "Request Course Enrollment",
+    "sheet_subtitle": "Select your payment method and attach transfer receipt for instant activation",
+    "payment_method": "Payment & Transfer Method",
+    "sender_ref": "Sender Phone Number or Transaction Ref",
+    "sender_ref_hint": "e.g., 01012345678 or transfer code",
+    "receipt_image": "Transfer Receipt Image",
+    "pick_receipt": "Tap to choose receipt from gallery",
+    "change_receipt": "Change receipt image",
+    "receipt_picked": "Receipt image attached successfully",
+    "submit_btn": "Submit Enrollment Request",
+    "submitting": "Submitting request and verifying receipt...",
+    "cash_center_note": "When paying in cash, please visit the center cash desk to activate your course immediately."
+  }
+}
+

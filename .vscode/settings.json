@@ -1,0 +1,34 @@
+{
+  "java.import.gradle.enabled": false,
+  "java.import.gradle.wrapper.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.import.exclusions": [
+    "**/android/**",
+    "**/build/**",
+    "**/.dart_tool/**"
+  ],
+  "java.autobuild.enabled": false,
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "java.server.launchMode": "LightWeight",
+  "java.gradle.buildServer.enabled": "off",
+  "java.errors.incompleteClasspath.severity": "ignore",
+  "java.diagnostic.filter": [
+    "**/android/**",
+    "**/build.gradle.kts",
+    "**/*.gradle.kts",
+    "**/*.gradle"
+  ],
+  "gradle.autoDetect": "off",
+  "gradle.nestedProjects": false,
+  "java.jdt.ls.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
+  "java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
+  "java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
+  "gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-21",
+      "path": "C:\\Program Files\\Android\\Android Studio\\jbr",
+      "default": true
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "app_name": "الأمين سنتر التعليمي",
+  "app_tagline": "منصة الكورسات وبث Mux المشفر والآمن",
+  "student_portal": "بوابة الطالب • منصة المحاضرات المشفرة",
+  "security_shield_desc": "حماية كاملة مشفرة ضد التسجيل والتقاط الشاشة",
+  "splash_loading": "جارٍ تهيئة نظام الحماية والدروس...",
+  
+  "auth": {
+    "login_title": "تسجيل الدخول للطلاب",
+    "email": "البريد الإلكتروني",
+    "email_hint": "student@example.com",
+    "password": "كلمة المرور",
+    "password_hint": "••••••••",
+    "confirm_password": "تأكيد كلمة المرور",
+    "full_name": "الاسم الكامل للطالب",
+    "full_name_hint": "أحمد محمد علي",
+    "phone": "رقم الهاتف / واتساب",
+    "phone_hint": "01012345678",
+    "forgot_password": "نسيت كلمة المرور؟",
+    "login_btn": "تسجيل الدخول",
+    "or_continue_with": "أو المتابعة السريعة بواسطة",
+    "google_login_btn": "المتابعة باستخدام حساب Google",
+    "new_student": "طالب جديد في الأمين سنتر؟",
+    "create_account": "إنشاء حساب جديد",
+    "already_have_account": "لديك حساب بالفعل في المنصة؟",
+    "register_title": "إنشاء حساب طالب جديد",
+    "register_subtitle": "انضم الآن إلى منصة الأمين سنتر التعليمية لمتابعة أقوى الكورسات",
+    "register_btn": "إنشاء الحساب والمتابعة",
+    "back_to_login": "العودة لتسجيل الدخول",
+    "sign_out": "تسجيل الخروج",
+    "sign_out_confirm": "هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟",
+    "auth_footer_trust": "تسجيل دخول آمن وموثوق بواسطة Firebase و Google Auth"
+  },
+
+  "validation": {
+    "email_required": "يرجى كتابة البريد الإلكتروني",
+    "email_invalid": "يرجى كتابة بريد إلكتروني صالح",
+    "password_required": "يرجى كتابة كلمة المرور",
+    "password_min_length": "يجب ألا تقل كلمة المرور عن 6 أحرف أو أرقام",
+    "confirm_password_required": "يرجى تأكيد كلمة المرور",
+    "passwords_mismatch": "كلمتا المرور غير متطابقتين",
+    "name_required": "يرجى كتابة اسم الطالب كاملاً",
+    "name_min_two_words": "يرجى كتابة الاسم ثنائياً على الأقل",
+    "phone_required": "يرجى إدخال رقم الهاتف للتواصل",
+    "phone_invalid": "رقم الهاتف غير صالح"
+  },
+
+  "dialogs": {
+    "ok": "حسناً، فهمت",
+    "retry": "إعادة المحاولة",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "yes_continue": "نعم، استمر",
+    "go_back": "تراجع",
+    "error_title": "تنبيه",
+    "success_title": "تم بنجاح",
+    "forgot_password_title": "استعادة كلمة المرور",
+    "forgot_password_desc": "أدخل بريدك الإلكتروني المسجل في الأمين سنتر وسنرسل لك رابطاً لإعادة تعيين كلمة المرور فوراً.",
+    "send_reset_link": "إرسال الرابط",
+    "reset_link_sent_title": "تم إرسال الرابط",
+    "reset_link_sent_desc": "تم إرسال تعليمات إعادة تعيين كلمة المرور إلى بريدك الإلكتروني. تفقد صندوق الوارد أو البريد العشوائي (Spam)."
+  },
+
+  "courses": {
+    "all_courses": "جميع الكورسات المتاحة",
+    "my_courses": "دوراتي المشترك بها",
+    "curriculum_title": "منهج ومستويات الكورس",
+    "levels_count": "مستويات",
+    "lessons_count": "درس",
+    "progress_title": "نسبة إنجازك في الدورة",
+    "progress_summary": "أكملت {completed} من أصل {total} درساً بنجاح",
+    "level_prefix": "المستوى",
+    "lesson_prefix": "الدرس",
+    "watch_now": "مشاهدة",
+    "completed": "مكتمل",
+    "locked": "مغلق",
+    "free_preview": "معاينة مجانية 🎁",
+    "hls_hd": "بث مشفر HD",
+    "locked_lesson_msg": "هذا الدرس مغلق. يرجى الضغط على 'طلب انضمام ورفع إيصال الدفع' لفتحه فور اعتماده.",
+    "no_levels": "لم يتم رفع مستويات أو دروس لهذا الكورس بعد",
+    "request_access_btn": "طلب انضمام ورفع إيصال الدفع",
+    "request_pending": "طلبك قيد المراجعة لدى الإدارة",
+    "request_approved": "مشترك بالفعل في الدورة"
+  },
+
+  "assignments": {
+    "title": "المهمات والواجبات التطبيقية",
+    "tasks_count": "مهمة",
+    "score": "درجة",
+    "submit_solution": "تسليم الحل للأدمن",
+    "submission_sent": "تم تسليم الحل بنجاح",
+    "status_pending": "قيد المراجعة والتصحيح",
+    "status_graded": "تم التقييم"
+  },
+
+  "profile": {
+    "title": "الملف الشخصي",
+    "student_id": "معرف الطالب",
+    "total_watch_time": "إجمالي وقت المشاهدة",
+    "completed_lessons": "الدروس المنجزة",
+    "enrolled_courses": "الدورات المشترك بها",
+    "app_settings": "إعدادات التطبيق",
+    "change_language": "تغيير لغة التطبيق",
+    "current_lang": "العربية"
+  },
+
+  "security": {
+    "recording_detected_title": "🚨 تم اكتشاف تسجيل الشاشة!",
+    "recording_detected_desc": "تطبيق 'الأمين سنتر' محمي ضد التسجيل وحفظ الوسائط.\nتم رصد أداة تسجيل شاشة تعمل الآن. تم إيقاف المشغل وحجب المنصة بالكامل لحماية الملكية الفكرية.",
+    "stop_recording_hint": "يرجى إيقاف تسجيل الشاشة تماماً ثم النقر على زر 'التحقق والمتابعة'.",
+    "verify_and_continue": "إعادة الفحص والمتابعة",
+    "verified_success": "تم التحقق بنجاح. أهلاً بك في الأمين سنتر!"
+  },
+
+  "requests": {
+    "sheet_title": "طلب انضمام إلى الدورة",
+    "sheet_subtitle": "يرجى اختيار طريقة الدفع وإرفاق بيانات إيصال التحويل للاعتماد الفوري",
+    "payment_method": "طريقة الدفع والتحويل",
+    "sender_ref": "رقم الهاتف المحول منه أو رقم العملية",
+    "sender_ref_hint": "مثال: 01012345678 أو كود التحويل",
+    "receipt_image": "صورة إيصال التحويل",
+    "pick_receipt": "اضغط لاختيار صورة الإيصال من المعرض",
+    "change_receipt": "تغيير صورة الإيصال",
+    "receipt_picked": "تم إرفاق صورة الإيصال بنجاح",
+    "submit_btn": "إرسال طلب الانضمام",
+    "submitting": "جارٍ إرسال الطلب واعتماد الإيصال...",
+    "cash_center_note": "عند اختيار السداد نقداً، يرجى مراجعة خزينة المركز لتفعيل اشتراكك فوراً."
+  }
+}
+
