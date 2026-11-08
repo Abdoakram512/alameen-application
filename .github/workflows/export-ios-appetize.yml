@@ -1,0 +1,32 @@
+name: Export iOS app for Appetize
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore verified simulator build
+        uses: actions/cache/restore@v4
+        with:
+          path: build/flutter-remote-app
+          key: flutter-remote-app-macOS-75ccbc0e6cd29e88
+          fail-on-cache-miss: true
+      - name: Package for Appetize
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/flutter-remote-app -maxdepth 2 -name '*.app' -type d | head -1)
+          test -n "$APP_PATH"
+          APP_NAME=$(basename "$APP_PATH")
+          mkdir -p export
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
+          file "$APP_PATH/Runner"
+          tar -czf export/secure_screen_app-ios-simulator.tar.gz -C build/flutter-remote-app "$APP_NAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: secure-screen-app-appetize
+          path: export/secure_screen_app-ios-simulator.tar.gz
+          retention-days: 7
