@@ -9,11 +9,19 @@ import '../../services/notification_service.dart';
 import '../../services/storage_service.dart';
 
 // Repositories (Interfaces & Implementations)
+import '../../repositories/admin_analytics_repository.dart';
+import '../../repositories/admins_repository.dart';
+import '../../repositories/app_content_repository.dart';
+import '../../repositories/assignments_repository.dart';
 import '../../repositories/auth_repository.dart';
 import '../../repositories/courses_repository.dart';
 import '../../repositories/mux_repository.dart';
 import '../../repositories/requests_repository.dart';
 import '../../repositories/students_repository.dart';
+import '../../repositories/impl/admin_analytics_repository_impl.dart';
+import '../../repositories/impl/admins_repository_impl.dart';
+import '../../repositories/impl/app_content_repository_impl.dart';
+import '../../repositories/impl/assignments_repository_impl.dart';
 import '../../repositories/impl/auth_repository_impl.dart';
 import '../../repositories/impl/courses_repository_impl.dart';
 import '../../repositories/impl/mux_repository_impl.dart';
@@ -37,7 +45,6 @@ Future<void> initDependencies() async {
   // 1. Data Sources & Services
   // ---------------------------------------------------------------------------
   sl.registerLazySingleton<AdminAuthService>(AdminAuthService.new);
-  sl.registerLazySingleton<FirestoreService>(FirestoreService.new);
   sl.registerLazySingleton<MuxService>(MuxService.new);
   sl.registerLazySingleton<StorageService>(StorageService.new);
   sl.registerLazySingleton<AdminNotificationService>(AdminNotificationService.new);
@@ -50,19 +57,48 @@ Future<void> initDependencies() async {
   );
 
   sl.registerLazySingleton<CoursesRepository>(
-    () => CoursesRepositoryImpl(firestoreService: sl<FirestoreService>()),
+    CoursesRepositoryImpl.new,
   );
 
   sl.registerLazySingleton<StudentsRepository>(
-    () => StudentsRepositoryImpl(firestoreService: sl<FirestoreService>()),
+    StudentsRepositoryImpl.new,
   );
 
   sl.registerLazySingleton<RequestsRepository>(
-    () => RequestsRepositoryImpl(firestoreService: sl<FirestoreService>()),
+    RequestsRepositoryImpl.new,
+  );
+
+  sl.registerLazySingleton<AssignmentsRepository>(
+    AssignmentsRepositoryImpl.new,
+  );
+
+  sl.registerLazySingleton<AdminAnalyticsRepository>(
+    AdminAnalyticsRepositoryImpl.new,
+  );
+
+  sl.registerLazySingleton<AdminsRepository>(
+    AdminsRepositoryImpl.new,
+  );
+
+  sl.registerLazySingleton<AppContentRepository>(
+    AppContentRepositoryImpl.new,
   );
 
   sl.registerLazySingleton<MuxRepository>(
     () => MuxRepositoryImpl(muxService: sl<MuxService>()),
+  );
+
+  // Legacy Facade (Backward compatibility with existing widgets/cubits)
+  sl.registerLazySingleton<FirestoreService>(
+    () => FirestoreService.withRepositories(
+      coursesRepository: sl<CoursesRepository>(),
+      studentsRepository: sl<StudentsRepository>(),
+      requestsRepository: sl<RequestsRepository>(),
+      assignmentsRepository: sl<AssignmentsRepository>(),
+      analyticsRepository: sl<AdminAnalyticsRepository>(),
+      adminsRepository: sl<AdminsRepository>(),
+      appContentRepository: sl<AppContentRepository>(),
+    ),
   );
 
   // ---------------------------------------------------------------------------
@@ -88,7 +124,7 @@ Future<void> initDependencies() async {
   );
 
   sl.registerLazySingleton<AdminAdminsCubit>(
-    () => AdminAdminsCubit(firestoreService: sl<FirestoreService>()),
+    () => AdminAdminsCubit(adminsRepository: sl<AdminsRepository>()),
   );
 
   // ---------------------------------------------------------------------------

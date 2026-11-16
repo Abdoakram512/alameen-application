@@ -2,21 +2,26 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/utils/network_error_mapper.dart';
 import '../../models/admin_model.dart';
+import '../../repositories/admins_repository.dart';
+import '../../repositories/impl/admins_repository_impl.dart';
 import '../../services/firestore_service.dart';
 import 'admin_admins_state.dart';
 
 class AdminAdminsCubit extends Cubit<AdminAdminsState> {
-  final FirestoreService _firestoreService;
+  final AdminsRepository _adminsRepository;
   StreamSubscription<List<AdminModel>>? _adminsSubscription;
 
-  AdminAdminsCubit({FirestoreService? firestoreService})
-      : _firestoreService = firestoreService ?? FirestoreService(),
+  AdminAdminsCubit({
+    AdminsRepository? adminsRepository,
+    FirestoreService? firestoreService,
+  })  : _adminsRepository = adminsRepository ??
+            (firestoreService?.adminsRepository ?? AdminsRepositoryImpl()),
         super(AdminAdminsInitial());
 
   void loadAdmins() {
     emit(AdminAdminsLoading());
     _adminsSubscription?.cancel();
-    _adminsSubscription = _firestoreService.streamAdmins().listen(
+    _adminsSubscription = _adminsRepository.streamAdmins().listen(
       (admins) {
         emit(AdminAdminsLoaded(admins));
       },
@@ -43,7 +48,7 @@ class AdminAdminsCubit extends Cubit<AdminAdminsState> {
   }) async {
     try {
       final cleanEmail = email.toLowerCase().trim();
-      final existing = await _firestoreService.getAdminByEmail(cleanEmail);
+      final existing = await _adminsRepository.getAdminByEmail(cleanEmail);
       if (existing != null) {
         emit(const AdminAdminsError('هذا البريد الإلكتروني مسجل بالفعل كمشرف.'));
         loadAdmins();
@@ -63,7 +68,7 @@ class AdminAdminsCubit extends Cubit<AdminAdminsState> {
         createdBy: createdBy,
       );
 
-      await _firestoreService.saveAdmin(newAdmin);
+      await _adminsRepository.saveAdmin(newAdmin);
       emit(const AdminAdminsActionSuccess('تمت إضافة المشرف بنجاح ومنحه الصلاحيات المحددة.'));
     } catch (e) {
       emit(AdminAdminsError('حدث خطأ أثناء إضافة المشرف: $e'));
@@ -76,7 +81,7 @@ class AdminAdminsCubit extends Cubit<AdminAdminsState> {
     required List<String> permissions,
   }) async {
     try {
-      await _firestoreService.updateAdminPermissions(
+      await _adminsRepository.updateAdminPermissions(
         adminId,
         role: role,
         permissions: permissions,
@@ -98,7 +103,7 @@ class AdminAdminsCubit extends Cubit<AdminAdminsState> {
         return;
       }
 
-      await _firestoreService.toggleAdminStatus(adminId, isActive);
+      await _adminsRepository.toggleAdminStatus(adminId, isActive);
       emit(AdminAdminsActionSuccess(
         isActive ? 'تم تنشيط حساب المشرف بنجاح.' : 'تم إيقاف صلاحيات المشرف مؤقتاً.',
       ));
@@ -117,7 +122,7 @@ class AdminAdminsCubit extends Cubit<AdminAdminsState> {
         return;
       }
 
-      await _firestoreService.deleteAdmin(adminId);
+      await _adminsRepository.deleteAdmin(adminId);
       emit(const AdminAdminsActionSuccess('تم حذف المشرف من النظام نهائياً.'));
     } catch (e) {
       emit(AdminAdminsError('حدث خطأ أثناء حذف المشرف: $e'));
