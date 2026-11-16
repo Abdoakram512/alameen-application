@@ -10,6 +10,8 @@ import '../../../logic/auth/admin_auth_cubit.dart';
 import '../../../logic/auth/admin_auth_state.dart';
 import '../../../models/admin_model.dart';
 import 'admins_widgets/add_admin_dialog.dart';
+import 'admins_widgets/admin_user_card.dart';
+import 'admins_widgets/admins_filter_bar.dart';
 import 'admins_widgets/edit_admin_permissions_dialog.dart';
 
 class AdminsTab extends StatefulWidget {
@@ -27,21 +29,6 @@ class _AdminsTabState extends State<AdminsTab> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-
-  Color _getRoleColor(AdminRole role) {
-    switch (role) {
-      case AdminRole.superAdmin:
-        return const Color(0xFF7C3AED); // Purple
-      case AdminRole.instructor:
-        return AppColors.primary; // Blue
-      case AdminRole.supervisor:
-        return const Color(0xFF0D9488); // Teal
-      case AdminRole.assistant:
-        return const Color(0xFF4F46E5); // Indigo
-      case AdminRole.custom:
-        return const Color(0xFFD97706); // Amber
-    }
   }
 
   @override
@@ -114,9 +101,8 @@ class _AdminsTabState extends State<AdminsTab> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final admins = state is AdminAdminsLoaded
-            ? state.admins
-            : <AdminModel>[];
+        final admins =
+            state is AdminAdminsLoaded ? state.admins : <AdminModel>[];
         final query = _searchController.text.trim().toLowerCase();
 
         final filtered = admins.where((admin) {
@@ -146,7 +132,7 @@ class _AdminsTabState extends State<AdminsTab> {
               vertical: 20,
             ),
             children: [
-              // Header & KPI Row
+              // Header & Add Admin Button
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -171,15 +157,14 @@ class _AdminsTabState extends State<AdminsTab> {
                     onPressed: () {
                       AddAdminDialog.show(
                         context,
-                        onAdd:
-                            ({
-                              required String name,
-                              required String email,
-                              required String phone,
-                              required AdminRole role,
-                              required List<String> permissions,
-                            }) {
-                              context.read<AdminAdminsCubit>().addAdmin(
+                        onAdd: ({
+                          required String name,
+                          required String email,
+                          required String phone,
+                          required AdminRole role,
+                          required List<String> permissions,
+                        }) {
+                          context.read<AdminAdminsCubit>().addAdmin(
                                 name: name,
                                 email: email,
                                 phone: phone,
@@ -187,7 +172,7 @@ class _AdminsTabState extends State<AdminsTab> {
                                 permissions: permissions,
                                 createdBy: currentAdmin?.email ?? 'admin',
                               );
-                            },
+                        },
                       );
                     },
                     icon: const Icon(Icons.add_rounded, size: 20),
@@ -212,93 +197,21 @@ class _AdminsTabState extends State<AdminsTab> {
               Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.borderHairline),
-                        boxShadow: AppColors.cardShadow,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.group_rounded,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isAr ? 'إجمالي المشرفين' : 'Total Admins',
-                                  style: AppTextStyles.caption,
-                                ),
-                                Text(
-                                  '$totalCount',
-                                  style: AppTextStyles.heading1.copyWith(
-                                    fontSize: 22,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: _buildKpiCard(
+                      label: isAr ? 'إجمالي المشرفين' : 'Total Admins',
+                      count: totalCount,
+                      icon: Icons.group_rounded,
+                      color: AppColors.primary,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.borderHairline),
-                        boxShadow: AppColors.cardShadow,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.check_circle_rounded,
-                              color: AppColors.success,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isAr ? 'المشرفين النشطين' : 'Active Admins',
-                                  style: AppTextStyles.caption,
-                                ),
-                                Text(
-                                  '$activeCount',
-                                  style: AppTextStyles.heading1.copyWith(
-                                    fontSize: 22,
-                                    color: AppColors.success,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: _buildKpiCard(
+                      label: isAr ? 'المشرفين النشطين' : 'Active Admins',
+                      count: activeCount,
+                      icon: Icons.check_circle_rounded,
+                      color: AppColors.success,
+                      textColor: AppColors.success,
                     ),
                   ),
                 ],
@@ -306,65 +219,17 @@ class _AdminsTabState extends State<AdminsTab> {
               const SizedBox(height: 18),
 
               // Search & Filter Bar
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.borderHairline),
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _searchController,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        hintText: isAr
-                            ? 'البحث باسم المشرف، بريده، أو رقم هاتفه...'
-                            : 'Search by admin name, email, or phone...',
-                        prefixIcon: const Icon(Icons.search_rounded, size: 22),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear_rounded, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        FilterChip(
-                          label: Text('requests.all'.tr()),
-                          selected: _selectedFilter == 'all',
-                          onSelected: (_) =>
-                              setState(() => _selectedFilter = 'all'),
-                        ),
-                        FilterChip(
-                          label: Text('admin_management.active'.tr()),
-                          selected: _selectedFilter == 'active',
-                          onSelected: (_) =>
-                              setState(() => _selectedFilter = 'active'),
-                        ),
-                        FilterChip(
-                          label: Text('admin_management.inactive'.tr()),
-                          selected: _selectedFilter == 'inactive',
-                          onSelected: (_) =>
-                              setState(() => _selectedFilter = 'inactive'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              AdminsFilterBar(
+                searchController: _searchController,
+                selectedFilter: _selectedFilter,
+                onFilterChanged: (filter) =>
+                    setState(() => _selectedFilter = filter),
+                onClearSearch: () {
+                  _searchController.clear();
+                  setState(() {});
+                },
+                onSearchChanged: (_) => setState(() {}),
+                isAr: isAr,
               ),
               const SizedBox(height: 16),
 
@@ -399,262 +264,117 @@ class _AdminsTabState extends State<AdminsTab> {
                 )
               else
                 ...filtered.map((admin) {
-                  final isProtectedSuperAdmin = admin.isSuperAdmin;
-                  final roleColor = _getRoleColor(admin.role);
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: admin.isActive
-                            ? AppColors.borderHairline
-                            : AppColors.error.withValues(alpha: 0.2),
-                      ),
-                      boxShadow: AppColors.cardShadow,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: roleColor.withValues(
-                                alpha: 0.12,
-                              ),
-                              child: Text(
-                                admin.name.isNotEmpty ? admin.name[0] : 'أ',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: roleColor,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Wrap(
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    spacing: 8,
-                                    runSpacing: 4,
-                                    children: [
-                                      Text(
-                                        admin.name,
-                                        style: AppTextStyles.heading3,
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: roleColor.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          admin.role.labelAr,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: roleColor,
-                                          ),
-                                        ),
-                                      ),
-                                      if (isProtectedSuperAdmin)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFEF3C7),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'حساب رئيسي',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w800,
-                                              color: Color(0xFFB45309),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    admin.email,
-                                    style: AppTextStyles.caption.copyWith(
-                                      color: AppColors.textPrimary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (admin.phone.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'هاتف: ${admin.phone}',
-                                      style: AppTextStyles.caption,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            Switch.adaptive(
-                              value: admin.isActive,
-                              activeTrackColor: AppColors.success,
-                              onChanged: isProtectedSuperAdmin
-                                  ? null
-                                  : (val) {
-                                      context
-                                          .read<AdminAdminsCubit>()
-                                          .toggleAdminStatus(
-                                            adminId: admin.id,
-                                            role: admin.role,
-                                            isActive: val,
-                                          );
-                                    },
-                            ),
-                          ],
-                        ),
-                        const Divider(height: 20),
-                        Text(
-                          'الصلاحيات المفعلة (${admin.permissions.length}):',
-                          style: AppTextStyles.caption.copyWith(
-                            fontWeight: FontWeight.w700,
+                  return AdminUserCard(
+                    admin: admin,
+                    onToggleStatus: (val) {
+                      context.read<AdminAdminsCubit>().toggleAdminStatus(
+                            adminId: admin.id,
+                            role: admin.role,
+                            isActive: val,
+                          );
+                    },
+                    onEditPermissions: () {
+                      EditAdminPermissionsDialog.show(
+                        context,
+                        admin: admin,
+                        onSave: ({
+                          required AdminRole role,
+                          required List<String> permissions,
+                        }) {
+                          context.read<AdminAdminsCubit>().updateAdminPermissions(
+                                adminId: admin.id,
+                                role: role,
+                                permissions: permissions,
+                              );
+                        },
+                      );
+                    },
+                    onDelete: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dlgContext) => AlertDialog(
+                          title: const Text('حذف المشرف'),
+                          content: Text(
+                            'هل أنت متأكد من حذف المشرف "${admin.name}" نهائياً من النظام؟ لن يتمكن من تسجيل الدخول بعد الآن.',
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: admin.permissions.map((p) {
-                            return Chip(
-                              label: Text(
-                                AdminPermission.getLabelAr(p),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              backgroundColor: AppColors.primary.withValues(
-                                alpha: 0.06,
-                              ),
-                              padding: EdgeInsets.zero,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              side: BorderSide(
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.15,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton.icon(
-                              onPressed: isProtectedSuperAdmin
-                                  ? null
-                                  : () {
-                                      EditAdminPermissionsDialog.show(
-                                        context,
-                                        admin: admin,
-                                        onSave:
-                                            ({
-                                              required AdminRole role,
-                                              required List<String> permissions,
-                                            }) {
-                                              context
-                                                  .read<AdminAdminsCubit>()
-                                                  .updateAdminPermissions(
-                                                    adminId: admin.id,
-                                                    role: role,
-                                                    permissions: permissions,
-                                                  );
-                                            },
-                                      );
-                                    },
-                              icon: const Icon(
-                                Icons.edit_note_rounded,
-                                size: 18,
-                              ),
-                              label: const Text('تعديل الصلاحيات'),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dlgContext).pop(false),
+                              child: const Text('إلغاء'),
                             ),
-                            if (!isProtectedSuperAdmin) ...[
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: AppColors.error,
-                                  size: 20,
-                                ),
-                                tooltip: 'حذف المشرف',
-                                onPressed: () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (dlgContext) => AlertDialog(
-                                      title: const Text('حذف المشرف'),
-                                      content: Text(
-                                        'هل أنت متأكد من حذف المشرف "${admin.name}" نهائياً من النظام؟ لن يتمكن من تسجيل الدخول بعد الآن.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.of(
-                                            dlgContext,
-                                          ).pop(false),
-                                          child: const Text('إلغاء'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () => Navigator.of(
-                                            dlgContext,
-                                          ).pop(true),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.error,
-                                            foregroundColor: Colors.white,
-                                          ),
-                                          child: const Text('تأكيد الحذف'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-
-                                  if (confirm == true && context.mounted) {
-                                    await context
-                                        .read<AdminAdminsCubit>()
-                                        .deleteAdmin(
-                                          adminId: admin.id,
-                                          role: admin.role,
-                                        );
-                                  }
-                                },
+                            ElevatedButton(
+                              onPressed: () =>
+                                  Navigator.of(dlgContext).pop(true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error,
+                                foregroundColor: Colors.white,
                               ),
-                            ],
+                              child: const Text('تأكيد الحذف'),
+                            ),
                           ],
                         ),
-                      ],
-                    ),
+                      );
+
+                      if (confirm == true && context.mounted) {
+                        await context.read<AdminAdminsCubit>().deleteAdmin(
+                              adminId: admin.id,
+                              role: admin.role,
+                            );
+                      }
+                    },
                   );
                 }),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildKpiCard({
+    required String label,
+    required int count,
+    required IconData icon,
+    required Color color,
+    Color? textColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderHairline),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: AppTextStyles.caption),
+                Text(
+                  '$count',
+                  style: AppTextStyles.heading1.copyWith(
+                    fontSize: 22,
+                    color: textColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
