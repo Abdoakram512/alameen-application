@@ -89,10 +89,15 @@ service cloud.firestore {
       // Students cannot modify role or escalate privileges. They can add open courses or update personal info
       allow update: if hasAdminPerm('manage_students') || (
         isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isBlocked', 'isAdmin']) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isBlocked', 'isAdmin', 'isSuspended']) &&
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['enrolledCourseIds']) ||
-          request.resource.data.enrolledCourseIds.hasAll(resource.data.get('enrolledCourseIds', []))
+          (
+            request.resource.data.enrolledCourseIds.hasAll(resource.data.get('enrolledCourseIds', [])) &&
+            request.resource.data.get('lastEnrolledCourseId', '') != '' &&
+            isOpenCourse(request.resource.data.lastEnrolledCourseId) &&
+            request.resource.data.enrolledCourseIds.toSet().difference(resource.data.get('enrolledCourseIds', []).toSet()) == [request.resource.data.lastEnrolledCourseId].toSet()
+          )
         )
       );
 
@@ -190,7 +195,17 @@ service cloud.firestore {
       allow update: if hasAdminPerm('view_analytics') || (
         isAuthenticated() &&
         resource.data.studentId == request.auth.uid &&
-        request.resource.data.studentId == request.auth.uid
+        request.resource.data.studentId == request.auth.uid &&
+        resource.data.courseId == request.resource.data.courseId &&
+        resource.data.lessonId == request.resource.data.lessonId &&
+        (
+          (request.resource.data.durationSeconds is int &&
+           request.resource.data.durationSeconds > 0 &&
+           request.resource.data.durationSeconds <= 14400) ||
+          (request.resource.data.secondsWatched is int &&
+           request.resource.data.secondsWatched > 0 &&
+           request.resource.data.secondsWatched <= 14400)
+        )
       );
       allow delete: if hasAdminPerm('view_analytics');
     }
@@ -199,7 +214,12 @@ service cloud.firestore {
     match /active_watch_sessions/{sessionId} {
       allow get: if isAdmin() || (isAuthenticated() && resource.data.get('studentId', '') == request.auth.uid);
       allow list: if isAdmin() || isAuthenticated();
-      allow create, update: if isAuthenticated() &&
+      allow create: if isAuthenticated() &&
+        (request.resource.data.get('studentUid', '') == request.auth.uid ||
+         request.resource.data.get('studentId', '') == request.auth.uid);
+      allow update: if isAuthenticated() &&
+        (resource.data.get('studentUid', '') == request.auth.uid ||
+         resource.data.get('studentId', '') == request.auth.uid) &&
         (request.resource.data.get('studentUid', '') == request.auth.uid ||
          request.resource.data.get('studentId', '') == request.auth.uid);
       allow delete: if (isAuthenticated() &&

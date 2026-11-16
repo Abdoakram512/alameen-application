@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/registered_student.dart';
 import '../../services/firestore_service.dart';
 import '../students_repository.dart';
@@ -11,6 +12,13 @@ class StudentsRepositoryImpl implements StudentsRepository {
   @override
   Stream<List<RegisteredStudent>> streamStudents() {
     return _firestoreService.streamStudents();
+  }
+
+  @override
+  Future<List<RegisteredStudent>> getStudents({bool forceRefresh = false}) {
+    return _firestoreService.getStudents(
+      source: forceRefresh ? Source.server : Source.serverAndCache,
+    );
   }
 
   @override

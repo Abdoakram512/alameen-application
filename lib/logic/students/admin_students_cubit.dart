@@ -15,26 +15,26 @@ class AdminStudentsCubit extends Cubit<AdminStudentsState> {
     : _studentsRepository = studentsRepository ?? StudentsRepositoryImpl(),
       super(AdminStudentsLoading());
 
-  void loadStudents() {
-    emit(AdminStudentsLoading());
-    _studentsSubscription?.cancel();
-    _studentsSubscription = _studentsRepository.streamStudents().listen(
-      (students) {
-        _cached = List.unmodifiable(students);
-        emit(AdminStudentsLoaded(_cached));
-      },
-      onError: (e) {
-        emit(
-          AdminStudentsError(
-            NetworkErrorMapper.toArabicMessage(
-              e,
-              defaultMessage: 'تعذر تحميل بيانات الطلاب.',
-            ),
-            students: _cached,
+  Future<void> loadStudents({bool forceRefresh = false}) async {
+    if (_cached.isEmpty) {
+      emit(AdminStudentsLoading());
+    }
+    await _studentsSubscription?.cancel();
+    try {
+      final students = await _studentsRepository.getStudents(forceRefresh: forceRefresh);
+      _cached = List.unmodifiable(students);
+      emit(AdminStudentsLoaded(_cached));
+    } catch (e) {
+      emit(
+        AdminStudentsError(
+          NetworkErrorMapper.toArabicMessage(
+            e,
+            defaultMessage: 'تعذر تحميل بيانات الطلاب.',
           ),
-        );
-      },
-    );
+          students: _cached,
+        ),
+      );
+    }
   }
 
   final Set<String> _inFlightCourseKeys = <String>{};
@@ -129,8 +129,8 @@ class AdminStudentsCubit extends Cubit<AdminStudentsState> {
   }
 
   @override
-  Future<void> close() {
-    _studentsSubscription?.cancel();
+  Future<void> close() async {
+    await _studentsSubscription?.cancel();
     return super.close();
   }
 }
