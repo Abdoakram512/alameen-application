@@ -23,8 +23,10 @@ import '../../../../services/firestore_service.dart';
 import '../../security/security_protection_watcher.dart';
 import '../widgets/submit_assignment_sheet.dart';
 import 'controllers/watch_progress_coordinator.dart';
+import 'widgets/desktop_two_column_player_view.dart';
 import 'widgets/lesson_details_panel.dart';
 import 'widgets/lesson_playlist_panel.dart';
+import 'widgets/mobile_single_column_player_view.dart';
 import 'widgets/player_view.dart';
 
 /// الشاشة الرئيسية لمشغل الفيديو التعليمي في منصة مركز الأمين.
@@ -861,146 +863,56 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           child: useImmersiveStage
               ? SizedBox.expand(child: _buildStage(showTopBar: true))
               : useDesktopTwoColumn
-                  ? ResponsiveCenter(
-                      maxWidth: 1280,
-                      padding: const EdgeInsets.all(24),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 7,
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxHeight: size.height * 0.62,
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(18),
-                                      child: AspectRatio(
-                                        aspectRatio: 16 / 9,
-                                        child: _buildStage(showTopBar: false),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Container(
-                                    padding: const EdgeInsets.all(24),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(
-                                        color: AppColors.borderHairline,
-                                      ),
-                                    ),
-                                    child: LessonDetailsPanel(
-                                      lesson: widget.lesson,
-                                      courseId: widget.courseId,
-                                      isCompleted: _isCompleted,
-                                      savingCompletion: _savingCompletion,
-                                      canComplete: widget.currentUser != null,
-                                      playlist: widget.playlist,
-                                      showInlinePlaylist: false,
-                                      lockedReasons: _lockedReasons,
-                                      isAssignmentSubmitted: _submittedAssignmentIds
-                                          .contains(widget.lesson.assignmentId),
-                                      onOpenAssignmentSheet:
-                                          widget.lesson.hasAssignment
-                                              ? _showAssignmentModal
-                                              : null,
-                                      onToggleCompletion: _toggleCompletion,
-                                      onSelectLesson: _openLesson,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          SizedBox(
-                            width: 350,
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: AppColors.borderHairline,
-                                ),
-                              ),
-                              child: SingleChildScrollView(
-                                child: LessonPlaylistPanel(
-                                  playlist: widget.playlist,
-                                  currentLessonId: widget.lesson.id,
-                                  courseId: widget.courseId,
-                                  courseAccessMode: widget.courseAccessMode,
-                                  submittedAssignmentIds: _submittedAssignmentIds,
-                                  onSelectLesson: _openLesson,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                  ? DesktopTwoColumnPlayerView(
+                      stageWidget: _buildStage(showTopBar: false),
+                      stageMaxHeight: size.height * 0.62,
+                      detailsPanel: LessonDetailsPanel(
+                        lesson: widget.lesson,
+                        courseId: widget.courseId,
+                        isCompleted: _isCompleted,
+                        savingCompletion: _savingCompletion,
+                        canComplete: widget.currentUser != null,
+                        playlist: widget.playlist,
+                        showInlinePlaylist: false,
+                        lockedReasons: _lockedReasons,
+                        isAssignmentSubmitted: _submittedAssignmentIds
+                            .contains(widget.lesson.assignmentId),
+                        onOpenAssignmentSheet: widget.lesson.hasAssignment
+                            ? _showAssignmentModal
+                            : null,
+                        onToggleCompletion: _toggleCompletion,
+                        onSelectLesson: _openLesson,
+                      ),
+                      playlistPanel: LessonPlaylistPanel(
+                        playlist: widget.playlist,
+                        currentLessonId: widget.lesson.id,
+                        courseId: widget.courseId,
+                        courseAccessMode: widget.courseAccessMode,
+                        submittedAssignmentIds: _submittedAssignmentIds,
+                        onSelectLesson: _openLesson,
                       ),
                     )
-                  : Column(
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          color: Colors.black,
-                          alignment: Alignment.center,
-                          constraints: BoxConstraints(
-                            maxHeight:
-                                (size.height * 0.40).clamp(190.0, 380.0),
-                          ),
-                          child: AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: _buildStage(showTopBar: false),
-                          ),
-                        ),
-                        Expanded(
-                          child: Container(
-                            color: Colors.white,
-                            child: ListView(
-                              padding: EdgeInsets.fromLTRB(
-                                context.horizontalPagePadding,
-                                20,
-                                context.horizontalPagePadding,
-                                MediaQuery.paddingOf(context).bottom + 28,
-                              ),
-                              children: [
-                                Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 780,
-                                    ),
-                                    child: LessonDetailsPanel(
-                                      lesson: widget.lesson,
-                                      courseId: widget.courseId,
-                                      isCompleted: _isCompleted,
-                                      savingCompletion: _savingCompletion,
-                                      canComplete: widget.currentUser != null,
-                                      playlist: widget.playlist,
-                                      showInlinePlaylist: true,
-                                      lockedReasons: _lockedReasons,
-                                      isAssignmentSubmitted: _submittedAssignmentIds
-                                          .contains(widget.lesson.assignmentId),
-                                      onOpenAssignmentSheet:
-                                          widget.lesson.hasAssignment
-                                              ? _showAssignmentModal
-                                              : null,
-                                      onToggleCompletion: _toggleCompletion,
-                                      onSelectLesson: _openLesson,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                  : MobileSingleColumnPlayerView(
+                      stageWidget: _buildStage(showTopBar: false),
+                      stageMaxHeight:
+                          (size.height * 0.40).clamp(190.0, 380.0),
+                      detailsPanel: LessonDetailsPanel(
+                        lesson: widget.lesson,
+                        courseId: widget.courseId,
+                        isCompleted: _isCompleted,
+                        savingCompletion: _savingCompletion,
+                        canComplete: widget.currentUser != null,
+                        playlist: widget.playlist,
+                        showInlinePlaylist: true,
+                        lockedReasons: _lockedReasons,
+                        isAssignmentSubmitted: _submittedAssignmentIds
+                            .contains(widget.lesson.assignmentId),
+                        onOpenAssignmentSheet: widget.lesson.hasAssignment
+                            ? _showAssignmentModal
+                            : null,
+                        onToggleCompletion: _toggleCompletion,
+                        onSelectLesson: _openLesson,
+                      ),
                     ),
         ),
       ),
