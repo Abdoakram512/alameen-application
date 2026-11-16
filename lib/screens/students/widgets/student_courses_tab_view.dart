@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../logic/courses/admin_courses_cubit.dart';
 import '../../../logic/courses/admin_courses_state.dart';
 import '../../../logic/students/admin_students_cubit.dart';
+import '../../../models/course_access_mode.dart';
 import '../../../models/registered_student.dart';
 
 class StudentCoursesTabView extends StatelessWidget {

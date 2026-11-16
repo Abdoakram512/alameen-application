@@ -809,7 +809,7 @@ class FirestoreService {
 
           for (final les in targetLevel.lessons.where((l) => l.id == lessonId)) {
             if (les.hasAssignment) {
-              batch.delete(_assignmentsRef.doc(les.assignmentId));
+              batch.delete(_assignmentsRef.doc(les.assignmentId!));
             }
           }
           final updatedLessons = targetLevel.lessons

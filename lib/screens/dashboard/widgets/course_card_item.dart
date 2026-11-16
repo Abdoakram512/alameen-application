@@ -11,6 +11,7 @@ import '../../../logic/courses/admin_courses_cubit.dart';
 import '../../../logic/students/admin_students_cubit.dart';
 import '../../../logic/students/admin_students_state.dart';
 import '../../../models/course.dart';
+import '../../../models/course_access_mode.dart';
 import '../../../services/course_audit_pdf_service.dart';
 import '../../../services/firestore_service.dart';
 import '../../courses/widgets/assign_students_dialog.dart';
