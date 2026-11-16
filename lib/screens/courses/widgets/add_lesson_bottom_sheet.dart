@@ -11,6 +11,9 @@ import '../../../logic/courses/admin_courses_cubit.dart';
 import '../../../models/lesson.dart';
 import '../../../repositories/mux_repository.dart';
 import 'lesson_assignment_form.dart';
+import 'lesson_basic_form_fields.dart';
+import 'lesson_publishing_schedule_box.dart';
+import 'lesson_video_settings_box.dart';
 import 'mux_video_upload_box.dart';
 
 class AddLessonBottomSheet extends StatefulWidget {
@@ -273,7 +276,8 @@ class _AddLessonBottomSheetState extends State<AddLessonBottomSheet> {
       }
       if (_assignmentForm.instructionsController.text.trim().isEmpty &&
           _descController.text.trim().isNotEmpty) {
-        _assignmentForm.instructionsController.text = _descController.text.trim();
+        _assignmentForm.instructionsController.text =
+            _descController.text.trim();
       }
       _assignmentForm.blocksNextLesson = true;
     } else {
@@ -342,17 +346,22 @@ class _AddLessonBottomSheetState extends State<AddLessonBottomSheet> {
       duration: isAssignmentItem
           ? 'مهمة تطبيقية'
           : (_durationController.text.trim().isNotEmpty
-              ? AppValidators.formatDurationArabic(_durationController.text.trim())
+              ? AppValidators.formatDurationArabic(
+                  _durationController.text.trim(),
+                )
               : 'تلقائية (Mux)'),
       muxPlaybackId: isAssignmentItem ? '' : playbackId,
       muxAssetId: isAssignmentItem ? null : _muxAssetId,
       isFreePreview: isAssignmentItem ? false : _isFreePreview,
       type: isAssignmentItem ? 'assignment' : 'video',
-      lockNextUntilSubmitted: isAssignmentItem ? true : _assignmentForm.blocksNextLesson,
+      lockNextUntilSubmitted:
+          isAssignmentItem ? true : _assignmentForm.blocksNextLesson,
       videoStatus: isAssignmentItem ? 'ready' : _videoStatus,
-      videoProgress: (isAssignmentItem || _videoStatus != 'processing') ? 100.0 : 0.0,
+      videoProgress:
+          (isAssignmentItem || _videoStatus != 'processing') ? 100.0 : 0.0,
       videoSourceUrl: isAssignmentItem ? null : _videoSourceUrl,
-      completionThresholdPercentage: isAssignmentItem ? 100 : _completionThreshold,
+      completionThresholdPercentage:
+          isAssignmentItem ? 100 : _completionThreshold,
       isPublished: isPublished,
       scheduledPublishAt: scheduledPublishAt,
     );
@@ -408,172 +417,35 @@ class _AddLessonBottomSheetState extends State<AddLessonBottomSheet> {
                 _itemType == 'assignment'
                     ? 'إضافة مهمة تطبيقية / تكليف جديد'
                     : 'إضافة درس فيديو جديد',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 14),
-              SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: 'video',
-                    label: Text('درس فيديو'),
-                    icon: Icon(Icons.play_circle_outline_rounded),
-                  ),
-                  ButtonSegment(
-                    value: 'assignment',
-                    label: Text('مهمة / تكليف مستقل'),
-                    icon: Icon(Icons.assignment_outlined),
-                  ),
-                ],
-                selected: {_itemType},
-                onSelectionChanged: (set) {
+              LessonBasicFormFields(
+                formKey: _formKey,
+                itemType: _itemType,
+                onItemTypeChanged: (type) {
                   setState(() {
-                    _itemType = set.first;
+                    _itemType = type;
                     if (_itemType == 'assignment') {
                       _assignmentForm.enabled = true;
                       _assignmentForm.blocksNextLesson = true;
                     }
                   });
                 },
-              ),
-              const SizedBox(height: 16),
-              Form(
-                key: _formKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextFormField(
-                      controller: _titleController,
-                      decoration: InputDecoration(
-                        labelText: _itemType == 'assignment'
-                            ? 'عنوان المهمة التطبيقية *'
-                            : 'عنوان الدرس *',
-                        hintText: _itemType == 'assignment'
-                            ? 'مثال: تطبيق عملي على مخارج الحروف'
-                            : 'مثال: جلسة علاج اللدغات والتأتأة',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: Icon(
-                          _itemType == 'assignment'
-                              ? Icons.assignment_outlined
-                              : Icons.title,
-                        ),
-                      ),
-                      validator: (val) => AppValidators.validateRequired(
-                        val,
-                        _itemType == 'assignment'
-                            ? 'عنوان المهمة'
-                            : 'عنوان الدرس',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _descController,
-                      decoration: InputDecoration(
-                        labelText: _itemType == 'assignment'
-                            ? 'وصف المهمة ومطلوب التنفيذ (اختياري)'
-                            : 'وصف الدرس (اختياري)',
-                        hintText: _itemType == 'assignment'
-                            ? 'اشرح للطالب المطلوب إنجازه بدقة'
-                            : 'محاور الدرس وما تغطيه الجلسة',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.description_outlined),
-                      ),
-                    ),
-                    if (_itemType == 'video') ...[
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _durationController,
-                        decoration: const InputDecoration(
-                          labelText: 'مدة الفيديو (اختياري)',
-                          hintText:
-                              'تُحسب تلقائياً من Mux، أو أدخلها يدوياً (مثال: 15:30)',
-                          helperText:
-                              'إذا تُرك فارغاً، سيتم احتساب وقت الفيديو تلقائياً من خوادم البث',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.timer_outlined),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                titleController: _titleController,
+                descController: _descController,
+                durationController: _durationController,
               ),
               if (_itemType == 'video') ...[
                 const SizedBox(height: 12),
-                SwitchListTile(
-                  title: const Text('إتاحة معاينة مجانية للدرس'),
-                  subtitle: const Text(
-                    'يسمح للمتدرب بمشاهدة هذا الدرس التعريفي قبل الاشتراك',
-                  ),
-                  value: _isFreePreview,
-                  activeTrackColor: AppColors.primary,
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (val) {
-                    setState(() => _isFreePreview = val);
-                  },
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLevel0,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderHairline),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'نسبة المشاهدة المطلوبة لاجتياز الدرس:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '$_completionThreshold%',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'الحد الأدنى لنسبة إتمام مشاهدة الفيديو لاحتساب الدرس ومطابقة استحقاق الشهادة (المعتمد 95%).',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      Slider(
-                        value: _completionThreshold.toDouble(),
-                        min: 50,
-                        max: 100,
-                        divisions: 10,
-                        label: '$_completionThreshold%',
-                        activeColor: AppColors.primary,
-                        onChanged: (val) {
-                          setState(() => _completionThreshold = val.round());
-                        },
-                      ),
-                    ],
-                  ),
+                LessonVideoSettingsBox(
+                  isFreePreview: _isFreePreview,
+                  onFreePreviewChanged: (val) =>
+                      setState(() => _isFreePreview = val),
+                  completionThreshold: _completionThreshold,
+                  onCompletionThresholdChanged: (val) =>
+                      setState(() => _completionThreshold = val),
                 ),
                 const SizedBox(height: 12),
                 MuxVideoUploadBox(
@@ -605,153 +477,20 @@ class _AddLessonBottomSheetState extends State<AddLessonBottomSheet> {
                 ),
               ],
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceLevel0,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.borderHairline),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.schedule_send_rounded,
-                          size: 18,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'حالة النشر وموعد المحاضرة',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'يمكنك رفع المحاضرة ونشرها فوراً، أو جدولتها لتُتاح للطلاب تلقائياً في موعد الدرس، أو حفظها كمسودة.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SegmentedButton<String>(
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: 'immediate',
-                          label: Text(
-                            'نشر فوري',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          icon: Icon(Icons.check_circle_outline, size: 16),
-                        ),
-                        ButtonSegment(
-                          value: 'schedule',
-                          label: Text(
-                            'جدولة بموعد',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          icon: Icon(Icons.access_time_rounded, size: 16),
-                        ),
-                        ButtonSegment(
-                          value: 'draft',
-                          label: Text(
-                            'مسودة (مغلق)',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          icon: Icon(Icons.drafts_outlined, size: 16),
-                        ),
-                      ],
-                      selected: {_publishOption},
-                      onSelectionChanged: (set) {
-                        setState(() {
-                          _publishOption = set.first;
-                          if (_publishOption == 'schedule' &&
-                              _scheduledDateTime == null) {
-                            _scheduledDateTime =
-                                DateTime.now().add(const Duration(hours: 2));
-                          }
-                        });
-                      },
-                    ),
-                    if (_publishOption == 'schedule') ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color:
-                                AppColors.royalNavy.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.event_available,
-                              color: AppColors.royalNavy,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'موعد إتاحة المحاضرة للطلاب:',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _scheduledDateTime != null
-                                        ? '${_scheduledDateTime!.year}/${_scheduledDateTime!.month.toString().padLeft(2, '0')}/${_scheduledDateTime!.day.toString().padLeft(2, '0')} - ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
-                                        : 'لم يتم تحديد الموعد بعد',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: AppColors.royalNavy,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _pickScheduleDateTime,
-                              icon:
-                                  const Icon(Icons.edit_calendar, size: 15),
-                              label: const Text(
-                                'تحديد الموعد',
-                                style: TextStyle(fontSize: 11),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+              LessonPublishingScheduleBox(
+                publishOption: _publishOption,
+                onPublishOptionChanged: (opt) {
+                  setState(() {
+                    _publishOption = opt;
+                    if (_publishOption == 'schedule' &&
+                        _scheduledDateTime == null) {
+                      _scheduledDateTime =
+                          DateTime.now().add(const Duration(hours: 2));
+                    }
+                  });
+                },
+                scheduledDateTime: _scheduledDateTime,
+                onPickScheduleDateTime: _pickScheduleDateTime,
               ),
               const SizedBox(height: 22),
               SizedBox(
