@@ -124,6 +124,7 @@ class CoursesRepositoryImpl implements CoursesRepository {
               {
                 'courseId': id,
                 'levelId': level.id,
+                'levelOrder': level.order,
                 'lessonId': lesson.id,
                 'muxPlaybackId': lesson.muxPlaybackId.trim(),
                 'muxAssetId': lesson.muxAssetId,

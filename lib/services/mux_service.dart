@@ -65,10 +65,10 @@ class MuxService {
     defaultValue: 'https://us-central1-elameen.cloudfunctions.net',
   );
 
-  /// مفاتيح Mux API الرسمية لحساب مركز الأمين (تُستخدم تلقائياً دون إشغال الأدمن بأي إعدادات يدوية).
-  static const String defaultTokenId = '4d865b2a-b645-4bc5-9ef9-55e6b75bf169';
-  static const String defaultTokenSecret =
-      '/EVOyJwJ99ZO3Z85Ep9Awl0BHEtj/V+3qw/Mp1yZgKSF5urfcvHEuTuTsuWbFCAkMIRTVzzanZA';
+  /// مفاتيح Mux API تُحقن عبر متغيرات البيئة (--dart-define) أو تُسترجع من خزينة المشرف في Firestore (/admins/{uid}).
+  /// خالية تماماً من أي مفاتيح سرية مدمجة في الكود المصدري.
+  static const String defaultTokenId = '';
+  static const String defaultTokenSecret = '';
 
   static const String _envTokenId = String.fromEnvironment(
     'MUX_TOKEN_ID',
@@ -79,10 +79,8 @@ class MuxService {
     defaultValue: defaultTokenSecret,
   );
 
-  // مفاتيح Mux جاهزة ومفعلة دائماً افتراضياً
-  String tokenId = _envTokenId.isNotEmpty ? _envTokenId : defaultTokenId;
-  String tokenSecret =
-      _envTokenSecret.isNotEmpty ? _envTokenSecret : defaultTokenSecret;
+  String tokenId = _envTokenId;
+  String tokenSecret = _envTokenSecret;
   bool _cloudEndpointVerified = false;
   bool _cloudEndpointUnavailable = false;
 
@@ -207,8 +205,7 @@ class MuxService {
   Future<Map<String, dynamic>> createDirectUpload() async {
     await restoreAdminVaultCredentials();
     if (!hasLocalSessionCredentials) {
-      tokenId = defaultTokenId;
-      tokenSecret = defaultTokenSecret;
+      throw StateError('بيانات اعتماد Mux غير مهيأة. يرجى إدخال المفاتيح في إعدادات المنصة.');
     }
 
     final response = await http.post(
@@ -407,8 +404,7 @@ class MuxService {
   Future<MuxUploadResult> registerUrlAsset(String videoUrl) async {
     await restoreAdminVaultCredentials();
     if (!hasLocalSessionCredentials) {
-      tokenId = defaultTokenId;
-      tokenSecret = defaultTokenSecret;
+      throw StateError('بيانات اعتماد Mux غير مهيأة. يرجى إدخال المفاتيح في إعدادات المنصة.');
     }
 
     final response = await http.post(
@@ -454,8 +450,7 @@ class MuxService {
   Future<MuxAssetStatusInfo> getAssetStatus(String assetId) async {
     await restoreAdminVaultCredentials();
     if (!hasLocalSessionCredentials) {
-      tokenId = defaultTokenId;
-      tokenSecret = defaultTokenSecret;
+      throw StateError('بيانات اعتماد Mux غير مهيأة. يرجى إدخال المفاتيح في إعدادات المنصة.');
     }
 
     final resp = await http.get(
@@ -537,8 +532,7 @@ class MuxService {
 
     await restoreAdminVaultCredentials();
     if (!hasLocalSessionCredentials) {
-      tokenId = defaultTokenId;
-      tokenSecret = defaultTokenSecret;
+      throw StateError('بيانات اعتماد Mux غير مهيأة. يرجى إدخال المفاتيح في إعدادات المنصة.');
     }
 
     final response = await http.post(
