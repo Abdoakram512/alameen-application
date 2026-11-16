@@ -432,6 +432,25 @@ class FirestoreService {
     } catch (_) {}
   }
 
+  Future<String?> getLatestLessonCoverage({
+    required String uid,
+    required String courseId,
+    required String lessonId,
+  }) async {
+    try {
+      final snapshot = await _watchLogsRef
+          .where('studentId', isEqualTo: uid)
+          .where('courseId', isEqualTo: courseId)
+          .where('lessonId', isEqualTo: lessonId)
+          .limit(1)
+          .get(const GetOptions(source: Source.serverAndCache));
+      if (snapshot.docs.isNotEmpty) {
+        return snapshot.docs.first.data()['coverageRanges'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> recordWatchEvent(Map<String, dynamic> event) async {
     final uid = event['uid'] as String;
     final seconds = (event['seconds'] as num?)?.toInt() ?? 0;
@@ -442,53 +461,107 @@ class FirestoreService {
     final lessonId = event['lessonId'] as String? ?? '';
     final sessionId = event['sessionId'] as String?;
     final eventId = event['id'] as String? ?? '';
+    final coverageRanges = event['coverageRanges'] as String?;
 
     final logDocId = (sessionId != null && sessionId.isNotEmpty)
-        ? 'log_${uid}_${courseId}_${lessonId}_$sessionId'
+        ? 'watch_${uid}_${courseId}_${lessonId}_$sessionId'
         : '${uid}_$eventId';
-    final log = _watchLogsRef.doc(logDocId);
+    final logRef = _watchLogsRef.doc(logDocId);
 
-    final batch = _db.batch();
-
-    // 1. Session Log Document: IDEMPOTENT write (uses absolute sessionSeconds)
-    batch.set(
-      log,
-      {
-        'id': logDocId,
-        'studentId': uid,
-        'studentName': event['studentName'] ?? '',
-        'studentEmail': event['studentEmail'] ?? '',
-        'courseId': courseId,
-        'lessonId': lessonId,
-        'lessonTitle': event['lessonTitle'] ?? '',
-        'durationSeconds': sessionSeconds,
-        'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? sessionSeconds,
-        'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
-        'completionPercentage': event['completionPercentage'] ?? 0.0,
-        'isCompleted': isCompleted,
-        'lastCheckpointId': eventId,
-        'ipAddress': event['ipAddress'] ?? 'غير محدد',
-        'networkType': event['networkType'] ?? 'غير محدد',
-        'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
-        'recordedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
-
-    // 2. User Document: Updated ONLY on lesson completion or session termination (decoupled from intermediate checkpoints!)
     if (isCompleted || isSessionEnd) {
-      final userUpdates = <String, dynamic>{
-        'lastActiveAt': FieldValue.serverTimestamp(),
-        if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
-        if (isCompleted && lessonId.isNotEmpty)
-          'completedLessonIds': FieldValue.arrayUnion([lessonId]),
-      };
-      if (isSessionEnd && seconds > 0) {
-        userUpdates['totalWatchSeconds'] = FieldValue.increment(seconds);
-      }
-      batch.set(_usersRef.doc(uid), userUpdates, SetOptions(merge: true));
-    }
+      // Transaction ensures:
+      // 1. Retry of the same session-end event NEVER double-increments users.totalWatchSeconds.
+      // 2. Older checkpoints cannot overwrite newer progress (durationSeconds monotonically increases).
+      // 3. User document completedLessonIds and watch seconds are committed atomically.
+      await _db.runTransaction((tx) async {
+        final logSnap = await tx.get(logRef);
+        final existingDuration = (logSnap.data()?['durationSeconds'] as num?)?.toInt() ?? 0;
+        final safeSessionSeconds = sessionSeconds >= existingDuration ? sessionSeconds : existingDuration;
 
-    await batch.commit().timeout(const Duration(seconds: 15));
+        final logData = <String, dynamic>{
+          'id': logDocId,
+          'studentId': uid,
+          'studentUid': uid,
+          'studentName': event['studentName'] ?? '',
+          'studentEmail': event['studentEmail'] ?? '',
+          'courseId': courseId,
+          'lessonId': lessonId,
+          'lessonTitle': event['lessonTitle'] ?? '',
+          'durationSeconds': safeSessionSeconds,
+          'secondsWatched': safeSessionSeconds,
+          'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? safeSessionSeconds,
+          'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
+          'completionPercentage': event['completionPercentage'] ?? 0.0,
+          'isCompleted': isCompleted || (logSnap.data()?['isCompleted'] == true),
+          'lastCheckpointId': eventId,
+          if (coverageRanges != null && coverageRanges.isNotEmpty)
+            'coverageRanges': coverageRanges,
+          'ipAddress': event['ipAddress'] ?? 'غير محدد',
+          'networkType': event['networkType'] ?? 'غير محدد',
+          'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
+          'recordedAt': FieldValue.serverTimestamp(),
+        };
+        tx.set(logRef, logData, SetOptions(merge: true));
+
+        final userRef = _usersRef.doc(uid);
+        final userSnap = await tx.get(userRef);
+        final userData = userSnap.data() ?? {};
+        final processedEvents = List<String>.from(userData['processedSessionEnds'] ?? []);
+
+        final userUpdates = <String, dynamic>{
+          'lastActiveAt': FieldValue.serverTimestamp(),
+          if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
+          if (isCompleted && lessonId.isNotEmpty)
+            'completedLessonIds': FieldValue.arrayUnion([lessonId]),
+        };
+
+        if (isSessionEnd && seconds > 0) {
+          if (!processedEvents.contains(eventId)) {
+            // First time processing this session-end event: increment totalWatchSeconds safely
+            processedEvents.add(eventId);
+            if (processedEvents.length > 50) {
+              processedEvents.removeAt(0); // Maintain sliding window of 50
+            }
+            final currentTotal = (userData['totalWatchSeconds'] as num?)?.toInt() ?? 0;
+            userUpdates['totalWatchSeconds'] = currentTotal + seconds;
+            userUpdates['processedSessionEnds'] = processedEvents;
+          }
+        }
+
+        tx.set(userRef, userUpdates, SetOptions(merge: true));
+      }).timeout(const Duration(seconds: 15));
+    } else {
+      // Continuous intermediate playback checkpoint: writes only to watch_logs (0 writes to users/{uid})
+      await _db.runTransaction((tx) async {
+        final logSnap = await tx.get(logRef);
+        final existingDuration = (logSnap.data()?['durationSeconds'] as num?)?.toInt() ?? 0;
+        final safeSessionSeconds = sessionSeconds >= existingDuration ? sessionSeconds : existingDuration;
+
+        final logData = <String, dynamic>{
+          'id': logDocId,
+          'studentId': uid,
+          'studentUid': uid,
+          'studentName': event['studentName'] ?? '',
+          'studentEmail': event['studentEmail'] ?? '',
+          'courseId': courseId,
+          'lessonId': lessonId,
+          'lessonTitle': event['lessonTitle'] ?? '',
+          'durationSeconds': safeSessionSeconds,
+          'secondsWatched': safeSessionSeconds,
+          'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? safeSessionSeconds,
+          'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
+          'completionPercentage': event['completionPercentage'] ?? 0.0,
+          'isCompleted': isCompleted || (logSnap.data()?['isCompleted'] == true),
+          'lastCheckpointId': eventId,
+          if (coverageRanges != null && coverageRanges.isNotEmpty)
+            'coverageRanges': coverageRanges,
+          'ipAddress': event['ipAddress'] ?? 'غير محدد',
+          'networkType': event['networkType'] ?? 'غير محدد',
+          'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
+          'recordedAt': FieldValue.serverTimestamp(),
+        };
+        tx.set(logRef, logData, SetOptions(merge: true));
+      }).timeout(const Duration(seconds: 15));
+    }
   }
 }

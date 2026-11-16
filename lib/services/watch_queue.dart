@@ -41,6 +41,7 @@ class WatchQueue {
     double? completionPercentage,
     bool? isCompleted,
     String? sessionId,
+    String? coverageRanges,
   }) =>
       _serial(() async {
         if (seconds <= 0 && isSessionEnd != true && isCompleted != true) return;
@@ -65,6 +66,7 @@ class WatchQueue {
           'completionPercentage': ?completionPercentage,
           'isCompleted': ?isCompleted,
           'sessionId': ?sessionId,
+          'coverageRanges': ?coverageRanges,
         });
         await write(_key(uid), jsonEncode(events));
       });

@@ -83,13 +83,45 @@ service cloud.firestore {
       allow create: if hasAdminPerm('manage_students') || (
         isOwner(userId) &&
         (!('role' in request.resource.data) || request.resource.data.role == 'student') &&
-        (!('enrolledCourseIds' in request.resource.data) || request.resource.data.enrolledCourseIds.size() == 0)
+        (!('enrolledCourseIds' in request.resource.data) || request.resource.data.enrolledCourseIds.size() == 0) &&
+        (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false) &&
+        (!('isBlocked' in request.resource.data) || request.resource.data.isBlocked == false) &&
+        (!('isSuspended' in request.resource.data) || request.resource.data.isSuspended == false)
       );
 
-      // Students cannot modify role or escalate privileges. They can add open courses or update personal info
+      // Strict allowlist for student updates: prevents forging admin status, roles, approval, or arbitrary fields
       allow update: if hasAdminPerm('manage_students') || (
         isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isBlocked', 'isAdmin', 'isSuspended']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'phone',
+          'photoUrl',
+          'lastActiveAt',
+          'lastKnownIp',
+          'fcmToken',
+          'deviceToken',
+          'updatedAt',
+          'completedLessonIds',
+          'totalWatchSeconds',
+          'processedSessionEnds',
+          'enrolledCourseIds',
+          'lastEnrolledCourseId'
+        ]) &&
+        // totalWatchSeconds can only increase and cannot jump by more than 14,400s (4h) per update
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalWatchSeconds']) ||
+          (
+            request.resource.data.totalWatchSeconds is int &&
+            request.resource.data.totalWatchSeconds >= resource.data.get('totalWatchSeconds', 0) &&
+            request.resource.data.totalWatchSeconds <= resource.data.get('totalWatchSeconds', 0) + 14400
+          )
+        ) &&
+        // completedLessonIds can only append, cannot remove completed lessons
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedLessonIds']) ||
+          request.resource.data.completedLessonIds.hasAll(resource.data.get('completedLessonIds', []))
+        ) &&
+        // enrolledCourseIds can only append verified open courses
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['enrolledCourseIds']) ||
           (
@@ -101,7 +133,7 @@ service cloud.firestore {
         )
       );
 
-      allow delete: if isOwner(userId) || hasAdminPerm('manage_students');
+      allow delete: if hasAdminPerm('manage_students');
     }
 
     // Admin team & RBAC permissions management
@@ -192,7 +224,7 @@ service cloud.firestore {
            request.resource.data.secondsWatched > 0 &&
            request.resource.data.secondsWatched <= 14400)
         );
-      allow update: if hasAdminPerm('view_analytics') || (
+      allow update: if hasAdminPerm('manage_courses') || (
         isAuthenticated() &&
         resource.data.studentId == request.auth.uid &&
         request.resource.data.studentId == request.auth.uid &&
@@ -200,14 +232,14 @@ service cloud.firestore {
         resource.data.lessonId == request.resource.data.lessonId &&
         (
           (request.resource.data.durationSeconds is int &&
-           request.resource.data.durationSeconds > 0 &&
+           request.resource.data.durationSeconds >= resource.data.get('durationSeconds', 0) &&
            request.resource.data.durationSeconds <= 14400) ||
           (request.resource.data.secondsWatched is int &&
-           request.resource.data.secondsWatched > 0 &&
+           request.resource.data.secondsWatched >= resource.data.get('secondsWatched', 0) &&
            request.resource.data.secondsWatched <= 14400)
         )
       );
-      allow delete: if hasAdminPerm('view_analytics');
+      allow delete: if hasAdminPerm('manage_courses');
     }
 
     // Live active watch sessions / presence radar

@@ -417,6 +417,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         networkType: _clientIpInfo?.networkType ?? '',
         devicePlatform: _clientIpInfo?.devicePlatform ?? '',
         sessionId: _sessionId,
+        coverageRanges: _coverageTracker.encodeRanges(),
       );
       _pendingWatchedSeconds = 0;
       await _watchQueue.flush(widget.currentUser!.uid);
@@ -499,6 +500,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final savedCoverage = await _preferences.getString(_coverageKey);
       if (savedCoverage != null && savedCoverage.isNotEmpty) {
         _coverageTracker = LessonCoverageTracker.decodeRanges(savedCoverage);
+      } else if (widget.currentUser != null) {
+        // Multi-device sync: restore remote coverage when opening on a fresh device
+        try {
+          final remoteCoverage = await FirestoreService().getLatestLessonCoverage(
+            uid: widget.currentUser!.uid,
+            courseId: widget.courseId,
+            lessonId: widget.lesson.id,
+          );
+          if (remoteCoverage != null && remoteCoverage.isNotEmpty) {
+            _coverageTracker = LessonCoverageTracker.decodeRanges(remoteCoverage);
+            await _preferences.setString(_coverageKey, remoteCoverage);
+          }
+        } catch (_) {}
       }
       if (!mounted) return;
       if (saved > 0 && saved < ctrl.value.duration.inMilliseconds - 2000) {

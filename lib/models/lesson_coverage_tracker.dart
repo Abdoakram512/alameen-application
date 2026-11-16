@@ -33,6 +33,11 @@ class LessonCoverageTracker {
     }
   }
 
+  /// دمج نطاقات مشاهدة من جهاز آخر أو جلسة أخرى (اتحاد المجموعات الحسابي)
+  void merge(LessonCoverageTracker other) {
+    _coveredSeconds.addAll(other._coveredSeconds);
+  }
+
   /// إجمالي عدد الثواني الفريدة غير المتكررة التي تمت مشاهدتها
   int get uniqueSeconds => _coveredSeconds.length;
   int get watchedSecondsCount => uniqueSeconds;
