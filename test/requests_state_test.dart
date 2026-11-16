@@ -19,7 +19,7 @@ class TestRequests implements RequestsRepository {
   Stream<List<CourseAccessRequest>> streamStudentRequests(String id) =>
       controller.stream;
   @override
-  Future<void> approveRequest(String id, String student, String course) async {
+  Future<void> approveRequest(String id, String student, String course, {String? levelId}) async {
     approvals++;
     if (wait != null) await wait!.future;
     if (fail) throw Exception('offline');

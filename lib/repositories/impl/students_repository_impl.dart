@@ -198,6 +198,9 @@ class StudentsRepositoryImpl implements StudentsRepository {
             'enrolledCourseIds': grant
                 ? FieldValue.arrayUnion([courseId])
                 : FieldValue.arrayRemove([courseId]),
+            'fullCourseEntitlements': grant
+                ? FieldValue.arrayUnion([courseId])
+                : FieldValue.arrayRemove([courseId]),
           },
           SetOptions(merge: true),
         );

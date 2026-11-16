@@ -62,8 +62,9 @@ class RequestsRepositoryImpl implements RequestsRepository {
   Future<void> approveRequest(
     String requestId,
     String studentId,
-    String courseId,
-  ) async {
+    String courseId, {
+    String? levelId,
+  }) async {
     final batch = db.batch();
     final requestRef = _requestsRef.doc(requestId);
     final studentRef = _usersRef.doc(studentId);
@@ -74,11 +75,19 @@ class RequestsRepositoryImpl implements RequestsRepository {
       'reviewedAt': FieldValue.serverTimestamp(),
     });
 
+    final isLevelSpecific = levelId != null && levelId.isNotEmpty;
+
+    final studentUpdates = <String, dynamic>{
+      'enrolledCourseIds': FieldValue.arrayUnion([courseId]),
+      if (isLevelSpecific)
+        'levelEntitlements': FieldValue.arrayUnion(['$courseId:$levelId'])
+      else
+        'fullCourseEntitlements': FieldValue.arrayUnion([courseId]),
+    };
+
     batch.set(
       studentRef,
-      {
-        'enrolledCourseIds': FieldValue.arrayUnion([courseId]),
-      },
+      studentUpdates,
       SetOptions(merge: true),
     );
 

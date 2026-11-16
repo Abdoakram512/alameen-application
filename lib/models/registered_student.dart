@@ -10,6 +10,9 @@ class RegisteredStudent {
   final DateTime joinedAt;
   final DateTime? lastActiveAt;
   final List<String> enrolledCourseIds;
+  final List<String> fullCourseEntitlements;
+  final List<String> levelEntitlements;
+  final List<String> unlockedLevelIds;
   final Set<String> completedLessonIds;
   final int totalWatchSeconds;
   final bool isSuspended;
@@ -27,6 +30,9 @@ class RegisteredStudent {
     required this.joinedAt,
     this.lastActiveAt,
     required this.enrolledCourseIds,
+    this.fullCourseEntitlements = const [],
+    this.levelEntitlements = const [],
+    this.unlockedLevelIds = const [],
     required this.completedLessonIds,
     this.totalWatchSeconds = 0,
     this.isSuspended = false,
@@ -34,6 +40,12 @@ class RegisteredStudent {
     this.appOrigin = 'alameen_speech_center',
     Map<String, DateTime>? courseExpiryDates,
   }) : courseExpiryDates = courseExpiryDates != null ? Map.from(courseExpiryDates) : <String, DateTime>{};
+
+  bool isLevelUnlocked(String courseId, String levelId) {
+    if (fullCourseEntitlements.contains(courseId)) return true;
+    final token = '$courseId:$levelId';
+    return levelEntitlements.contains(token) || unlockedLevelIds.contains(token);
+  }
 
   bool isCourseExpired(String courseId) {
     if (!courseExpiryDates.containsKey(courseId)) return false;
@@ -104,6 +116,9 @@ class RegisteredStudent {
     DateTime? joinedAt,
     DateTime? lastActiveAt,
     List<String>? enrolledCourseIds,
+    List<String>? fullCourseEntitlements,
+    List<String>? levelEntitlements,
+    List<String>? unlockedLevelIds,
     Set<String>? completedLessonIds,
     int? totalWatchSeconds,
     bool? isSuspended,
@@ -121,6 +136,9 @@ class RegisteredStudent {
       joinedAt: joinedAt ?? this.joinedAt,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       enrolledCourseIds: enrolledCourseIds ?? List.from(this.enrolledCourseIds),
+      fullCourseEntitlements: fullCourseEntitlements ?? List.from(this.fullCourseEntitlements),
+      levelEntitlements: levelEntitlements ?? List.from(this.levelEntitlements),
+      unlockedLevelIds: unlockedLevelIds ?? List.from(this.unlockedLevelIds),
       completedLessonIds: completedLessonIds ?? Set.from(this.completedLessonIds),
       totalWatchSeconds: totalWatchSeconds ?? this.totalWatchSeconds,
       isSuspended: isSuspended ?? this.isSuspended,
@@ -144,6 +162,9 @@ class RegisteredStudent {
         'createdAt': joinedAt.toIso8601String(),
         'lastActiveAt': lastActiveAt?.toIso8601String(),
         'enrolledCourseIds': enrolledCourseIds,
+        'fullCourseEntitlements': fullCourseEntitlements,
+        'levelEntitlements': levelEntitlements,
+        'unlockedLevelIds': unlockedLevelIds,
         'completedLessonIds': completedLessonIds.toList(),
         'totalWatchSeconds': totalWatchSeconds,
         'isSuspended': isSuspended,
@@ -183,6 +204,9 @@ class RegisteredStudent {
       joinedAt: parseDate(json['createdAt'] ?? json['joinedAt']),
       lastActiveAt: parseNullableDate(json['lastActiveAt']),
       enrolledCourseIds: List<String>.from(json['enrolledCourseIds'] ?? []),
+      fullCourseEntitlements: List<String>.from(json['fullCourseEntitlements'] ?? []),
+      levelEntitlements: List<String>.from(json['levelEntitlements'] ?? []),
+      unlockedLevelIds: List<String>.from(json['unlockedLevelIds'] ?? []),
       completedLessonIds: Set<String>.from(json['completedLessonIds'] ?? []),
       totalWatchSeconds: json['totalWatchSeconds'] != null
           ? int.tryParse(json['totalWatchSeconds'].toString()) ?? 0

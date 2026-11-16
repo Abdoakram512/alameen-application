@@ -235,9 +235,15 @@ class FirestoreService {
   Future<void> approveRequest(
     String requestId,
     String studentId,
-    String courseId,
-  ) =>
-      _requestsRepository.approveRequest(requestId, studentId, courseId);
+    String courseId, {
+    String? levelId,
+  }) =>
+      _requestsRepository.approveRequest(
+        requestId,
+        studentId,
+        courseId,
+        levelId: levelId,
+      );
   Future<void> rejectRequest(String requestId, {String adminNotes = ''}) =>
       _requestsRepository.rejectRequest(requestId, adminNotes: adminNotes);
 

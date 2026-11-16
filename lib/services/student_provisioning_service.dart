@@ -35,8 +35,6 @@ class ProvisionStudentOutcome {
   });
 }
 
-/// خدمة إنشاء حسابات المتدربين (مفرد أو جماعي) عبر نسخة Firebase معزولة
-/// لضمان عدم تسجيل خروج المشرف أثناء إنشاء حسابات الطلاب ومنحهم الصلاحيات.
 class StudentProvisioningService {
   static const String _secondaryAppName = 'AlameenStudentProvisioner';
 
@@ -152,6 +150,7 @@ class StudentProvisioningService {
           'role': 'student',
           'provisionedByAdmin': true,
           'enrolledCourseIds': uniqueCourseIds,
+          'fullCourseEntitlements': uniqueCourseIds,
           'completedLessonIds': const <String>[],
           'totalWatchSeconds': 0,
           'createdAt': FieldValue.serverTimestamp(),
@@ -250,8 +249,10 @@ class StudentProvisioningService {
         .toList();
 
     final updates = <String, dynamic>{
-      if (courseIds.isNotEmpty)
+      if (courseIds.isNotEmpty) ...{
         'enrolledCourseIds': FieldValue.arrayUnion(courseIds),
+        'fullCourseEntitlements': FieldValue.arrayUnion(courseIds),
+      },
       if (name.isNotEmpty) 'displayName': name,
       if (phone.isNotEmpty) 'phone': phone,
     };

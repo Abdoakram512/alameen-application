@@ -75,6 +75,7 @@ class AdminRequestsCubit extends Cubit<AdminRequestsState> {
     required String studentId,
     required String courseId,
     required String studentName,
+    String? levelId,
   }) async {
     if (!_busyIds.add(requestId)) return;
 
@@ -92,7 +93,12 @@ class AdminRequestsCubit extends Cubit<AdminRequestsState> {
     emit(AdminRequestsLoaded(updatedList));
 
     try {
-      await _requestsRepository.approveRequest(requestId, studentId, courseId);
+      await _requestsRepository.approveRequest(
+        requestId,
+        studentId,
+        courseId,
+        levelId: levelId,
+      );
       emit(
         AdminRequestsActionSuccess(
           'requests.success_approved'.tr(),
