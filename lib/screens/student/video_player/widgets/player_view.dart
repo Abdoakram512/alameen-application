@@ -1,3 +1,4 @@
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../models/video_quality.dart';
@@ -8,6 +9,7 @@ export 'video_stage_player.dart';
 /// واجهة مشهد مشغل الفيديو المحدثة والموحدة في مسار المكونات النمطية.
 class PlayerView extends StatelessWidget {
   final VideoPlayerController? controller;
+  final ChewieController? chewieController;
   final bool isInitialized;
   final bool hasError;
   final String errorMessage;
@@ -42,6 +44,7 @@ class PlayerView extends StatelessWidget {
   const PlayerView({
     super.key,
     required this.controller,
+    this.chewieController,
     required this.isInitialized,
     required this.hasError,
     required this.errorMessage,
@@ -78,6 +81,7 @@ class PlayerView extends StatelessWidget {
   Widget build(BuildContext context) {
     return VideoStagePlayer(
       controller: controller,
+      chewieController: chewieController,
       isInitialized: isInitialized,
       hasError: hasError,
       errorMessage: errorMessage,

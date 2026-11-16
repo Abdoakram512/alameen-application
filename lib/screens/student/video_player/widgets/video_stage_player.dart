@@ -1,3 +1,4 @@
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/widgets/app_cached_image.dart';
@@ -9,6 +10,7 @@ import 'video_watermark_overlay.dart';
 /// مسرح عرض الفيديو مع الحفاظ الصارم على النسبة الأصلية لأبعاد الفيديو دون تمدد أو تشويه.
 class VideoStagePlayer extends StatelessWidget {
   final VideoPlayerController? controller;
+  final ChewieController? chewieController;
   final bool isInitialized;
   final bool hasError;
   final String errorMessage;
@@ -43,6 +45,7 @@ class VideoStagePlayer extends StatelessWidget {
   const VideoStagePlayer({
     super.key,
     required this.controller,
+    this.chewieController,
     required this.isInitialized,
     required this.hasError,
     required this.errorMessage,
@@ -99,7 +102,9 @@ class VideoStagePlayer extends StatelessWidget {
                 child: AspectRatio(
                   aspectRatio: _safeIntrinsicAspectRatio,
                   child: RepaintBoundary(
-                    child: VideoPlayer(activeController),
+                    child: chewieController != null
+                        ? Chewie(controller: chewieController!)
+                        : VideoPlayer(activeController),
                   ),
                 ),
               )
