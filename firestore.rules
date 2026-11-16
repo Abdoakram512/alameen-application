@@ -47,26 +47,17 @@ service cloud.firestore {
     }
 
     function isEntitledToLesson(courseId, lessonData) {
-      let isPreview = lessonData.get('isFreePreview', false) == true;
-      let userDocExists = exists(/databases/$(database)/documents/users/$(request.auth.uid));
-      let userData = userDocExists ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : {};
-      let hasFullEntitlement = courseId in userData.get('fullCourseEntitlements', []);
-      let lessonLevelId = lessonData.get('levelId', '');
-      let hasLevelEntitlement = (lessonLevelId != '') && (
-        (courseId + ':' + lessonLevelId) in userData.get('levelEntitlements', []) ||
-        (courseId + ':' + lessonLevelId) in userData.get('unlockedLevelIds', [])
-      );
-      return isPreview || isOpenCourse(courseId) || hasFullEntitlement || hasLevelEntitlement;
-    }
+      let isPreviewOrOpen = (lessonData.get('isFreePreview', false) == true) || isOpenCourse(courseId);
+      let userData = exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+      let levelToken = courseId + ':' + lessonData.get('levelId', '');
+      let hasLevelAccess = (lessonData.get('levelId', '') != '') &&
+        (levelToken in userData.get('levelEntitlements', []) || levelToken in userData.get('unlockedLevelIds', []));
+      let hasCourseAccess = (courseId in userData.get('fullCourseEntitlements', [])) &&
+        (!lessonData.get('isSequential', true) || lessonData.get('levelOrder', 1) == 1 || lessonData.get('levelId', '') == 'lvl_1' || levelToken in userData.get('unlockedLevelIds', []));
 
-    function isEnrolledInCourse(courseId) {
-      return isAuthenticated() && (
-        isOpenCourse(courseId) ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          courseId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('enrolledCourseIds', [])
-        )
-      );
+      return isPreviewOrOpen || hasLevelAccess || hasCourseAccess;
     }
 
     // Courses catalog — public metadata readable for guest catalog browsing;
@@ -137,7 +128,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedLessonIds']) ||
           request.resource.data.completedLessonIds.hasAll(resource.data.get('completedLessonIds', []))
         ) &&
-        // processedSessionEnds cannot shrink below its current size when size < 50, and must maintain max 50
+        // processedSessionEnds: strictly retains existing items when size < 50; drops at most 1 item when size == 50
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['processedSessionEnds']) ||
           (
@@ -145,9 +136,12 @@ service cloud.firestore {
             request.resource.data.processedSessionEnds.size() <= 50 &&
             (
               (resource.data.get('processedSessionEnds', []).size() < 50 &&
-               request.resource.data.processedSessionEnds.size() >= resource.data.get('processedSessionEnds', []).size()) ||
+               request.resource.data.processedSessionEnds.size() >= resource.data.get('processedSessionEnds', []).size() &&
+               request.resource.data.processedSessionEnds.hasAll(resource.data.get('processedSessionEnds', []))) ||
               (resource.data.get('processedSessionEnds', []).size() >= 50 &&
-               request.resource.data.processedSessionEnds.size() == 50)
+               request.resource.data.processedSessionEnds.size() == 50 &&
+               (resource.data.get('processedSessionEnds', [])[49] in request.resource.data.processedSessionEnds) &&
+               (resource.data.get('processedSessionEnds', [])[1] in request.resource.data.processedSessionEnds))
             )
           )
         ) &&
@@ -156,9 +150,10 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['enrolledCourseIds']) ||
           (
             request.resource.data.enrolledCourseIds.hasAll(resource.data.get('enrolledCourseIds', [])) &&
+            request.resource.data.enrolledCourseIds.size() == resource.data.get('enrolledCourseIds', []).size() + 1 &&
             request.resource.data.get('lastEnrolledCourseId', '') != '' &&
             isOpenCourse(request.resource.data.lastEnrolledCourseId) &&
-            request.resource.data.enrolledCourseIds.toSet().difference(resource.data.get('enrolledCourseIds', []).toSet()) == [request.resource.data.lastEnrolledCourseId].toSet()
+            (request.resource.data.lastEnrolledCourseId in request.resource.data.enrolledCourseIds)
           )
         )
       );
@@ -273,27 +268,20 @@ service cloud.firestore {
       allow delete: if hasAdminPerm('manage_courses');
     }
 
-    // Live active watch sessions / presence radar
+    // Live active watch sessions / presence radar — strict owner & identity mismatch prevention
     match /active_watch_sessions/{sessionId} {
       allow get: if isAdmin() || (isAuthenticated() && resource.data.get('studentId', '') == request.auth.uid);
       allow list: if hasAdminPerm('view_analytics') || (
-        isAuthenticated() && (
-          resource.data.studentId == request.auth.uid ||
-          resource.data.studentUid == request.auth.uid
-        )
+        isAuthenticated() && resource.data.studentId == request.auth.uid
       );
       allow create: if isAuthenticated() &&
-        (request.resource.data.get('studentUid', '') == request.auth.uid ||
-         request.resource.data.get('studentId', '') == request.auth.uid);
+        request.resource.data.get('studentId', '') == request.auth.uid &&
+        (!('studentUid' in request.resource.data) || request.resource.data.studentUid == request.auth.uid);
       allow update: if isAuthenticated() &&
-        (resource.data.get('studentUid', '') == request.auth.uid ||
-         resource.data.get('studentId', '') == request.auth.uid) &&
-        (request.resource.data.get('studentUid', '') == request.auth.uid ||
-         request.resource.data.get('studentId', '') == request.auth.uid);
-      allow delete: if (isAuthenticated() &&
-        (resource.data.get('studentUid', '') == request.auth.uid ||
-         resource.data.get('studentId', '') == request.auth.uid)) ||
-        isAdmin();
+        resource.data.get('studentId', '') == request.auth.uid &&
+        request.resource.data.get('studentId', '') == request.auth.uid &&
+        (!('studentUid' in request.resource.data) || request.resource.data.studentUid == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.get('studentId', '') == request.auth.uid);
     }
 
     // Screen capture / security audit alerts

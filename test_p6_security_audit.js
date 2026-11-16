@@ -85,7 +85,7 @@ function toFields(obj) {
 
 async function runSecurityAudit() {
   console.log('======================================================================');
-  console.log('P6 SECURITY POST-REMEDIATION VERIFICATION SUITE (FIRESTORE EMULATOR)');
+  console.log('P6 DEFINITIVE COMPREHENSIVE SECURITY VERIFICATION SUITE');
   console.log('Testing Project: elameen on 127.0.0.1:8088');
   console.log('======================================================================\n');
 
@@ -120,38 +120,42 @@ async function runSecurityAudit() {
     }),
   });
 
-  // Setup: Create a paid multi-level course with protected lessons
+  // Setup 1: Paid multi-level sequential course
   await firestoreRequest({
     method: 'PATCH',
     path: '/courses/course_math_physics_paid',
     token: superAdminToken,
     data: toFields({
-      title: 'الفيزياء المتقدمة - دورة شاملة متعددة المستويات',
+      title: 'الفيزياء المتقدمة - دورة شاملة متعددة المستويات (تتابعي)',
       accessMode: 'closed',
       price: 1500,
       enrolledCount: 0,
     }),
   });
 
-  // Level 1 protected lesson (Purchased by Alice)
+  // Level 1 protected lesson (Level order 1)
   await firestoreRequest({
     method: 'PATCH',
     path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl1_intro',
     token: superAdminToken,
     data: toFields({
       levelId: 'lvl_1',
+      levelOrder: 1,
+      isSequential: true,
       title: 'المستوى 1: محاضرة الحركة الخطية',
       muxPlaybackId: 'mux_lvl1_secret_playback_token_abc123',
     }),
   });
 
-  // Level 2 protected lesson (NOT purchased by Alice, separate payment level)
+  // Level 2 protected lesson (Level order 2 - Sequential progression)
   await firestoreRequest({
     method: 'PATCH',
     path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
     token: superAdminToken,
     data: toFields({
       levelId: 'lvl_2',
+      levelOrder: 2,
+      isSequential: true,
       title: 'المستوى 2: الديناميكا الحرارية والفيزياء النووية',
       muxPlaybackId: 'mux_lvl2_CONFIDENTIAL_playback_token_xyz999',
     }),
@@ -164,6 +168,7 @@ async function runSecurityAudit() {
     token: superAdminToken,
     data: toFields({
       levelId: 'lvl_1',
+      levelOrder: 1,
       title: 'معاينة مجانية للمستوى الأول',
       isFreePreview: true,
       muxPlaybackId: 'mux_free_preview_playback_token',
@@ -200,7 +205,7 @@ async function runSecurityAudit() {
     }),
   });
 
-  // Seed Charlie: Full-course purchase
+  // Seed Charlie: Full-course purchase (starts with only Level 1 unlocked sequentially)
   await firestoreRequest({
     method: 'PATCH',
     path: '/users/student_charlie',
@@ -235,121 +240,40 @@ async function runSecurityAudit() {
     }),
   });
 
-  // ----------------------------------------------------------------------------------
-  // TEST 1: Level-Specific Protected Playback Access (HIGH / RELEASE BLOCKER FIX)
-  // ----------------------------------------------------------------------------------
-  console.log('--- 1. Level-Specific Protected Playback Access ---');
+  // ==================================================================================
+  // 1. COMPLETION FORGERY & ENTITLEMENT CONSISTENCY
+  // ==================================================================================
+  console.log('\n--- 1. Completion Forgery vs Authoritative Gating ---');
   {
-    // A: Alice (Level 1 only) tries to access Level 2 protected lesson
-    const resLvl2 = await firestoreRequest({
+    // A: Student appends to completedLessonIds directly (changing NO other fields)
+    const resAppendCompleted = await firestoreRequest({
+      method: 'PATCH',
+      path: '/users/student_alice?updateMask.fieldPaths=completedLessonIds',
+      token: studentToken,
+      data: toFields({
+        completedLessonIds: ['lesson_lvl1_intro', 'lesson_lvl2_advanced'],
+      }),
+    });
+    assert(
+      resAppendCompleted.status === 200,
+      'Student CAN append completedLessonIds directly (200 OK) for personal client checkmarks',
+      `Actual status: ${resAppendCompleted.status}`
+    );
+
+    // B: Does forged completedLessonIds unlock Level 2 protected lesson?
+    const resLvl2Attempt = await firestoreRequest({
       method: 'GET',
       path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
       token: studentToken,
     });
     assert(
-      resLvl2.status === 403,
-      'Student with Level 1 CANNOT read Level 2 protected Mux token (403 Forbidden)',
-      `Actual status: ${resLvl2.status}`
+      resLvl2Attempt.status === 403,
+      'Forged completedLessonIds CANNOT unlock Level 2 protected playback (403 Forbidden)',
+      `Actual status: ${resLvl2Attempt.status}`
     );
 
-    // B: Alice (Level 1 only) accesses Level 1 protected lesson
-    const resLvl1 = await firestoreRequest({
-      method: 'GET',
-      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl1_intro',
-      token: studentToken,
-    });
-    assert(
-      resLvl1.status === 200,
-      'Student with Level 1 CAN read Level 1 protected Mux token (200 OK)',
-      `Actual status: ${resLvl1.status}`
-    );
-
-    // C: Charlie (Full course entitlement) accesses Level 2 protected lesson
-    const resCharlieLvl2 = await firestoreRequest({
-      method: 'GET',
-      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
-      token: studentCharlieToken,
-    });
-    assert(
-      resCharlieLvl2.status === 200,
-      'Student with Full Course entitlement CAN read Level 2 protected lesson (200 OK)',
-      `Actual status: ${resCharlieLvl2.status}`
-    );
-
-    // D: Unenrolled Bob accesses Free Preview lesson
-    const resFreePreview = await firestoreRequest({
-      method: 'GET',
-      path: '/courses/course_math_physics_paid/protected_lessons/lesson_free_preview',
-      token: studentBobToken,
-    });
-    assert(
-      resFreePreview.status === 200,
-      'Any student CAN read Free Preview lesson in paid course (200 OK)',
-      `Actual status: ${resFreePreview.status}`
-    );
-
-    // E: Legacy lesson with missing levelId fails closed for Level 1 subscriber
-    const resLegacyLvl1 = await firestoreRequest({
-      method: 'GET',
-      path: '/courses/course_math_physics_paid/protected_lessons/lesson_legacy_no_level',
-      token: studentToken,
-    });
-    assert(
-      resLegacyLvl1.status === 403,
-      'Legacy lesson with missing levelId FAILS CLOSED for individual level subscriber (403 Forbidden)',
-      `Actual status: ${resLegacyLvl1.status}`
-    );
-
-    // F: Legacy lesson accessible to Full Course subscriber
-    const resLegacyFull = await firestoreRequest({
-      method: 'GET',
-      path: '/courses/course_math_physics_paid/protected_lessons/lesson_legacy_no_level',
-      token: studentCharlieToken,
-    });
-    assert(
-      resLegacyFull.status === 200,
-      'Legacy lesson with missing levelId is accessible to Full Course subscriber (200 OK)',
-      `Actual status: ${resLegacyFull.status}`
-    );
-  }
-
-  // ----------------------------------------------------------------------------------
-  // TEST 2: Authoritative Entitlement & Privilege Isolation (HIGH FIX)
-  // ----------------------------------------------------------------------------------
-  console.log('\n--- 2. Authoritative Entitlement & Privilege Isolation ---');
-  {
-    // A: Alice tries to grant herself fullCourseEntitlements
-    const resForgeFull = await firestoreRequest({
-      method: 'PATCH',
-      path: '/users/student_alice?updateMask.fieldPaths=fullCourseEntitlements',
-      token: studentToken,
-      data: toFields({
-        fullCourseEntitlements: ['course_math_physics_paid'],
-      }),
-    });
-    assert(
-      resForgeFull.status === 403,
-      'Student CANNOT forge fullCourseEntitlements (403 Forbidden)',
-      `Actual status: ${resForgeFull.status}`
-    );
-
-    // B: Alice tries to grant herself levelEntitlements for Level 2
-    const resForgeLvl2 = await firestoreRequest({
-      method: 'PATCH',
-      path: '/users/student_alice?updateMask.fieldPaths=levelEntitlements',
-      token: studentToken,
-      data: toFields({
-        levelEntitlements: ['course_math_physics_paid:lvl_1', 'course_math_physics_paid:lvl_2'],
-      }),
-    });
-    assert(
-      resForgeLvl2.status === 403,
-      'Student CANNOT forge levelEntitlements (403 Forbidden)',
-      `Actual status: ${resForgeLvl2.status}`
-    );
-
-    // C: Alice tries to forge certifiedCourseIds
-    const resForgeCert = await firestoreRequest({
+    // C: Student attempts to directly grant themselves certifiedCourseIds
+    const resCertForge = await firestoreRequest({
       method: 'PATCH',
       path: '/users/student_alice?updateMask.fieldPaths=certifiedCourseIds',
       token: studentToken,
@@ -358,38 +282,63 @@ async function runSecurityAudit() {
       }),
     });
     assert(
-      resForgeCert.status === 403,
-      'Student CANNOT forge certificate / certifiedCourseIds (403 Forbidden)',
-      `Actual status: ${resForgeCert.status}`
+      resCertForge.status === 403,
+      'Student CANNOT forge authoritative certificate / certifiedCourseIds (403 Forbidden)',
+      `Actual status: ${resCertForge.status}`
     );
 
-    // D: Even if Alice marks completedLessonIds with Level 2 lesson, she still cannot access Level 2 protected lesson
-    await firestoreRequest({
+    // D: Student attempts to directly grant themselves fullCourseEntitlements
+    const resFullForge = await firestoreRequest({
       method: 'PATCH',
-      path: '/users/student_alice?updateMask.fieldPaths=completedLessonIds',
+      path: '/users/student_alice?updateMask.fieldPaths=fullCourseEntitlements',
       token: studentToken,
       data: toFields({
-        completedLessonIds: ['lesson_lvl2_advanced'],
+        fullCourseEntitlements: ['course_math_physics_paid'],
       }),
     });
-    const resLvl2AfterCheckmark = await firestoreRequest({
-      method: 'GET',
-      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
+    assert(
+      resFullForge.status === 403,
+      'Student CANNOT forge fullCourseEntitlements (403 Forbidden)',
+      `Actual status: ${resFullForge.status}`
+    );
+
+    // E: Student attempts to directly grant themselves levelEntitlements
+    const resLvlForge = await firestoreRequest({
+      method: 'PATCH',
+      path: '/users/student_alice?updateMask.fieldPaths=levelEntitlements',
       token: studentToken,
+      data: toFields({
+        levelEntitlements: ['course_math_physics_paid:lvl_2'],
+      }),
     });
     assert(
-      resLvl2AfterCheckmark.status === 403,
-      'Forged client completedLessonIds CANNOT unlock protected lesson playback (403 Forbidden)',
-      `Actual status: ${resLvl2AfterCheckmark.status}`
+      resLvlForge.status === 403,
+      'Student CANNOT forge levelEntitlements (403 Forbidden)',
+      `Actual status: ${resLvlForge.status}`
+    );
+
+    // F: Student attempts to directly grant themselves unlockedLevelIds
+    const resUnlockForge = await firestoreRequest({
+      method: 'PATCH',
+      path: '/users/student_alice?updateMask.fieldPaths=unlockedLevelIds',
+      token: studentToken,
+      data: toFields({
+        unlockedLevelIds: ['course_math_physics_paid:lvl_2'],
+      }),
+    });
+    assert(
+      resUnlockForge.status === 403,
+      'Student CANNOT forge unlockedLevelIds (403 Forbidden)',
+      `Actual status: ${resUnlockForge.status}`
     );
   }
 
-  // ----------------------------------------------------------------------------------
-  // TEST 3: Replay Protection Cache Integrity (HIGH FIX)
-  // ----------------------------------------------------------------------------------
-  console.log('\n--- 3. Replay Protection Sliding Window Cache Integrity ---');
+  // ==================================================================================
+  // 2. REPLAY PROTECTION & CACHE INTEGRITY
+  // ==================================================================================
+  console.log('\n--- 2. Replay Protection & Sliding Window Cache Integrity ---');
   {
-    // A: Alice attempts to wipe processedSessionEnds array
+    // A: Attempt to wipe processedSessionEnds array to []
     const resWipe = await firestoreRequest({
       method: 'PATCH',
       path: '/users/student_alice?updateMask.fieldPaths=processedSessionEnds',
@@ -400,114 +349,62 @@ async function runSecurityAudit() {
     });
     assert(
       resWipe.status === 403,
-      'Student CANNOT wipe processedSessionEnds array to reset replay cache (403 Forbidden)',
+      'Student CANNOT wipe processedSessionEnds array to [] (403 Forbidden)',
       `Actual status: ${resWipe.status}`
     );
 
-    // B: Legitimate append to processedSessionEnds is allowed
-    const resAppend = await firestoreRequest({
+    // B: Seed exactly 50 session entries in a test user
+    const fiftySessions = Array.from({ length: 50 }, (_, i) => `sess_item_${i + 1}`);
+    await firestoreRequest({
       method: 'PATCH',
-      path: '/users/student_alice?updateMask.fieldPaths=processedSessionEnds',
-      token: studentToken,
+      path: '/users/student_fifty',
+      token: superAdminToken,
       data: toFields({
-        processedSessionEnds: ['initial_sess_001', 'sess_new_002'],
+        displayName: 'Fifty Sessions Student',
+        email: 'fifty@alameen.com',
+        role: 'student',
+        processedSessionEnds: fiftySessions,
+        totalWatchSeconds: 1000,
+      }),
+    });
+    const fiftyToken = makeToken('student_fifty');
+
+    // Attempt to replace all 50 sessions with 50 arbitrary/fabricated values
+    const arbitraryFifty = Array.from({ length: 50 }, (_, i) => `arbitrary_fake_${i + 1}`);
+    const resReplaceFifty = await firestoreRequest({
+      method: 'PATCH',
+      path: '/users/student_fifty?updateMask.fieldPaths=processedSessionEnds',
+      token: fiftyToken,
+      data: toFields({
+        processedSessionEnds: arbitraryFifty,
       }),
     });
     assert(
-      resAppend.status === 200,
-      'Legitimate append to processedSessionEnds is ALLOWED (200 OK)',
-      `Actual status: ${resAppend.status}`
+      resReplaceFifty.status === 403,
+      'Student CANNOT replace 50 existing sessions with 50 arbitrary values (403 Forbidden)',
+      `Actual status: ${resReplaceFifty.status}`
     );
-  }
 
-  // ----------------------------------------------------------------------------------
-  // TEST 4: Student Privacy & Active Watch Sessions Directory Isolation (HIGH FIX)
-  // ----------------------------------------------------------------------------------
-  console.log('\n--- 4. Active Watch Sessions Privacy & Directory Isolation ---');
-  {
-    // Seed Bob's active watch session
-    await firestoreRequest({
+    // Legitimate sliding window update: drops index 0 and appends 1 new item (diff size == 1)
+    const slidingFifty = [...fiftySessions.slice(1), 'sess_item_51_new'];
+    const resValidSlide = await firestoreRequest({
       method: 'PATCH',
-      path: '/active_watch_sessions/sess_bob_active',
-      token: studentBobToken,
+      path: '/users/student_fifty?updateMask.fieldPaths=processedSessionEnds',
+      token: fiftyToken,
       data: toFields({
-        studentId: 'student_bob',
-        studentName: 'Bob Target',
-        studentEmail: 'bob@alameen.com',
-        studentPhone: '01099998888',
-        ipAddress: '197.34.120.45',
-        isPlaying: true,
+        processedSessionEnds: slidingFifty,
       }),
     });
-
-    // A: Student Alice attempts broad list of /active_watch_sessions
-    const resListSessions = await firestoreRequest({
-      method: 'GET',
-      path: '/active_watch_sessions',
-      token: studentToken,
-    });
     assert(
-      resListSessions.status === 403,
-      'Student CANNOT list /active_watch_sessions directory of peers (403 Forbidden)',
-      `Actual status: ${resListSessions.status}`
+      resValidSlide.status === 200,
+      'Legitimate sliding window update (drops 1, appends 1) is ALLOWED (200 OK)',
+      `Actual status: ${resValidSlide.status}`
     );
 
-    // B: Student Alice attempts direct read of Bob's active watch session
-    const resGetBobSession = await firestoreRequest({
-      method: 'GET',
-      path: '/active_watch_sessions/sess_bob_active',
-      token: studentToken,
-    });
-    assert(
-      resGetBobSession.status === 403,
-      'Student CANNOT read peer student active watch session doc (403 Forbidden)',
-      `Actual status: ${resGetBobSession.status}`
-    );
-
-    // C: Student Alice CAN create and read her own active session
+    // C: Watch log immutability of sessionEndCommitted flag
     await firestoreRequest({
       method: 'PATCH',
-      path: '/active_watch_sessions/sess_alice_active',
-      token: studentToken,
-      data: toFields({
-        studentId: 'student_alice',
-        studentName: 'Alice Student',
-        isPlaying: true,
-      }),
-    });
-    const resGetAliceSession = await firestoreRequest({
-      method: 'GET',
-      path: '/active_watch_sessions/sess_alice_active',
-      token: studentToken,
-    });
-    assert(
-      resGetAliceSession.status === 200,
-      'Student CAN read her own active watch session doc (200 OK)',
-      `Actual status: ${resGetAliceSession.status}`
-    );
-
-    // D: Admin with view_analytics CAN list /active_watch_sessions
-    const resAdminList = await firestoreRequest({
-      method: 'GET',
-      path: '/active_watch_sessions',
-      token: viewOnlyAdminToken,
-    });
-    assert(
-      resAdminList.status === 200,
-      'Admin with view_analytics CAN list /active_watch_sessions for live radar (200 OK)',
-      `Actual status: ${resAdminList.status}`
-    );
-  }
-
-  // ----------------------------------------------------------------------------------
-  // TEST 5: Watch Logs Immutability of sessionEndCommitted Flag
-  // ----------------------------------------------------------------------------------
-  console.log('\n--- 5. Watch Logs sessionEndCommitted Flag Immutability ---');
-  {
-    // Create committed watch log
-    await firestoreRequest({
-      method: 'PATCH',
-      path: '/watch_logs/watch_alice_session_committed',
+      path: '/watch_logs/watch_alice_session_test',
       token: studentToken,
       data: toFields({
         studentId: 'student_alice',
@@ -519,24 +416,236 @@ async function runSecurityAudit() {
       }),
     });
 
-    // Alice attempts to flip sessionEndCommitted back to false
-    const resFlip = await firestoreRequest({
+    // Attempt to flip sessionEndCommitted back to false
+    const resFlipFlag = await firestoreRequest({
       method: 'PATCH',
-      path: '/watch_logs/watch_alice_session_committed',
+      path: '/watch_logs/watch_alice_session_test',
       token: studentToken,
       data: toFields({
         sessionEndCommitted: false,
       }),
     });
     assert(
-      resFlip.status === 403,
-      'Student CANNOT uncommit or reset sessionEndCommitted flag in watch_logs (403 Forbidden)',
-      `Actual status: ${resFlip.status}`
+      resFlipFlag.status === 403,
+      'Student CANNOT flip sessionEndCommitted from true back to false in watch_logs (403 Forbidden)',
+      `Actual status: ${resFlipFlag.status}`
+    );
+  }
+
+  // ==================================================================================
+  // 3. PURCHASED LEVEL VS UNLOCKED LEVEL (SEQUENTIAL PROGRESSION)
+  // ==================================================================================
+  console.log('\n--- 3. Purchased Level vs Unlocked Level (Sequential Progression) ---');
+  {
+    // A: Charlie has Full Course Entitlement. Does he get Level 1?
+    const resCharlieLvl1 = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl1_intro',
+      token: studentCharlieToken,
+    });
+    assert(
+      resCharlieLvl1.status === 200,
+      'Full-Course subscriber CAN access Level 1 (order 1) initial level (200 OK)',
+      `Actual status: ${resCharlieLvl1.status}`
+    );
+
+    // B: Charlie attempts to access Level 2 BEFORE it is unlocked
+    const resCharlieLvl2Locked = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
+      token: studentCharlieToken,
+    });
+    assert(
+      resCharlieLvl2Locked.status === 403,
+      'Full-Course subscriber CANNOT access Level 2 (order 2) merely because course was purchased (403 Forbidden)',
+      `Actual status: ${resCharlieLvl2Locked.status}`
+    );
+
+    // C: Admin authorizes unlocking Level 2 for Charlie (adds courseId:lvl_2 to unlockedLevelIds)
+    await firestoreRequest({
+      method: 'PATCH',
+      path: '/users/student_charlie?updateMask.fieldPaths=unlockedLevelIds',
+      token: superAdminToken,
+      data: toFields({
+        unlockedLevelIds: ['course_math_physics_paid:lvl_2'],
+      }),
+    });
+
+    // Now Charlie accesses Level 2
+    const resCharlieLvl2Unlocked = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
+      token: studentCharlieToken,
+    });
+    assert(
+      resCharlieLvl2Unlocked.status === 200,
+      'Full-Course subscriber CAN access Level 2 once authorized in unlockedLevelIds (200 OK)',
+      `Actual status: ${resCharlieLvl2Unlocked.status}`
+    );
+
+    // D: Level 1-only subscriber (Alice) still cannot access Level 2
+    const resAliceLvl2 = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_math_physics_paid/protected_lessons/lesson_lvl2_advanced',
+      token: studentToken,
+    });
+    assert(
+      resAliceLvl2.status === 403,
+      'Level 1 subscriber CANNOT access Level 2 (403 Forbidden)',
+      `Actual status: ${resAliceLvl2.status}`
+    );
+
+    // E: Non-sequential course: full-course subscriber gets immediate access to all levels
+    await firestoreRequest({
+      method: 'PATCH',
+      path: '/courses/course_open_progression',
+      token: superAdminToken,
+      data: toFields({
+        title: 'دورة البرمجة المفتوحة (غير تتابعي)',
+        accessMode: 'closed',
+      }),
+    });
+    await firestoreRequest({
+      method: 'PATCH',
+      path: '/courses/course_open_progression/protected_lessons/lesson_advanced_nonseq',
+      token: superAdminToken,
+      data: toFields({
+        levelId: 'lvl_advanced',
+        levelOrder: 2,
+        isSequential: false, // Explicitly non-sequential!
+        title: 'محاضرة متقدمة في دورة غير تتابعية',
+        muxPlaybackId: 'mux_nonseq_playback_token',
+      }),
+    });
+    await firestoreRequest({
+      method: 'PATCH',
+      path: '/users/student_charlie?updateMask.fieldPaths=fullCourseEntitlements',
+      token: superAdminToken,
+      data: toFields({
+        fullCourseEntitlements: ['course_math_physics_paid', 'course_open_progression'],
+      }),
+    });
+    const resNonSeq = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_open_progression/protected_lessons/lesson_advanced_nonseq',
+      token: studentCharlieToken,
+    });
+    assert(
+      resNonSeq.status === 200,
+      'Full-Course subscriber CAN access higher levels in non-sequential course (200 OK)',
+      `Actual status: ${resNonSeq.status}`
+    );
+
+    // F: Free preview accessible to unenrolled Bob
+    const resFreePreview = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_math_physics_paid/protected_lessons/lesson_free_preview',
+      token: studentBobToken,
+    });
+    assert(
+      resFreePreview.status === 200,
+      'Any student CAN read Free Preview lesson (200 OK)',
+      `Actual status: ${resFreePreview.status}`
+    );
+
+    // G: Legacy lesson without levelId fails closed for Level 1 buyer, open for full course
+    const resLegacyLvl = await firestoreRequest({
+      method: 'GET',
+      path: '/courses/course_math_physics_paid/protected_lessons/lesson_legacy_no_level',
+      token: studentToken,
+    });
+    assert(
+      resLegacyLvl.status === 403,
+      'Legacy lesson without levelId FAILS CLOSED for individual level subscriber (403 Forbidden)',
+      `Actual status: ${resLegacyLvl.status}`
+    );
+  }
+
+  // ==================================================================================
+  // 4. ACTIVE WATCH SESSION INTEGRITY & IDENTITY MISMATCH PREVENTION
+  // ==================================================================================
+  console.log('\n--- 4. Active Watch Session Integrity & Impersonation Prevention ---');
+  {
+    // A: Alice attempts to create session claiming studentId == student_bob (Impersonation)
+    const resImpersonate = await firestoreRequest({
+      method: 'PATCH',
+      path: '/active_watch_sessions/sess_impersonate_001',
+      token: studentToken,
+      data: toFields({
+        studentId: 'student_bob',
+        studentName: 'Bob Target Spoofed',
+        isPlaying: true,
+      }),
+    });
+    assert(
+      resImpersonate.status === 403,
+      'Student CANNOT create session with mismatched studentId to impersonate peer (403 Forbidden)',
+      `Actual status: ${resImpersonate.status}`
+    );
+
+    // B: Alice attempts to create session with studentUid: 'student_alice' but studentId: 'student_bob'
+    const resMismatchedIds = await firestoreRequest({
+      method: 'PATCH',
+      path: '/active_watch_sessions/sess_mismatch_002',
+      token: studentToken,
+      data: toFields({
+        studentUid: 'student_alice',
+        studentId: 'student_bob',
+        studentName: 'Bob Target Spoofed 2',
+        isPlaying: true,
+      }),
+    });
+    assert(
+      resMismatchedIds.status === 403,
+      'Student CANNOT submit conflicting studentUid and studentId fields (403 Forbidden)',
+      `Actual status: ${resMismatchedIds.status}`
+    );
+
+    // C: Alice creates valid session with own studentId
+    const resValidSession = await firestoreRequest({
+      method: 'PATCH',
+      path: '/active_watch_sessions/sess_alice_valid',
+      token: studentToken,
+      data: toFields({
+        studentId: 'student_alice',
+        studentUid: 'student_alice',
+        studentName: 'Alice Student',
+        isPlaying: true,
+      }),
+    });
+    assert(
+      resValidSession.status === 200,
+      'Student CAN create own active watch session with matching studentId (200 OK)',
+      `Actual status: ${resValidSession.status}`
+    );
+
+    // D: Alice attempts broad listing of /active_watch_sessions
+    const resListSessions = await firestoreRequest({
+      method: 'GET',
+      path: '/active_watch_sessions',
+      token: studentToken,
+    });
+    assert(
+      resListSessions.status === 403,
+      'Student CANNOT perform unconstrained list of /active_watch_sessions (403 Forbidden)',
+      `Actual status: ${resListSessions.status}`
+    );
+
+    // E: Admin with view_analytics performs broad listing for live radar
+    const resAdminList = await firestoreRequest({
+      method: 'GET',
+      path: '/active_watch_sessions',
+      token: viewOnlyAdminToken,
+    });
+    assert(
+      resAdminList.status === 200,
+      'Admin with view_analytics CAN list all active watch sessions for live radar (200 OK)',
+      `Actual status: ${resAdminList.status}`
     );
   }
 
   console.log('\n======================================================================');
-  console.log(`SECURITY VERIFICATION SUMMARY: ${passed} PASSED, ${failed} FAILED`);
+  console.log(`FINAL SECURITY VERIFICATION SUMMARY: ${passed} PASSED, ${failed} FAILED`);
   console.log('======================================================================');
 
   if (failed > 0) {
@@ -547,7 +656,7 @@ async function runSecurityAudit() {
 
 runSecurityAudit()
   .then((count) => {
-    console.log(`\nAll ${count} security checks PASSED cleanly!`);
+    console.log(`\nAll ${count} P6 final security checks PASSED cleanly!`);
     process.exit(0);
   })
   .catch((err) => {
