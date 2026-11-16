@@ -24,6 +24,8 @@ class CourseAccessRequest extends Equatable {
   final String studentAvatar;
   final String courseId;
   final String courseTitle;
+  final String? levelId;
+  final String? levelTitle;
   final String paymentMethod;
   final String senderNumberOrRef;
   final String receiptUrl;
@@ -40,6 +42,8 @@ class CourseAccessRequest extends Equatable {
     this.studentAvatar = '',
     required this.courseId,
     required this.courseTitle,
+    this.levelId,
+    this.levelTitle,
     this.paymentMethod = 'فودافون كاش (Vodafone Cash)',
     this.senderNumberOrRef = '',
     this.receiptUrl = '',
@@ -57,6 +61,8 @@ class CourseAccessRequest extends Equatable {
     String? studentAvatar,
     String? courseId,
     String? courseTitle,
+    String? levelId,
+    String? levelTitle,
     String? paymentMethod,
     String? senderNumberOrRef,
     String? receiptUrl,
@@ -73,6 +79,8 @@ class CourseAccessRequest extends Equatable {
       studentAvatar: studentAvatar ?? this.studentAvatar,
       courseId: courseId ?? this.courseId,
       courseTitle: courseTitle ?? this.courseTitle,
+      levelId: levelId ?? this.levelId,
+      levelTitle: levelTitle ?? this.levelTitle,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       senderNumberOrRef: senderNumberOrRef ?? this.senderNumberOrRef,
       receiptUrl: receiptUrl ?? this.receiptUrl,
@@ -91,6 +99,8 @@ class CourseAccessRequest extends Equatable {
         'studentAvatar': studentAvatar,
         'courseId': courseId,
         'courseTitle': courseTitle,
+        if (levelId != null && levelId!.isNotEmpty) 'levelId': levelId,
+        if (levelTitle != null && levelTitle!.isNotEmpty) 'levelTitle': levelTitle,
         'paymentMethod': paymentMethod,
         'senderNumberOrRef': senderNumberOrRef,
         'receiptUrl': receiptUrl,
@@ -111,6 +121,8 @@ class CourseAccessRequest extends Equatable {
       studentAvatar: (json['studentAvatar'] ?? json['photoUrl'])?.toString() ?? '',
       courseId: json['courseId']?.toString() ?? '',
       courseTitle: json['courseTitle']?.toString() ?? '',
+      levelId: json['levelId']?.toString(),
+      levelTitle: json['levelTitle']?.toString(),
       paymentMethod: json['paymentMethod']?.toString() ?? 'فودافون كاش',
       senderNumberOrRef: json['senderNumberOrRef']?.toString() ?? '',
       receiptUrl: json['receiptUrl']?.toString() ?? '',
@@ -136,6 +148,8 @@ class CourseAccessRequest extends Equatable {
         studentAvatar,
         courseId,
         courseTitle,
+        levelId,
+        levelTitle,
         paymentMethod,
         senderNumberOrRef,
         receiptUrl,

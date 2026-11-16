@@ -136,6 +136,7 @@ class StudentWatchRepositoryImpl implements StudentWatchRepository {
         final logSnap = await tx.get(logRef);
         final existingDuration = (logSnap.data()?['durationSeconds'] as num?)?.toInt() ?? 0;
         final safeSessionSeconds = sessionSeconds >= existingDuration ? sessionSeconds : existingDuration;
+        final alreadyCommittedInLog = logSnap.data()?['sessionEndCommitted'] == true;
 
         final logData = <String, dynamic>{
           'id': logDocId,
@@ -152,6 +153,7 @@ class StudentWatchRepositoryImpl implements StudentWatchRepository {
           'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
           'completionPercentage': event['completionPercentage'] ?? 0.0,
           'isCompleted': isCompleted || (logSnap.data()?['isCompleted'] == true),
+          'sessionEndCommitted': alreadyCommittedInLog || isSessionEnd,
           'lastCheckpointId': eventId,
           if (coverageRanges != null && coverageRanges.isNotEmpty)
             'coverageRanges': coverageRanges,
@@ -174,7 +176,7 @@ class StudentWatchRepositoryImpl implements StudentWatchRepository {
             'completedLessonIds': FieldValue.arrayUnion([lessonId]),
         };
 
-        if (isSessionEnd && seconds > 0) {
+        if (isSessionEnd && seconds > 0 && !alreadyCommittedInLog) {
           if (!processedEvents.contains(eventId)) {
             // First time processing this session-end event: increment totalWatchSeconds safely
             processedEvents.add(eventId);

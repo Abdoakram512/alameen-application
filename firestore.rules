@@ -46,6 +46,19 @@ service cloud.firestore {
         get(/databases/$(database)/documents/courses/$(courseId)).data.get('accessMode', 'closed') == 'open';
     }
 
+    function isEntitledToLesson(courseId, lessonData) {
+      let isPreview = lessonData.get('isFreePreview', false) == true;
+      let userDocExists = exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userData = userDocExists ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : {};
+      let hasFullEntitlement = courseId in userData.get('fullCourseEntitlements', []);
+      let lessonLevelId = lessonData.get('levelId', '');
+      let hasLevelEntitlement = (lessonLevelId != '') && (
+        (courseId + ':' + lessonLevelId) in userData.get('levelEntitlements', []) ||
+        (courseId + ':' + lessonLevelId) in userData.get('unlockedLevelIds', [])
+      );
+      return isPreview || isOpenCourse(courseId) || hasFullEntitlement || hasLevelEntitlement;
+    }
+
     function isEnrolledInCourse(courseId) {
       return isAuthenticated() && (
         isOpenCourse(courseId) ||
@@ -68,9 +81,9 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['enrolledCount'])
       );
 
-      // Protected lesson playback identifiers — strictly accessible to Admin or Enrolled Students (and open courses)
+      // Protected lesson playback identifiers — strictly accessible to Admin or Entitled Students (and open courses / free previews)
       match /protected_lessons/{lessonId} {
-        allow read: if isAdmin() || isEnrolledInCourse(courseId);
+        allow read: if isAdmin() || isEntitledToLesson(courseId, resource.data);
         allow create, update, delete: if hasAdminPerm('manage_courses');
       }
     }
@@ -79,11 +92,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || hasAdminPerm('manage_students');
 
-      // Students can only create their own profile with role == 'student' and zero enrolledCourseIds
+      // Students can only create their own profile with role == 'student' and zero enrolledCourseIds and zero entitlements
       allow create: if hasAdminPerm('manage_students') || (
         isOwner(userId) &&
         (!('role' in request.resource.data) || request.resource.data.role == 'student') &&
         (!('enrolledCourseIds' in request.resource.data) || request.resource.data.enrolledCourseIds.size() == 0) &&
+        (!('fullCourseEntitlements' in request.resource.data) || request.resource.data.fullCourseEntitlements.size() == 0) &&
+        (!('levelEntitlements' in request.resource.data) || request.resource.data.levelEntitlements.size() == 0) &&
+        (!('unlockedLevelIds' in request.resource.data) || request.resource.data.unlockedLevelIds.size() == 0) &&
         (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false) &&
         (!('isBlocked' in request.resource.data) || request.resource.data.isBlocked == false) &&
         (!('isSuspended' in request.resource.data) || request.resource.data.isSuspended == false)
@@ -120,6 +136,20 @@ service cloud.firestore {
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedLessonIds']) ||
           request.resource.data.completedLessonIds.hasAll(resource.data.get('completedLessonIds', []))
+        ) &&
+        // processedSessionEnds cannot shrink below its current size when size < 50, and must maintain max 50
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['processedSessionEnds']) ||
+          (
+            request.resource.data.processedSessionEnds is list &&
+            request.resource.data.processedSessionEnds.size() <= 50 &&
+            (
+              (resource.data.get('processedSessionEnds', []).size() < 50 &&
+               request.resource.data.processedSessionEnds.size() >= resource.data.get('processedSessionEnds', []).size()) ||
+              (resource.data.get('processedSessionEnds', []).size() >= 50 &&
+               request.resource.data.processedSessionEnds.size() == 50)
+            )
+          )
         ) &&
         // enrolledCourseIds can only append verified open courses
         (
@@ -230,6 +260,7 @@ service cloud.firestore {
         request.resource.data.studentId == request.auth.uid &&
         resource.data.courseId == request.resource.data.courseId &&
         resource.data.lessonId == request.resource.data.lessonId &&
+        (!('sessionEndCommitted' in resource.data) || resource.data.sessionEndCommitted == false || request.resource.data.get('sessionEndCommitted', false) == true) &&
         (
           (request.resource.data.durationSeconds is int &&
            request.resource.data.durationSeconds >= resource.data.get('durationSeconds', 0) &&
@@ -245,7 +276,12 @@ service cloud.firestore {
     // Live active watch sessions / presence radar
     match /active_watch_sessions/{sessionId} {
       allow get: if isAdmin() || (isAuthenticated() && resource.data.get('studentId', '') == request.auth.uid);
-      allow list: if isAdmin() || isAuthenticated();
+      allow list: if hasAdminPerm('view_analytics') || (
+        isAuthenticated() && (
+          resource.data.studentId == request.auth.uid ||
+          resource.data.studentUid == request.auth.uid
+        )
+      );
       allow create: if isAuthenticated() &&
         (request.resource.data.get('studentUid', '') == request.auth.uid ||
          request.resource.data.get('studentId', '') == request.auth.uid);

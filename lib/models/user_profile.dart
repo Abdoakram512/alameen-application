@@ -9,6 +9,9 @@ class UserModel extends Equatable {
   final String phone;
   final String role;
   final List<String> enrolledCourseIds;
+  final List<String> fullCourseEntitlements;
+  final List<String> levelEntitlements;
+  final List<String> unlockedLevelIds;
   final List<String> completedLessonIds;
   final int totalWatchSeconds;
   final DateTime createdAt;
@@ -25,6 +28,9 @@ class UserModel extends Equatable {
     this.phone = '',
     this.role = 'student',
     this.enrolledCourseIds = const [],
+    this.fullCourseEntitlements = const [],
+    this.levelEntitlements = const [],
+    this.unlockedLevelIds = const [],
     this.completedLessonIds = const [],
     this.totalWatchSeconds = 0,
     required this.createdAt,
@@ -33,6 +39,12 @@ class UserModel extends Equatable {
     this.suspensionReason,
     this.courseExpiryDates = const {},
   });
+
+  bool isLevelUnlocked(String courseId, String levelId) {
+    if (fullCourseEntitlements.contains(courseId)) return true;
+    final token = '$courseId:$levelId';
+    return levelEntitlements.contains(token) || unlockedLevelIds.contains(token);
+  }
 
   bool isCourseExpired(String courseId) {
     if (!courseExpiryDates.containsKey(courseId)) return false;
@@ -75,6 +87,9 @@ class UserModel extends Equatable {
         'phone': phone,
         'role': role,
         'enrolledCourseIds': enrolledCourseIds,
+        'fullCourseEntitlements': fullCourseEntitlements,
+        'levelEntitlements': levelEntitlements,
+        'unlockedLevelIds': unlockedLevelIds,
         'completedLessonIds': completedLessonIds,
         'totalWatchSeconds': totalWatchSeconds,
         'createdAt': createdAt.toIso8601String(),
@@ -107,6 +122,9 @@ class UserModel extends Equatable {
       phone: map['phone'] ?? '',
       role: map['role'] ?? 'student',
       enrolledCourseIds: List<String>.from(map['enrolledCourseIds'] ?? []),
+      fullCourseEntitlements: List<String>.from(map['fullCourseEntitlements'] ?? []),
+      levelEntitlements: List<String>.from(map['levelEntitlements'] ?? []),
+      unlockedLevelIds: List<String>.from(map['unlockedLevelIds'] ?? []),
       completedLessonIds: List<String>.from(map['completedLessonIds'] ?? []),
       totalWatchSeconds: map['totalWatchSeconds'] != null
           ? int.tryParse(map['totalWatchSeconds'].toString()) ?? 0
@@ -129,6 +147,9 @@ class UserModel extends Equatable {
     String? phone,
     String? role,
     List<String>? enrolledCourseIds,
+    List<String>? fullCourseEntitlements,
+    List<String>? levelEntitlements,
+    List<String>? unlockedLevelIds,
     List<String>? completedLessonIds,
     int? totalWatchSeconds,
     DateTime? createdAt,
@@ -145,6 +166,9 @@ class UserModel extends Equatable {
       phone: phone ?? this.phone,
       role: role ?? this.role,
       enrolledCourseIds: enrolledCourseIds ?? List.from(this.enrolledCourseIds),
+      fullCourseEntitlements: fullCourseEntitlements ?? List.from(this.fullCourseEntitlements),
+      levelEntitlements: levelEntitlements ?? List.from(this.levelEntitlements),
+      unlockedLevelIds: unlockedLevelIds ?? List.from(this.unlockedLevelIds),
       completedLessonIds: completedLessonIds ?? List.from(this.completedLessonIds),
       totalWatchSeconds: totalWatchSeconds ?? this.totalWatchSeconds,
       createdAt: createdAt ?? this.createdAt,
@@ -164,6 +188,9 @@ class UserModel extends Equatable {
         phone,
         role,
         enrolledCourseIds,
+        fullCourseEntitlements,
+        levelEntitlements,
+        unlockedLevelIds,
         completedLessonIds,
         totalWatchSeconds,
         createdAt,
