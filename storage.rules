@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.uid == 'zkmjl8rJXOQCahdS1CXKt1rjWT83' ||
+        (
+          request.auth.token.email != null &&
+          request.auth.token.email_verified == true &&
+          request.auth.token.email.lower() == 'elameencenter66@gmail.com'
+        )
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Course thumbnails — readable by signed-in users, writable only by admin
+    match /courses/{courseId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() &&
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    // Payment receipts — private to uploading student and admin
+    match /receipts/{studentId}/{fileName} {
+      allow read: if isOwner(studentId) || isAdmin();
+      allow write: if isOwner(studentId) &&
+        request.resource.size < 10 * 1024 * 1024 &&
+        (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf'
+        );
+    }
+
+    // Assignment submissions — private to uploading student and admin
+    match /submissions/{studentId}/{fileName} {
+      allow read: if isOwner(studentId) || isAdmin();
+      allow write: if isOwner(studentId) &&
+        request.resource.size < 25 * 1024 * 1024 &&
+        (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType.matches('audio/.*') ||
+          request.resource.contentType.matches('video/.*') ||
+          request.resource.contentType == 'application/pdf'
+        );
+    }
+  }
+}
+
