@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -131,11 +132,20 @@ class NotificationService {
   }
 
   /// حفظ توكن الجهاز في ملف الطالب في فايرستور
+  /// حفظ توكن الجهاز في ملف الطالب في فايرستور (فقط إذا تغير التوكن لتوفير عمليات الكتابة)
   Future<void> syncFCMToken(String uid) async {
     try {
       // ignore: deprecated_member_use
       final token = await _fcm.getToken();
-      if (token != null) {
+      if (token != null && token.isNotEmpty) {
+        final prefs = SharedPreferencesAsync();
+        final cacheKey = 'fcm_token_synced_$uid';
+        final cachedToken = await prefs.getString(cacheKey);
+        if (cachedToken == token) {
+          // Token has not changed; skip redundant Firestore write
+          return;
+        }
+
         await FirebaseFirestore.instance.collection('users').doc(uid).set(
           {
             'fcmToken': token,
@@ -143,6 +153,7 @@ class NotificationService {
           },
           SetOptions(merge: true),
         );
+        await prefs.setString(cacheKey, token);
       }
     } catch (e) {
       debugPrint('syncFCMToken error: $e');
@@ -171,6 +182,8 @@ class NotificationService {
   Future<void> clearFCMToken(String? uid) async {
     try {
       if (uid != null && uid.isNotEmpty) {
+        final prefs = SharedPreferencesAsync();
+        await prefs.remove('fcm_token_synced_$uid');
         await FirebaseFirestore.instance
             .collection('users')
             .doc(uid)

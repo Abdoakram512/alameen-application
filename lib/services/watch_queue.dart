@@ -38,6 +38,7 @@ class WatchQueue {
     int? maxPlayheadSeconds,
     double? completionPercentage,
     bool? isCompleted,
+    String? sessionId,
   }) =>
       _serial(() async {
         if (seconds <= 0) return;
@@ -59,6 +60,7 @@ class WatchQueue {
           'maxPlayheadSeconds': ?maxPlayheadSeconds,
           'completionPercentage': ?completionPercentage,
           'isCompleted': ?isCompleted,
+          'sessionId': ?sessionId,
         });
         await write(_key(uid), jsonEncode(events));
       });

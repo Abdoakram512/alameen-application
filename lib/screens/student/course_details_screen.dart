@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/di/injection_container.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/feedback/app_error_state.dart';
@@ -19,7 +20,7 @@ import '../../models/course_access_mode.dart';
 import '../../models/learning_history.dart';
 import '../../models/lesson.dart';
 import '../../models/user_profile.dart';
-import '../../services/firestore_service.dart';
+import '../../repositories/student_learning_repository.dart';
 import 'course_details/widgets/course_assignments_section.dart';
 import 'course_details/widgets/course_certificate_card.dart';
 import 'course_details/widgets/course_curriculum_section.dart';
@@ -46,7 +47,10 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     if (uid == null) return Stream.value(const <AssignmentSubmission>[]);
     if (_submissionsStream == null || _lastUid != uid) {
       _lastUid = uid;
-      _submissionsStream = FirestoreService().streamStudentSubmissions(uid);
+      final repo = sl.isRegistered<StudentLearningRepository>()
+          ? sl<StudentLearningRepository>()
+          : StudentLearningRepositoryImpl();
+      _submissionsStream = repo.streamStudentSubmissions(uid);
     }
     return _submissionsStream!;
   }

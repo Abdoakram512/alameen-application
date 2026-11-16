@@ -64,6 +64,29 @@ class FirestoreService {
     });
   }
 
+  Future<List<Course>> getCourses({Source source = Source.serverAndCache}) async {
+    try {
+      final snapshot = await _coursesRef.get(GetOptions(source: source));
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        final course = Course.fromMap(data);
+
+        final sortedLevels = List<CourseLevel>.from(course.levels)
+          ..sort((a, b) => a.order.compareTo(b.order));
+        final finalLevels = sortedLevels.map((lvl) {
+          final sortedLessons = List<Lesson>.from(lvl.lessons)
+            ..sort((a, b) => a.order.compareTo(b.order));
+          return lvl.copyWith(lessons: sortedLessons);
+        }).toList();
+
+        return course.copyWith(levels: finalLevels);
+      }).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Stream<UserModel?> streamUser(String uid) {
     return _usersRef.doc(uid).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
@@ -118,6 +141,21 @@ class FirestoreService {
         return AssignmentSubmission.fromMap(data, id: doc.id);
       }).toList();
     });
+  }
+
+  Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId) async {
+    try {
+      final snapshot = await _submissionsRef
+          .where('studentId', isEqualTo: studentId)
+          .get(const GetOptions(source: Source.serverAndCache));
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return AssignmentSubmission.fromMap(data, id: doc.id);
+      }).toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// بث سجلات المشاهدة للمتدرب مرتبة زمنياً في Dart لتجنب الحاجة لفهرس مركب (Composite Index).
@@ -200,12 +238,38 @@ class FirestoreService {
       }
     }
 
-    try {
-      await docRef.set(payload, SetOptions(merge: true)).timeout(
-            const Duration(seconds: 8),
-          );
-    } catch (e) {
-      debugPrint('Firestore syncUserProfile set error: $e');
+    bool needsWrite = !docExists;
+    if (docExists && existingData != null) {
+      if (payload.containsKey('displayName') &&
+          existingData['displayName'] != payload['displayName']) {
+        needsWrite = true;
+      }
+      if (payload.containsKey('photoUrl') &&
+          existingData['photoUrl'] != payload['photoUrl']) {
+        needsWrite = true;
+      }
+      if (payload.containsKey('phone') &&
+          existingData['phone'] != payload['phone']) {
+        needsWrite = true;
+      }
+      final lastActive = existingData['lastActiveAt'];
+      if (lastActive is Timestamp) {
+        if (DateTime.now().difference(lastActive.toDate()).inMinutes > 30) {
+          needsWrite = true;
+        }
+      } else {
+        needsWrite = true;
+      }
+    }
+
+    if (needsWrite) {
+      try {
+        await docRef.set(payload, SetOptions(merge: true)).timeout(
+              const Duration(seconds: 8),
+            );
+      } catch (e) {
+        debugPrint('Firestore syncUserProfile set error: $e');
+      }
     }
 
     if (existingData != null) {
@@ -371,40 +435,50 @@ class FirestoreService {
     final uid = event['uid'] as String;
     final seconds = event['seconds'] as int;
     if (seconds <= 0) return;
-    final log = _watchLogsRef.doc('${uid}_${event['id']}');
+
+    final sessionId = event['sessionId'] as String?;
+    final courseId = event['courseId'] as String? ?? '';
+    final lessonId = event['lessonId'] as String? ?? '';
+    final logDocId = (sessionId != null && sessionId.isNotEmpty)
+        ? 'log_${uid}_${courseId}_${lessonId}_$sessionId'
+        : '${uid}_${event['id']}';
+    final log = _watchLogsRef.doc(logDocId);
     final isCompleted = event['isCompleted'] == true;
-    final lessonId = event['lessonId'] as String?;
-    await _db.runTransaction((transaction) async {
-      final existing = await transaction.get(log);
-      if (existing.exists) return;
-      transaction.set(
-        _usersRef.doc(uid),
-        {
-          'totalWatchSeconds': FieldValue.increment(seconds),
-          'lastActiveAt': FieldValue.serverTimestamp(),
-          if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
-          if (isCompleted && lessonId != null)
-            'completedLessonIds': FieldValue.arrayUnion([lessonId]),
-        },
-        SetOptions(merge: true),
-      );
-      transaction.set(log, {
+
+    final batch = _db.batch();
+    batch.set(
+      _usersRef.doc(uid),
+      {
+        'totalWatchSeconds': FieldValue.increment(seconds),
+        'lastActiveAt': FieldValue.serverTimestamp(),
+        if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
+        if (isCompleted && lessonId.isNotEmpty)
+          'completedLessonIds': FieldValue.arrayUnion([lessonId]),
+      },
+      SetOptions(merge: true),
+    );
+    batch.set(
+      log,
+      {
+        'id': logDocId,
         'studentId': uid,
         'studentName': event['studentName'] ?? '',
         'studentEmail': event['studentEmail'] ?? '',
-        'courseId': event['courseId'],
-        'lessonId': event['lessonId'],
+        'courseId': courseId,
+        'lessonId': lessonId,
         'lessonTitle': event['lessonTitle'] ?? '',
-        'durationSeconds': seconds,
+        'durationSeconds': FieldValue.increment(seconds),
         'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? seconds,
         'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
         'completionPercentage': event['completionPercentage'] ?? 0.0,
-        'isCompleted': event['isCompleted'] ?? false,
+        'isCompleted': isCompleted,
         'ipAddress': event['ipAddress'] ?? 'غير محدد',
         'networkType': event['networkType'] ?? 'غير محدد',
         'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
         'recordedAt': FieldValue.serverTimestamp(),
-      });
-    }).timeout(const Duration(seconds: 15));
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit().timeout(const Duration(seconds: 15));
   }
 }

@@ -65,7 +65,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String _baseStreamUrl = '';
 
   StreamSubscription<AuthState>? _accessSubscription;
-  StreamSubscription? _submissionsSubscription;
   Set<String> _submittedAssignmentIds = <String>{};
   ValueNotifier<bool>? _screenCaptureNotifier;
 
@@ -112,8 +111,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isSeekingRight = true;
   Timer? _seekFeedbackTimer;
   Timer? _watchTrackerTimer;
+  static const int _flushThresholdSeconds = 180;
   int _pendingWatchedSeconds = 0;
-  Timer? _presenceHeartbeatTimer;
+  int _accumulatedWatchedSeconds = 0;
+  late final String _sessionId;
   IpInfo? _clientIpInfo;
   DateTime _sessionStartTime = DateTime.now();
   int _maxPlayheadSeconds = 0;
@@ -151,6 +152,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _sessionStartTime = DateTime.now();
+    _sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
     IpService().getClientIpInfo().then((info) {
       if (mounted) setState(() => _clientIpInfo = info);
     }).catchError((_) {});
@@ -180,17 +182,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final uid = widget.currentUser?.uid;
     if (uid != null) {
       _watchQueue.flush(uid).catchError((Object _) {});
-      _submissionsSubscription =
-          FirestoreService().streamStudentSubmissions(uid).listen((subs) {
-        if (mounted) {
-          setState(() {
-            _submittedAssignmentIds =
-                subs.map((s) => s.assignmentId).toSet();
-          });
-        }
-      });
+      _loadStudentSubmissions();
     }
     _startWatermarkAnimation();
+  }
+
+  Future<void> _loadStudentSubmissions() async {
+    final uid = widget.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final subs = await FirestoreService().getStudentSubmissions(uid);
+      if (mounted) {
+        setState(() {
+          _submittedAssignmentIds =
+              subs.map((s) => s.assignmentId).toSet();
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -270,15 +278,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
-  void _startPresenceHeartbeat() {
-    _presenceHeartbeatTimer?.cancel();
-    _sendPresenceHeartbeat();
-    _presenceHeartbeatTimer = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) => _sendPresenceHeartbeat(),
-    );
-  }
-
   void _sendPresenceHeartbeat() {
     final user = widget.currentUser;
     final ctrl = _controller;
@@ -323,8 +322,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _removePresenceHeartbeat() {
-    _presenceHeartbeatTimer?.cancel();
-    _presenceHeartbeatTimer = null;
     final user = widget.currentUser;
     if (user == null) return;
     FirestoreService()
@@ -346,9 +343,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _maxPlayheadSeconds = posSec;
         }
         _pendingWatchedSeconds++;
-        if (_pendingWatchedSeconds >= 30) {
+        _accumulatedWatchedSeconds++;
+        if (_pendingWatchedSeconds >= _flushThresholdSeconds) {
           _savePosition();
           _flushWatchTime();
+          _sendPresenceHeartbeat();
         }
       }
     });
@@ -386,7 +385,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? ((_maxPlayheadSeconds / totalDur) * 100).clamp(0.0, 100.0)
         : 0.0;
     final requiredThreshold = widget.lesson.completionThresholdPercentage;
-    final isCompleted = completionPct >= requiredThreshold || _isCompleted;
+    final hasSufficientWatchCoverage = totalDur <= 45 ||
+        _accumulatedWatchedSeconds >= (totalDur * (requiredThreshold / 100.0) * 0.70);
+    final isCompleted = (completionPct >= requiredThreshold && hasSufficientWatchCoverage) || _isCompleted;
 
     try {
       await _watchQueue.enqueue(
@@ -404,6 +405,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ipAddress: _clientIpInfo?.ip ?? '',
         networkType: _clientIpInfo?.networkType ?? '',
         devicePlatform: _clientIpInfo?.devicePlatform ?? '',
+        sessionId: _sessionId,
       );
       _pendingWatchedSeconds -= seconds;
       await _watchQueue.flush(widget.currentUser!.uid);
@@ -516,8 +518,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (isPlaying != _wasPlaying) {
       _wasPlaying = isPlaying;
       if (isPlaying) {
-        _startPresenceHeartbeat();
+        _sendPresenceHeartbeat();
       } else {
+        _savePosition();
+        if (_pendingWatchedSeconds > 0) {
+          _flushWatchTime();
+        }
         _removePresenceHeartbeat();
       }
     }
@@ -649,6 +655,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _seek(int seconds) async {
     final ctrl = _controller;
     if (!_isInitialized || ctrl == null) return;
+    if (_pendingWatchedSeconds > 0) {
+      _savePosition();
+      _flushWatchTime();
+    }
     final value = (ctrl.value.position.inSeconds + seconds).clamp(
       0,
       ctrl.value.duration.inSeconds,
@@ -688,7 +698,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final assignment = await FirestoreService().getAssignment(assignmentId);
       if (assignment == null || !mounted) return;
-      showModalBottomSheet(
+      await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.white,
@@ -700,6 +710,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           user: user,
         ),
       );
+      if (mounted) {
+        _loadStudentSubmissions();
+      }
     } catch (_) {}
   }
 
@@ -772,14 +785,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? ((_maxPlayheadSeconds / totalDur) * 100).clamp(0.0, 100.0)
         : 0.0;
     final threshold = widget.lesson.completionThresholdPercentage;
+    final hasSufficientWatchCoverage = totalDur <= 45 ||
+        _accumulatedWatchedSeconds >= (totalDur * (threshold / 100.0) * 0.70);
 
-    if (target && completionPct < threshold) {
+    if (target && (completionPct < threshold || !hasSufficientWatchCoverage)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.error,
           content: Text(
-            'يجب إكمال مشاهدة $threshold% على الأقل من المحاضرة لاحتسابها مكتملة والتأهل للشهادة (أنجزت ${completionPct.toStringAsFixed(0)}%).',
+            'يجب إكمال مشاهدة $threshold% على الأقل من المحاضرة فعلياً لاحتسابها مكتملة والتأهل للشهادة (أنجزت ${completionPct.toStringAsFixed(0)}%).',
           ),
         ),
       );
@@ -825,11 +840,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void dispose() {
     _screenCaptureNotifier?.removeListener(_handleScreenCaptureChanged);
     _accessSubscription?.cancel();
-    _submissionsSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _hideControlsTimer?.cancel();
     _seekFeedbackTimer?.cancel();
-    _presenceHeartbeatTimer?.cancel();
     _removePresenceHeartbeat();
     _savePosition();
     _flushWatchTime();

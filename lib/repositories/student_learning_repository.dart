@@ -49,6 +49,7 @@ abstract class StudentLearningRepository {
 class StudentLearningRepositoryImpl implements StudentLearningRepository {
   final FirestoreService _firestoreService;
   final StorageService _storageService;
+  final Map<String, Stream<List<AssignmentSubmission>>> _submissionStreams = {};
 
   static const String _functionsBaseUrl = String.fromEnvironment(
     'FUNCTIONS_BASE_URL',
@@ -71,7 +72,11 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
   Stream<List<AssignmentSubmission>> streamStudentSubmissions(
     String studentId,
   ) {
-    return _firestoreService.streamStudentSubmissions(studentId);
+    return _submissionStreams.putIfAbsent(studentId, () {
+      return _firestoreService
+          .streamStudentSubmissions(studentId)
+          .asBroadcastStream();
+    });
   }
 
   @override

@@ -43,9 +43,9 @@ class ActiveWatchSession extends Equatable {
     required this.lastHeartbeatAt,
   });
 
-  /// تعتبر الجلسة منتهية أو متوقفة إذا مرت 60 ثانية دون أي نبضة جديدة
+  /// تعتبر الجلسة منتهية أو متوقفة إذا مرت 5 دقائق دون أي نبضة جديدة
   bool get isStale =>
-      DateTime.now().difference(lastHeartbeatAt).inSeconds > 60;
+      DateTime.now().difference(lastHeartbeatAt).inSeconds > 300;
 
   String get currentPositionFormatted {
     final m = currentPositionSeconds ~/ 60;
