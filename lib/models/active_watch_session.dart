@@ -44,8 +44,11 @@ class ActiveWatchSession extends Equatable {
   });
 
   /// تعتبر الجلسة منتهية أو متوقفة إذا مرت 5 دقائق دون أي نبضة جديدة
-  bool get isStale =>
-      DateTime.now().difference(lastHeartbeatAt).inSeconds > 300;
+  bool get isStale => isStaleWithGrace(0);
+
+  /// فحص حالة الجلسة مع هامش أمان اختياري (مثل 60 ثانية) لتفادي اعتباره خامل خطأً أثناء التخزين المؤقت أو تأخير الشبكة
+  bool isStaleWithGrace([int graceSeconds = 0]) =>
+      DateTime.now().difference(lastHeartbeatAt).inSeconds > (300 + graceSeconds);
 
   String get currentPositionFormatted {
     final m = currentPositionSeconds ~/ 60;

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:chewie/chewie.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,7 +55,6 @@ class VideoPlayerScreen extends StatefulWidget {
 class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with WidgetsBindingObserver {
   VideoPlayerController? _controller;
-  ChewieController? _chewieController;
   WatchProgressCoordinator? _progressCoordinator;
 
   bool _isInitialized = false;
@@ -350,15 +348,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await ctrl.setVolume(0.0);
       }
       if (mounted) {
-        _chewieController?.dispose();
-        _chewieController = ChewieController(
-          videoPlayerController: ctrl,
-          autoPlay: false,
-          looping: false,
-          showControls: false,
-          allowFullScreen: false,
-          allowMuting: false,
-        );
         setState(() {
           _isInitialized = true;
         });
@@ -446,15 +435,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       oldCtrl.removeListener(_onControllerStateChanged);
 
       if (mounted) {
-        _chewieController?.dispose();
-        _chewieController = ChewieController(
-          videoPlayerController: newCtrl,
-          autoPlay: false,
-          looping: false,
-          showControls: false,
-          allowFullScreen: false,
-          allowMuting: false,
-        );
         setState(() {
           _controller = newCtrl;
           _selectedQuality = quality;
@@ -735,7 +715,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _progressCoordinator?.flushWatchTime(isSessionEnd: true);
     _progressCoordinator?.dispose();
 
-    _chewieController?.dispose();
     _controller?.removeListener(_onControllerStateChanged);
     _controller?.dispose();
     super.dispose();
@@ -753,7 +732,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     return PlayerView(
       controller: _controller,
-      chewieController: _chewieController,
       isInitialized: _isInitialized,
       hasError: _hasError,
       errorMessage: _errorMessage,
@@ -778,9 +756,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _hasError = false;
           _isInitialized = false;
         });
-        final oldChewie = _chewieController;
-        _chewieController = null;
-        oldChewie?.dispose();
         final old = _controller;
         _controller = null;
         await old?.dispose();
