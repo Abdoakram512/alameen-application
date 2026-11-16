@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -7,31 +8,11 @@ import '../../logic/courses/admin_courses_cubit.dart';
 import '../../logic/students/admin_students_cubit.dart';
 import '../../models/course.dart';
 import '../../services/student_provisioning_service.dart';
+import 'provision_widgets/bulk_students_provision_editor.dart';
 import 'provision_widgets/course_access_selector_box.dart';
+import 'provision_widgets/provision_progress_indicator.dart';
 import 'provision_widgets/provisioned_credentials_dialog.dart';
-
-class _BulkRowControllers {
-  final TextEditingController name;
-  final TextEditingController email;
-  final TextEditingController password;
-
-  _BulkRowControllers({
-    String initialName = '',
-    String initialEmail = '',
-    String? initialPassword,
-  })  : name = TextEditingController(text: initialName),
-        email = TextEditingController(text: initialEmail),
-        password = TextEditingController(
-          text: initialPassword ??
-              StudentProvisioningService.generateStrongPassword(),
-        );
-
-  void dispose() {
-    name.dispose();
-    email.dispose();
-    password.dispose();
-  }
-}
+import 'provision_widgets/single_student_provision_form.dart';
 
 /// نافذة إضافة متدرب واحد أو عدة متدربين دفعة واحدة مع تفعيل فوري للكورسات.
 class ProvisionStudentsSheet extends StatefulWidget {
@@ -81,12 +62,11 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
   late final TextEditingController _singlePasswordCtrl = TextEditingController(
     text: StudentProvisioningService.generateStrongPassword(),
   );
-  bool _obscureSinglePassword = false;
 
   // Bulk Students rows
-  final List<_BulkRowControllers> _bulkRows = [
-    _BulkRowControllers(),
-    _BulkRowControllers(),
+  final List<BulkRowControllers> _bulkRows = [
+    BulkRowControllers(),
+    BulkRowControllers(),
   ];
 
   // Selected Courses shared across tabs
@@ -149,7 +129,8 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
             children: [
               const Text(
                 'ضع كل متدرب في سطر مستقل بالصيغة التالية (كلمة المرور اختيارية ويتم توليدها تلقائياً إن تُركت):',
-                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style:
+                    TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 6),
               Container(
@@ -211,7 +192,7 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
             .toList();
         if (parts.length >= 2) {
           _bulkRows.add(
-            _BulkRowControllers(
+            BulkRowControllers(
               initialName: parts[0],
               initialEmail: parts[1],
               initialPassword: parts.length >= 3 && parts[2].length >= 6
@@ -222,7 +203,7 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
         }
       }
       if (_bulkRows.isEmpty) {
-        _bulkRows.add(_BulkRowControllers());
+        _bulkRows.add(BulkRowControllers());
       }
     });
   }
@@ -233,25 +214,31 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
     final drafts = <ProvisionStudentDraft>[];
     if (_tabController.index == 0) {
       if (!(_singleFormKey.currentState?.validate() ?? false)) return;
-      final nameErr = AppValidators.validateRequired(_singleNameCtrl.text, 'اسم المتدرب');
+      final nameErr =
+          AppValidators.validateRequired(_singleNameCtrl.text, 'اسم المتدرب');
       if (nameErr != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(nameErr)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(nameErr)));
         return;
       }
       final emailErr = AppValidators.validateEmail(_singleEmailCtrl.text);
       if (emailErr != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(emailErr)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(emailErr)));
         return;
       }
       final passErr = AppValidators.validatePassword(_singlePasswordCtrl.text);
       if (passErr != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(passErr)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(passErr)));
         return;
       }
       if (_singlePhoneCtrl.text.trim().isNotEmpty) {
-        final phoneErr = AppValidators.validateEgyptianPhone(_singlePhoneCtrl.text);
+        final phoneErr =
+            AppValidators.validateEgyptianPhone(_singlePhoneCtrl.text);
         if (phoneErr != null) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(phoneErr)));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(phoneErr)));
           return;
         }
       }
@@ -442,9 +429,27 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_tabController.index == 0)
-                    _buildSingleStudentFields()
+                    SingleStudentProvisionForm(
+                      formKey: _singleFormKey,
+                      nameController: _singleNameCtrl,
+                      emailController: _singleEmailCtrl,
+                      passwordController: _singlePasswordCtrl,
+                      phoneController: _singlePhoneCtrl,
+                    )
                   else
-                    _buildBulkStudentsFields(),
+                    BulkStudentsProvisionEditor(
+                      bulkRows: _bulkRows,
+                      isSubmitting: _isSubmitting,
+                      onAddRow: () =>
+                          setState(() => _bulkRows.add(BulkRowControllers())),
+                      onRemoveRow: (index) {
+                        setState(() {
+                          final removed = _bulkRows.removeAt(index);
+                          removed.dispose();
+                        });
+                      },
+                      onQuickPaste: _openQuickPasteDialog,
+                    ),
                   const SizedBox(height: 16),
                   CourseAccessSelectorBox(
                     courses: widget.availableCourses,
@@ -457,283 +462,15 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
             ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: _isSubmitting ? null : _submitProvisioning,
-              icon: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(PhosphorIconsRegular.checkCircle, size: 19),
-              label: Text(
-                _isSubmitting
-                    ? 'جاري تجهيز الحساب $_completedCount من $_totalCount...'
-                    : (_tabController.index == 0
-                          ? 'إنشاء حساب المتدرب وتفعيل الدورات'
-                          : 'إنشاء وتفعيل جميع الحسابات المضافة'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-            ),
+          ProvisionProgressIndicatorButton(
+            isSubmitting: _isSubmitting,
+            completedCount: _completedCount,
+            totalCount: _totalCount,
+            activeTabIndex: _tabController.index,
+            onSubmit: _submitProvisioning,
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSingleStudentFields() {
-    return Form(
-      key: _singleFormKey,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextFormField(
-            controller: _singleNameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'الاسم الكامل للمتدرب *',
-              hintText: 'مثال: د. مريم طارق',
-              prefixIcon: Icon(PhosphorIconsRegular.user, size: 19),
-            ),
-            validator: (v) => AppValidators.validateRequired(v, 'اسم المتدرب'),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _singleEmailCtrl,
-            keyboardType: TextInputType.emailAddress,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-            decoration: const InputDecoration(
-              labelText: 'البريد الإلكتروني للحساب *',
-              hintText: 'student@example.com',
-              prefixIcon: Icon(PhosphorIconsRegular.envelopeSimple, size: 19),
-            ),
-            validator: AppValidators.validateEmail,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _singlePasswordCtrl,
-                  obscureText: _obscureSinglePassword,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  decoration: InputDecoration(
-                    labelText: 'كلمة المرور (6 أحرف فأكثر) *',
-                    prefixIcon: const Icon(PhosphorIconsRegular.key, size: 19),
-                    suffixIcon: IconButton(
-                      tooltip: _obscureSinglePassword ? 'إظهار' : 'إخفاء',
-                      icon: Icon(
-                        _obscureSinglePassword
-                            ? PhosphorIconsRegular.eye
-                            : PhosphorIconsRegular.eyeSlash,
-                        size: 18,
-                      ),
-                      onPressed: () => setState(
-                        () => _obscureSinglePassword = !_obscureSinglePassword,
-                      ),
-                    ),
-                  ),
-                  validator: AppValidators.validatePassword,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 52,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _singlePasswordCtrl.text =
-                          StudentProvisioningService.generateStrongPassword();
-                    });
-                  },
-                  icon: const Icon(PhosphorIconsRegular.arrowsClockwise, size: 16),
-                  label: const Text('توليد'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _singlePhoneCtrl,
-            keyboardType: TextInputType.phone,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-            decoration: const InputDecoration(
-              labelText: 'رقم الهاتف أو واتساب (اختياري)',
-              hintText: '010XXXXXXXX',
-              prefixIcon: Icon(PhosphorIconsRegular.phone, size: 19),
-            ),
-            validator: (v) => (v != null && v.trim().isNotEmpty)
-                ? AppValidators.validateEgyptianPhone(v)
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBulkStudentsFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'قائمة المتدربين (${_bulkRows.length})',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13.5,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: _isSubmitting ? null : _openQuickPasteDialog,
-              icon: const Icon(PhosphorIconsRegular.clipboardText, size: 17),
-              label: const Text(
-                'لصق قائمة دفعة واحدة',
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        for (int i = 0; i < _bulkRows.length; i++) ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borderHairline),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentCobaltLight,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'متدرب ${i + 1}',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    if (_bulkRows.length > 1)
-                      IconButton(
-                        tooltip: 'حذف السطر',
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(
-                          PhosphorIconsRegular.trash,
-                          size: 17,
-                          color: AppColors.error,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            final removed = _bulkRows.removeAt(i);
-                            removed.dispose();
-                          });
-                        },
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _bulkRows[i].name,
-                  decoration: const InputDecoration(
-                    labelText: 'الاسم الكامل *',
-                    isDense: true,
-                    prefixIcon: Icon(PhosphorIconsRegular.user, size: 18),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 6,
-                      child: TextField(
-                        controller: _bulkRows[i].email,
-                        keyboardType: TextInputType.emailAddress,
-                        textDirection: TextDirection.ltr,
-                        textAlign: TextAlign.left,
-                        decoration: const InputDecoration(
-                          labelText: 'البريد الإلكتروني *',
-                          isDense: true,
-                          prefixIcon: Icon(
-                            PhosphorIconsRegular.envelopeSimple,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 5,
-                      child: TextField(
-                        controller: _bulkRows[i].password,
-                        textDirection: TextDirection.ltr,
-                        textAlign: TextAlign.left,
-                        decoration: const InputDecoration(
-                          labelText: 'كلمة المرور *',
-                          isDense: true,
-                          prefixIcon: Icon(PhosphorIconsRegular.key, size: 17),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 11),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          onPressed: _isSubmitting
-              ? null
-              : () => setState(() => _bulkRows.add(_BulkRowControllers())),
-          icon: const Icon(PhosphorIconsRegular.plus, size: 17),
-          label: const Text('إضافة متدرب آخر للقائمة'),
-        ),
-      ],
     );
   }
 }
