@@ -416,9 +416,12 @@ class FirestoreService {
 
   Future<void> updateActiveWatchSession(ActiveWatchSession session) async {
     try {
+      final data = session.toMap()
+        ..['lastHeartbeatAt'] = FieldValue.serverTimestamp()
+        ..['startedAt'] = Timestamp.fromDate(session.startedAt);
       await _activeSessionsRef
           .doc(session.id)
-          .set(session.toMap(), SetOptions(merge: true))
+          .set(data, SetOptions(merge: true))
           .timeout(const Duration(seconds: 10));
     } catch (_) {}
   }
