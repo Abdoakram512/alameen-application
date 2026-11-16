@@ -33,6 +33,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _currentIndex = 0;
+  final Set<int> _loadedTabs = {0};
 
   @override
   void initState() {
@@ -44,17 +45,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         if (coursesCubit.state is! AdminCoursesLoaded) {
           coursesCubit.loadCourses();
         }
-        final studentsCubit = context.read<AdminStudentsCubit>();
-        if (studentsCubit.state is! AdminStudentsLoaded) {
-          studentsCubit.loadStudents();
-        }
         final requestsCubit = context.read<AdminRequestsCubit>();
         if (requestsCubit.state is! AdminRequestsLoaded) {
           requestsCubit.loadRequests();
-        }
-        final adminsCubit = context.read<AdminAdminsCubit>();
-        if (adminsCubit.state is! AdminAdminsLoaded) {
-          adminsCubit.loadAdmins();
         }
       }
     });
@@ -64,7 +57,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (_currentIndex != index) {
       setState(() {
         _currentIndex = index;
+        _loadedTabs.add(index);
       });
+      if (index == 2 || index == 3) {
+        final studentsCubit = context.read<AdminStudentsCubit>();
+        if (studentsCubit.state is! AdminStudentsLoaded) {
+          studentsCubit.loadStudents();
+        }
+      }
+      if (index == 6) {
+        final adminsCubit = context.read<AdminAdminsCubit>();
+        if (adminsCubit.state is! AdminAdminsLoaded) {
+          adminsCubit.loadAdmins();
+        }
+      }
     }
   }
 
@@ -128,12 +134,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               index: _currentIndex,
               children: [
                 CoursesTab(onSelectTab: _onTabChanged),
-                AssignmentsTab(onBackToHome: () => _onTabChanged(0)),
-                AnalyticsTab(onSelectTab: _onTabChanged),
-                const StudentsTab(),
-                const RequestsTab(),
-                const ProfileTab(),
-                const AdminsTab(),
+                _loadedTabs.contains(1)
+                    ? AssignmentsTab(onBackToHome: () => _onTabChanged(0))
+                    : const SizedBox.shrink(),
+                _loadedTabs.contains(2)
+                    ? AnalyticsTab(onSelectTab: _onTabChanged)
+                    : const SizedBox.shrink(),
+                _loadedTabs.contains(3)
+                    ? const StudentsTab()
+                    : const SizedBox.shrink(),
+                _loadedTabs.contains(4)
+                    ? const RequestsTab()
+                    : const SizedBox.shrink(),
+                _loadedTabs.contains(5)
+                    ? const ProfileTab()
+                    : const SizedBox.shrink(),
+                _loadedTabs.contains(6)
+                    ? const AdminsTab()
+                    : const SizedBox.shrink(),
               ],
             ),
           );

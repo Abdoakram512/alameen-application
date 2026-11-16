@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -8,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../core/widgets/student_avatar.dart';
+import '../../../logic/courses/admin_courses_cubit.dart';
 import '../../../models/assignment_submission.dart';
 import '../../../models/course.dart';
 import '../../../services/firestore_service.dart';
@@ -27,6 +29,13 @@ class _AssignmentsTabState extends State<AssignmentsTab> {
   String _searchQuery = '';
   String? _selectedCourseId;
   String _statusFilter = 'all'; // 'all' | 'pending' | 'graded'
+  late final Stream<List<AssignmentSubmission>> _submissionsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _submissionsStream = FirestoreService().streamAllSubmissions();
+  }
 
   @override
   void dispose() {
@@ -100,16 +109,15 @@ class _AssignmentsTabState extends State<AssignmentsTab> {
 
             // Content Streams
             Expanded(
-              child: StreamBuilder<List<Course>>(
-                stream: FirestoreService().streamCourses(),
-                builder: (context, coursesSnapshot) {
-                  final courses = coursesSnapshot.data ?? [];
+              child: Builder(
+                builder: (context) {
+                  final courses = context.watch<AdminCoursesCubit>().state.courses;
                   final courseTitles = <String, String>{
                     for (final c in courses) c.id: c.title,
                   };
 
                   return StreamBuilder<List<AssignmentSubmission>>(
-                    stream: FirestoreService().streamAllSubmissions(),
+                    stream: _submissionsStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const AppLoadingIndicator(

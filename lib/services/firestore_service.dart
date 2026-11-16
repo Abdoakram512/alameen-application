@@ -108,6 +108,40 @@ class FirestoreService {
     });
   }
 
+  /// جلب قائمة الطلاب الحقيقيين المسجلين لمرة واحدة
+  Future<List<RegisteredStudent>> getStudents({Source source = Source.serverAndCache}) async {
+    try {
+      final snapshot = await _usersRef.get(GetOptions(source: source));
+      final list = snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return RegisteredStudent.fromJson(data);
+          })
+          .where(
+            (s) =>
+                s.role != 'admin' &&
+                (s.appOrigin.isEmpty ||
+                    s.appOrigin == 'alameen_speech_center'),
+          )
+          .toList();
+      list.sort((a, b) => a.name.compareTo(b.name));
+      return list;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// جلب عدد الطلاب المسجلين بالاستعلام التجميعي دون قراءة الوثائق
+  Future<int> getStudentsCount() async {
+    try {
+      final countQuery = await _usersRef.count().get();
+      return countQuery.count ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// استماع حي لطلبات الانضمام الحقيقية
   Stream<List<CourseAccessRequest>> streamRequests() {
     return _requestsRef.snapshots().map((snapshot) {
@@ -138,7 +172,7 @@ class FirestoreService {
   }
 
   /// استماع حي لسجلات المشاهدة العامة عبر المنصة (للإحصائيات العامة)
-  Stream<List<WatchLogEntry>> streamAllWatchLogs({int limit = 400}) {
+  Stream<List<WatchLogEntry>> streamAllWatchLogs({int limit = 50}) {
     return _watchLogsRef.limit(limit).snapshots().map((snapshot) {
       final list = snapshot.docs
           .map((doc) => WatchLogEntry.fromMap(doc.data(), id: doc.id))
@@ -146,6 +180,22 @@ class FirestoreService {
       list.sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
       return list;
     });
+  }
+
+  /// جلب سجلات المشاهدة الأخيرة لمرة واحدة
+  Future<List<WatchLogEntry>> getRecentWatchLogs({int limit = 50}) async {
+    try {
+      final snapshot = await _watchLogsRef
+          .limit(limit)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final list = snapshot.docs
+          .map((doc) => WatchLogEntry.fromMap(doc.data(), id: doc.id))
+          .toList();
+      list.sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+      return list;
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// استماع حي لسجلات المشاهدة لطالب محدد (مرتبة في Dart دون الحاجة لـ Composite Index)
@@ -245,6 +295,36 @@ class FirestoreService {
       list.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
       return list;
     });
+  }
+
+  /// استماع لتسليمات الطلاب قيد الانتظار فقط (للإحصائيات السريعة والتنبيهات)
+  Stream<List<AssignmentSubmission>> streamPendingSubmissions() {
+    return _submissionsRef
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => AssignmentSubmission.fromMap(doc.data(), id: doc.id))
+          .toList();
+      list.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      return list;
+    });
+  }
+
+  /// جلب تسليمات كورس محدد لمرة واحدة
+  Future<List<AssignmentSubmission>> getCourseSubmissions(String courseId) async {
+    try {
+      final snapshot = await _submissionsRef
+          .where('courseId', isEqualTo: courseId)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final list = snapshot.docs
+          .map((doc) => AssignmentSubmission.fromMap(doc.data(), id: doc.id))
+          .toList();
+      list.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      return list;
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// استماع لتسليمات طالب محدد

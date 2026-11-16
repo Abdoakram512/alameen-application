@@ -187,7 +187,12 @@ service cloud.firestore {
            request.resource.data.secondsWatched > 0 &&
            request.resource.data.secondsWatched <= 14400)
         );
-      allow update, delete: if hasAdminPerm('view_analytics');
+      allow update: if hasAdminPerm('view_analytics') || (
+        isAuthenticated() &&
+        resource.data.studentId == request.auth.uid &&
+        request.resource.data.studentId == request.auth.uid
+      );
+      allow delete: if hasAdminPerm('view_analytics');
     }
 
     // Live active watch sessions / presence radar

@@ -8,6 +8,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_cached_image.dart';
 import '../../../core/widgets/bouncing_card.dart';
 import '../../../logic/courses/admin_courses_cubit.dart';
+import '../../../logic/students/admin_students_cubit.dart';
+import '../../../logic/students/admin_students_state.dart';
 import '../../../models/course.dart';
 import '../../../services/course_audit_pdf_service.dart';
 import '../../../services/firestore_service.dart';
@@ -59,13 +61,15 @@ class CourseCardItem extends StatelessWidget {
     );
 
     try {
-      final allStudents = await FirestoreService().streamStudents().first;
+      final studentsState = context.read<AdminStudentsCubit>().state;
+      final allStudents = studentsState is AdminStudentsLoaded
+          ? studentsState.students
+          : await FirestoreService().getStudents();
       final courseStudents = allStudents
           .where((s) => s.enrolledCourseIds.contains(course.id))
           .toList();
-      final allSubs = await FirestoreService().streamAllSubmissions().first;
       final courseSubs =
-          allSubs.where((sub) => sub.courseId == course.id).toList();
+          await FirestoreService().getCourseSubmissions(course.id);
 
       await CourseAuditPdfService.generateAndPrintReport(
         course: course,

@@ -29,6 +29,7 @@ class VideoMonitoringRadarCard extends StatefulWidget {
 class _VideoMonitoringRadarCardState extends State<VideoMonitoringRadarCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
+  late final Stream<List<ActiveWatchSession>> _sessionsStream;
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _VideoMonitoringRadarCardState extends State<VideoMonitoringRadarCard>
       vsync: this,
       duration: const Duration(milliseconds: 2400),
     )..repeat();
+    _sessionsStream = FirestoreService().streamActiveWatchSessions();
   }
 
   @override
@@ -169,7 +171,7 @@ class _VideoMonitoringRadarCardState extends State<VideoMonitoringRadarCard>
 
           // Live Active Students Stream Section
           StreamBuilder<List<ActiveWatchSession>>(
-            stream: FirestoreService().streamActiveWatchSessions(),
+            stream: _sessionsStream,
             builder: (context, snapshot) {
               final activeList = snapshot.data ?? [];
 

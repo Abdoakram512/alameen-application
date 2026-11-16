@@ -49,7 +49,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     final fs = FirestoreService();
     if (fs.isAvailable) {
       _watchLogsStream = fs.streamAllWatchLogs();
-      _submissionsStream = fs.streamAllSubmissions();
+      _submissionsStream = fs.streamPendingSubmissions();
     }
   }
 
