@@ -9,8 +9,6 @@ import '../../../../models/course.dart';
 import '../../../../models/registered_student.dart';
 import '../../../../services/firestore_service.dart';
 
-/// كارت رادار المراقبة الحي اللحظي لرصد حضور ومشاهدات الطلاب النشطين الآن.
-/// يتميز بتصميم تنفيذي نظيف خالي من الحشو التقني، ويعرض تقدم المشاهدة الحي بالثانية.
 class VideoMonitoringRadarCard extends StatefulWidget {
   final List<Course> courses;
   final List<RegisteredStudent> students;
