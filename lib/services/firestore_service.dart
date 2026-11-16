@@ -307,6 +307,7 @@ class FirestoreService {
     await _usersRef.doc(uid).set(
       {
         'enrolledCourseIds': FieldValue.arrayUnion([courseId]),
+        'lastEnrolledCourseId': courseId,
       },
       SetOptions(merge: true),
     );
@@ -433,30 +434,23 @@ class FirestoreService {
 
   Future<void> recordWatchEvent(Map<String, dynamic> event) async {
     final uid = event['uid'] as String;
-    final seconds = event['seconds'] as int;
-    if (seconds <= 0) return;
-
-    final sessionId = event['sessionId'] as String?;
+    final seconds = (event['seconds'] as num?)?.toInt() ?? 0;
+    final sessionSeconds = (event['sessionSeconds'] as num?)?.toInt() ?? seconds;
+    final isSessionEnd = event['isSessionEnd'] == true;
+    final isCompleted = event['isCompleted'] == true;
     final courseId = event['courseId'] as String? ?? '';
     final lessonId = event['lessonId'] as String? ?? '';
+    final sessionId = event['sessionId'] as String?;
+    final eventId = event['id'] as String? ?? '';
+
     final logDocId = (sessionId != null && sessionId.isNotEmpty)
         ? 'log_${uid}_${courseId}_${lessonId}_$sessionId'
-        : '${uid}_${event['id']}';
+        : '${uid}_$eventId';
     final log = _watchLogsRef.doc(logDocId);
-    final isCompleted = event['isCompleted'] == true;
 
     final batch = _db.batch();
-    batch.set(
-      _usersRef.doc(uid),
-      {
-        'totalWatchSeconds': FieldValue.increment(seconds),
-        'lastActiveAt': FieldValue.serverTimestamp(),
-        if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
-        if (isCompleted && lessonId.isNotEmpty)
-          'completedLessonIds': FieldValue.arrayUnion([lessonId]),
-      },
-      SetOptions(merge: true),
-    );
+
+    // 1. Session Log Document: IDEMPOTENT write (uses absolute sessionSeconds)
     batch.set(
       log,
       {
@@ -467,11 +461,12 @@ class FirestoreService {
         'courseId': courseId,
         'lessonId': lessonId,
         'lessonTitle': event['lessonTitle'] ?? '',
-        'durationSeconds': FieldValue.increment(seconds),
-        'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? seconds,
+        'durationSeconds': sessionSeconds,
+        'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? sessionSeconds,
         'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
         'completionPercentage': event['completionPercentage'] ?? 0.0,
         'isCompleted': isCompleted,
+        'lastCheckpointId': eventId,
         'ipAddress': event['ipAddress'] ?? 'غير محدد',
         'networkType': event['networkType'] ?? 'غير محدد',
         'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
@@ -479,6 +474,21 @@ class FirestoreService {
       },
       SetOptions(merge: true),
     );
+
+    // 2. User Document: Updated ONLY on lesson completion or session termination (decoupled from intermediate checkpoints!)
+    if (isCompleted || isSessionEnd) {
+      final userUpdates = <String, dynamic>{
+        'lastActiveAt': FieldValue.serverTimestamp(),
+        if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
+        if (isCompleted && lessonId.isNotEmpty)
+          'completedLessonIds': FieldValue.arrayUnion([lessonId]),
+      };
+      if (isSessionEnd && seconds > 0) {
+        userUpdates['totalWatchSeconds'] = FieldValue.increment(seconds);
+      }
+      batch.set(_usersRef.doc(uid), userUpdates, SetOptions(merge: true));
+    }
+
     await batch.commit().timeout(const Duration(seconds: 15));
   }
 }

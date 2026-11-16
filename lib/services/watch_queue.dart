@@ -28,6 +28,8 @@ class WatchQueue {
     required String courseId,
     required String lessonId,
     required int seconds,
+    int? sessionSeconds,
+    bool? isSessionEnd,
     String? studentName,
     String? studentEmail,
     String? lessonTitle,
@@ -41,7 +43,7 @@ class WatchQueue {
     String? sessionId,
   }) =>
       _serial(() async {
-        if (seconds <= 0) return;
+        if (seconds <= 0 && isSessionEnd != true && isCompleted != true) return;
         final events = await _load(uid);
         events.add({
           'id':
@@ -50,6 +52,8 @@ class WatchQueue {
           'courseId': courseId,
           'lessonId': lessonId,
           'seconds': seconds,
+          'sessionSeconds': ?sessionSeconds,
+          'isSessionEnd': ?isSessionEnd,
           'studentName': ?studentName,
           'studentEmail': ?studentEmail,
           'lessonTitle': ?lessonTitle,

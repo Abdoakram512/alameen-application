@@ -17,6 +17,7 @@ import '../../models/active_watch_session.dart';
 import '../../models/course_access_mode.dart';
 import '../../models/learning_history.dart';
 import '../../models/lesson.dart';
+import '../../models/lesson_coverage_tracker.dart';
 import '../../models/user_profile.dart';
 import '../../models/video_quality.dart';
 import '../../repositories/student_learning_repository.dart';
@@ -111,9 +112,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isSeekingRight = true;
   Timer? _seekFeedbackTimer;
   Timer? _watchTrackerTimer;
-  static const int _flushThresholdSeconds = 180;
+  static const int _flushThresholdSeconds = 300;
   int _pendingWatchedSeconds = 0;
-  int _accumulatedWatchedSeconds = 0;
+  int _sessionCumulativeSeconds = 0;
+  LessonCoverageTracker _coverageTracker = LessonCoverageTracker();
+  int _lastPlaybackSecond = -1;
   late final String _sessionId;
   IpInfo? _clientIpInfo;
   DateTime _sessionStartTime = DateTime.now();
@@ -146,6 +149,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   String get _positionKey =>
       'position.${widget.currentUser?.uid}.${widget.courseId}.${widget.lesson.id}';
+
+  String get _coverageKey =>
+      'coverage.${widget.currentUser?.uid}.${widget.courseId}.${widget.lesson.id}';
 
   @override
   void initState() {
@@ -342,11 +348,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (posSec > _maxPlayheadSeconds) {
           _maxPlayheadSeconds = posSec;
         }
+        _coverageTracker.markPlayback(
+          currentPosition: posSec,
+          lastPosition: _lastPlaybackSecond,
+        );
+        _lastPlaybackSecond = posSec;
         _pendingWatchedSeconds++;
-        _accumulatedWatchedSeconds++;
+        _sessionCumulativeSeconds++;
         if (_pendingWatchedSeconds >= _flushThresholdSeconds) {
           _savePosition();
-          _flushWatchTime();
+          _flushWatchTime(isSessionEnd: false);
           _sendPresenceHeartbeat();
         }
       }
@@ -359,6 +370,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final position = ctrl.value.position.inMilliseconds;
       await _preferences.setInt(_positionKey, position);
+      await _preferences.setString(_coverageKey, _coverageTracker.encodeRanges());
       await _preferences.setString(
         'learning.recent.${widget.currentUser!.uid}',
         RecentLesson(
@@ -371,8 +383,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {}
   }
 
-  Future<void> _flushWatchTime() async {
-    if (_syncing || _pendingWatchedSeconds <= 0 || widget.currentUser == null) {
+  Future<void> _flushWatchTime({bool isSessionEnd = false}) async {
+    if (_syncing || (_pendingWatchedSeconds <= 0 && !isSessionEnd) || widget.currentUser == null) {
       return;
     }
     _syncing = true;
@@ -381,13 +393,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final totalDur = (ctrl != null && ctrl.value.isInitialized)
         ? ctrl.value.duration.inSeconds
         : widget.lesson.durationInSeconds;
-    final completionPct = totalDur > 0
-        ? ((_maxPlayheadSeconds / totalDur) * 100).clamp(0.0, 100.0)
-        : 0.0;
     final requiredThreshold = widget.lesson.completionThresholdPercentage;
-    final hasSufficientWatchCoverage = totalDur <= 45 ||
-        _accumulatedWatchedSeconds >= (totalDur * (requiredThreshold / 100.0) * 0.70);
-    final isCompleted = (completionPct >= requiredThreshold && hasSufficientWatchCoverage) || _isCompleted;
+    final actualCoveragePct = _coverageTracker.coveragePercentage(totalDur);
+    // Strict 95% unique interval coverage requirement (rewatching and seeking do not bypass)
+    final isCompleted = _coverageTracker.isComplete(totalDur, requiredThreshold) || _isCompleted;
 
     try {
       await _watchQueue.enqueue(
@@ -395,19 +404,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         courseId: widget.courseId,
         lessonId: widget.lesson.id,
         seconds: seconds,
+        sessionSeconds: _sessionCumulativeSeconds,
         studentName: widget.currentUser!.displayName,
         studentEmail: widget.currentUser!.email,
         lessonTitle: widget.lesson.title,
         totalDurationSeconds: totalDur,
         maxPlayheadSeconds: _maxPlayheadSeconds,
-        completionPercentage: completionPct,
+        completionPercentage: actualCoveragePct,
         isCompleted: isCompleted,
+        isSessionEnd: isSessionEnd,
         ipAddress: _clientIpInfo?.ip ?? '',
         networkType: _clientIpInfo?.networkType ?? '',
         devicePlatform: _clientIpInfo?.devicePlatform ?? '',
         sessionId: _sessionId,
       );
-      _pendingWatchedSeconds -= seconds;
+      _pendingWatchedSeconds = 0;
       await _watchQueue.flush(widget.currentUser!.uid);
       if (isCompleted && !_isCompleted) {
         if (mounted) {
@@ -485,6 +496,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await ctrl.initialize();
       if (!mounted) return;
       final saved = await _preferences.getInt(_positionKey) ?? 0;
+      final savedCoverage = await _preferences.getString(_coverageKey);
+      if (savedCoverage != null && savedCoverage.isNotEmpty) {
+        _coverageTracker = LessonCoverageTracker.decodeRanges(savedCoverage);
+      }
       if (!mounted) return;
       if (saved > 0 && saved < ctrl.value.duration.inMilliseconds - 2000) {
         await ctrl.seekTo(Duration(milliseconds: saved));
@@ -522,7 +537,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } else {
         _savePosition();
         if (_pendingWatchedSeconds > 0) {
-          _flushWatchTime();
+          _flushWatchTime(isSessionEnd: true);
         }
         _removePresenceHeartbeat();
       }
@@ -615,7 +630,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (state != AppLifecycleState.resumed && _isInitialized) {
       _controller?.pause();
       _savePosition();
-      _flushWatchTime();
+      _flushWatchTime(isSessionEnd: true);
       _removePresenceHeartbeat();
     }
   }
@@ -655,9 +670,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _seek(int seconds) async {
     final ctrl = _controller;
     if (!_isInitialized || ctrl == null) return;
+    _lastPlaybackSecond = -1;
     if (_pendingWatchedSeconds > 0) {
       _savePosition();
-      _flushWatchTime();
+      _flushWatchTime(isSessionEnd: false);
     }
     final value = (ctrl.value.position.inSeconds + seconds).clamp(
       0,
@@ -781,20 +797,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final totalDur = (ctrl != null && ctrl.value.isInitialized)
         ? ctrl.value.duration.inSeconds
         : widget.lesson.durationInSeconds;
-    final completionPct = totalDur > 0
-        ? ((_maxPlayheadSeconds / totalDur) * 100).clamp(0.0, 100.0)
-        : 0.0;
     final threshold = widget.lesson.completionThresholdPercentage;
-    final hasSufficientWatchCoverage = totalDur <= 45 ||
-        _accumulatedWatchedSeconds >= (totalDur * (threshold / 100.0) * 0.70);
+    final actualCoveragePct = _coverageTracker.coveragePercentage(totalDur);
 
-    if (target && (completionPct < threshold || !hasSufficientWatchCoverage)) {
+    if (target && !_coverageTracker.isComplete(totalDur, threshold)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.error,
           content: Text(
-            'يجب إكمال مشاهدة $threshold% على الأقل من المحاضرة فعلياً لاحتسابها مكتملة والتأهل للشهادة (أنجزت ${completionPct.toStringAsFixed(0)}%).',
+            'يجب إكمال مشاهدة $threshold% على الأقل من المحاضرة فعلياً لاحتسابها مكتملة والتأهل للشهادة (أنجزت ${actualCoveragePct.toStringAsFixed(0)}%).',
           ),
         ),
       );
@@ -845,7 +857,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _seekFeedbackTimer?.cancel();
     _removePresenceHeartbeat();
     _savePosition();
-    _flushWatchTime();
+    _flushWatchTime(isSessionEnd: true);
     _watchTrackerTimer?.cancel();
     _watermarkTimer?.cancel();
     _watermarkAlignmentNotifier.dispose();

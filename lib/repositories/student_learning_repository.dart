@@ -75,7 +75,10 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
     return _submissionStreams.putIfAbsent(studentId, () {
       return _firestoreService
           .streamStudentSubmissions(studentId)
-          .asBroadcastStream();
+          .asBroadcastStream(onCancel: (sub) {
+        _submissionStreams.remove(studentId);
+        sub.cancel();
+      });
     });
   }
 

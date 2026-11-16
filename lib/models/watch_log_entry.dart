@@ -57,7 +57,9 @@ class WatchLogEntry extends Equatable {
       return DateTime.now();
     }
 
-    final durSec = int.tryParse('${map['durationSeconds'] ?? 0}') ?? 0;
+    final durSec = int.tryParse(
+            '${map['durationSeconds'] ?? map['secondsWatched'] ?? map['seconds'] ?? 0}') ??
+        0;
     final totDur = int.tryParse('${map['totalDurationSeconds'] ?? 0}') ?? 0;
     final maxHead = int.tryParse('${map['maxPlayheadSeconds'] ?? 0}') ?? durSec;
 
