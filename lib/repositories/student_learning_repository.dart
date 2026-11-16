@@ -21,6 +21,19 @@ class ResolvedLessonPlayback {
   });
 }
 
+/// استثناء أمني يُطلق عند فشل التحقق من صلاحية وصول الطالب للمحاضرة لمنع التراجع لروابط غير محمية.
+class PlaybackAuthorizationException extends StateError {
+  final int? statusCode;
+
+  PlaybackAuthorizationException(
+    super.message, {
+    this.statusCode,
+  });
+
+  @override
+  String toString() => message;
+}
+
 /// واجهة نظيفة تفصل طبقة العرض (UI Widgets) عن تفاصيل Firestore و Storage و Cloud Functions.
 abstract class StudentLearningRepository {
   Stream<List<Assignment>> streamCourseAssignments(String courseId);
@@ -170,6 +183,11 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
 
         if (resp.statusCode == 404) {
           _cloudPlaybackUnavailable = true;
+        } else if (resp.statusCode == 401 || resp.statusCode == 403) {
+          throw PlaybackAuthorizationException(
+            'تم رفض الوصول: لا تملك صلاحية مشاهدة هذه المحاضرة. يرجى تفعيل اشتراكك في الدورة.',
+            statusCode: resp.statusCode,
+          );
         } else if (resp.statusCode == 200) {
           final body = jsonDecode(resp.body) as Map<String, dynamic>;
           final signedStream = (body['streamUrl'] as String?)?.trim() ?? '';
@@ -181,8 +199,11 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
             );
           }
         }
-      } catch (_) {
-        // التراجع السلس لـ Firestore protected_lessons عند عدم نشر دوال السحابة بعد
+      } catch (e) {
+        if (e is PlaybackAuthorizationException) {
+          rethrow;
+        }
+        // التراجع السلس لـ Firestore protected_lessons عند تعذر الاتصال بالدوال السحابية
       }
     }
 
@@ -201,7 +222,13 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
     }
 
     if (playbackId.isEmpty) {
-      throw StateError('تعذر العثور على رابط البث المحمي لهذه المحاضرة.');
+      if (!lesson.isFreePreview) {
+        throw PlaybackAuthorizationException(
+          'تعذر التحقق من صلاحية الوصول إلى هذه المحاضرة المحمية. تأكد من تفعيل اشتراكك بالدورة.',
+          statusCode: 403,
+        );
+      }
+      throw StateError('تعذر العثور على رابط البث لهذه المحاضرة.');
     }
 
     return ResolvedLessonPlayback(
