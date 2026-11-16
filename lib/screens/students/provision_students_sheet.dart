@@ -308,7 +308,7 @@ class _ProvisionStudentsSheetState extends State<ProvisionStudentsSheet>
         .where((c) => _selectedCourseIds.contains(c.id))
         .toList();
 
-    context.read<AdminStudentsCubit>().loadStudents();
+    unawaited(context.read<AdminStudentsCubit>().loadStudents());
     context.read<AdminCoursesCubit>().loadCourses();
 
     final nav = Navigator.of(context);

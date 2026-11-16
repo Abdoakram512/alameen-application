@@ -231,7 +231,7 @@ class FirestoreService {
     return query.snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => ActiveWatchSession.fromMap(doc.data(), id: doc.id))
-          .where((sess) => !sess.isStale && sess.isPlaying)
+          .where((sess) => !sess.isStaleWithGrace(60) && sess.isPlaying)
           .toList();
     });
   }

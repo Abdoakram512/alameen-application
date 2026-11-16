@@ -66,8 +66,8 @@ class CoursesTab extends StatelessWidget {
                   color: AppColors.royalNavy,
                   onRefresh: () async {
                     context.read<AdminCoursesCubit>().loadCourses();
-                    context.read<AdminStudentsCubit>().loadStudents();
                     context.read<AdminRequestsCubit>().loadRequests();
+                    await context.read<AdminStudentsCubit>().loadStudents();
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

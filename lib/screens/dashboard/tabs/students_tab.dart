@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -79,7 +80,7 @@ class _StudentsTabState extends State<StudentsTab> {
     }
 
     if (mounted) {
-      context.read<AdminStudentsCubit>().loadStudents();
+      unawaited(context.read<AdminStudentsCubit>().loadStudents());
       context.read<AdminCoursesCubit>().loadCourses();
       messenger.showSnackBar(
         SnackBar(
@@ -104,7 +105,7 @@ class _StudentsTabState extends State<StudentsTab> {
     );
 
     if (mounted) {
-      context.read<AdminStudentsCubit>().loadStudents();
+      unawaited(context.read<AdminStudentsCubit>().loadStudents());
       context.read<AdminCoursesCubit>().loadCourses();
       messenger.showSnackBar(
         SnackBar(
@@ -131,7 +132,7 @@ class _StudentsTabState extends State<StudentsTab> {
     }
 
     if (mounted) {
-      context.read<AdminStudentsCubit>().loadStudents();
+      unawaited(context.read<AdminStudentsCubit>().loadStudents());
       messenger.showSnackBar(
         SnackBar(
           content: Text('تم تمديد الصلاحية بمقدار $days يوماً لـ ${ids.length} طالباً.'),
@@ -155,7 +156,7 @@ class _StudentsTabState extends State<StudentsTab> {
     );
 
     if (mounted) {
-      context.read<AdminStudentsCubit>().loadStudents();
+      unawaited(context.read<AdminStudentsCubit>().loadStudents());
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -196,7 +197,7 @@ class _StudentsTabState extends State<StudentsTab> {
       _clearSelection();
       await FirestoreService().bulkDeleteStudents(ids);
       if (mounted) {
-        context.read<AdminStudentsCubit>().loadStudents();
+        unawaited(context.read<AdminStudentsCubit>().loadStudents());
         messenger.showSnackBar(
           SnackBar(
             content: Text('تم حذف ${ids.length} حسابات طلاب نهائياً.'),
@@ -265,8 +266,8 @@ class _StudentsTabState extends State<StudentsTab> {
                 RefreshIndicator(
                   color: AppColors.royalNavy,
                   onRefresh: () async {
-                    context.read<AdminStudentsCubit>().loadStudents();
                     context.read<AdminCoursesCubit>().loadCourses();
+                    await context.read<AdminStudentsCubit>().loadStudents();
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

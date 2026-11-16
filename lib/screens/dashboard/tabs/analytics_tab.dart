@@ -148,8 +148,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       color: AppColors.primary,
       onRefresh: () async {
         context.read<AdminCoursesCubit>().loadCourses();
-        context.read<AdminStudentsCubit>().loadStudents();
         context.read<AdminRequestsCubit>().loadRequests();
+        await context.read<AdminStudentsCubit>().loadStudents();
         if (mounted) setState(_bindRealtimeStreams);
       },
       child: ListView(
