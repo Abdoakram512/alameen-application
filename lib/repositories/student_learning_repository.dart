@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -94,11 +95,16 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
   }) async {
     var finalSubmission = submission;
     if (attachmentFile != null) {
-      final uploadedUrl = await _storageService.uploadAssignmentAttachment(
-        studentId: submission.studentId,
-        assignmentId: submission.assignmentId,
-        file: attachmentFile,
-      );
+      final uploadedUrl = await _storageService
+          .uploadAssignmentAttachment(
+            studentId: submission.studentId,
+            assignmentId: submission.assignmentId,
+            file: attachmentFile,
+          )
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw TimeoutException('استغرق رفع المرفق وقتاً طويلاً. تأكد من سرعة اتصالك بالإنترنت.'),
+          );
       finalSubmission = AssignmentSubmission(
         id: submission.id,
         assignmentId: submission.assignmentId,
@@ -117,7 +123,12 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
         gradedAt: submission.gradedAt,
       );
     }
-    await _firestoreService.submitAssignment(finalSubmission);
+    await _firestoreService
+        .submitAssignment(finalSubmission)
+        .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw TimeoutException('استغرق حفظ بيانات التكليف وقتاً طويلاً. تأكد من اتصالك بالإنترنت.'),
+        );
   }
 
   @override
@@ -167,6 +178,10 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
       }
     }
 
+    if (lesson.isVideoProcessing) {
+      throw StateError('المحاضرة قيد التجهيز والمعالجة السحابية في Mux وستكون متاحة للمشاهدة فور اكتمالها.');
+    }
+
     // 2. إذا كان الدرس مدفوعاً ومعزولاً في protected_lessons، يُجلب بصلاحية الطالب المشترك
     var playbackId = lesson.muxPlaybackId.trim();
     if (playbackId.isEmpty && !lesson.isFreePreview) {
@@ -183,8 +198,9 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
 
     return ResolvedLessonPlayback(
       streamUrl: 'https://stream.mux.com/$playbackId.m3u8',
-      thumbnailUrl:
-          'https://image.mux.com/$playbackId/thumbnail.jpg?width=600&height=340&fit_mode=smart',
+      thumbnailUrl: lesson.thumbnailUrl.isNotEmpty
+          ? lesson.thumbnailUrl
+          : 'https://image.mux.com/$playbackId/thumbnail.jpg?width=600&height=340&fit_mode=smart',
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,9 +14,11 @@ import '../../core/theme/app_colors.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../models/active_watch_session.dart';
+import '../../models/course_access_mode.dart';
 import '../../models/learning_history.dart';
 import '../../models/lesson.dart';
 import '../../models/user_profile.dart';
+import '../../models/video_quality.dart';
 import '../../repositories/student_learning_repository.dart';
 import '../../services/firestore_service.dart';
 import '../../services/ip_service.dart';
@@ -24,11 +27,13 @@ import '../security/security_protection_watcher.dart';
 import 'lesson_playlist.dart';
 import 'video_player/widgets/lesson_details_panel.dart';
 import 'video_player/widgets/video_stage_player.dart';
+import 'widgets/submit_assignment_sheet.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final Lesson lesson;
   final String courseId;
   final String courseTitle;
+  final CourseAccessMode courseAccessMode;
   final UserModel? currentUser;
   final List<Lesson> playlist;
 
@@ -37,6 +42,7 @@ class VideoPlayerScreen extends StatefulWidget {
     required this.lesson,
     required this.courseId,
     this.courseTitle = '',
+    this.courseAccessMode = CourseAccessMode.closed,
     this.currentUser,
     this.playlist = const [],
   });
@@ -54,9 +60,44 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String _resolvedThumbnailUrl = '';
   late bool _isCompleted;
   bool _isMuted = false;
+  VideoQuality _selectedQuality = VideoQuality.auto;
+  bool _isChangingQuality = false;
+  String _baseStreamUrl = '';
 
   StreamSubscription<AuthState>? _accessSubscription;
+  StreamSubscription? _submissionsSubscription;
+  Set<String> _submittedAssignmentIds = <String>{};
   ValueNotifier<bool>? _screenCaptureNotifier;
+
+  Map<String, String> get _lockedReasons {
+    final reasons = <String, String>{};
+    String? blockingLessonTitle;
+
+    for (int i = 0; i < widget.playlist.length; i++) {
+      final item = widget.playlist[i];
+
+      if (blockingLessonTitle != null) {
+        reasons[item.id] = blockingLessonTitle;
+        continue;
+      }
+
+      final requiresSubmission = item.isAssignmentLesson ||
+          (item.lockNextUntilSubmitted && item.hasAssignment);
+      final assignmentKey = (item.assignmentId != null &&
+              item.assignmentId!.isNotEmpty)
+          ? item.assignmentId!
+          : 'asg_${item.id}';
+      final isSubmitted = _submittedAssignmentIds.contains(assignmentKey) ||
+          _submittedAssignmentIds.contains(item.id) ||
+          (item.assignmentId != null &&
+              _submittedAssignmentIds.contains(item.assignmentId));
+
+      if (requiresSubmission && !isSubmitted) {
+        blockingLessonTitle = item.title;
+      }
+    }
+    return reasons;
+  }
 
   bool _savingCompletion = false;
   bool _syncing = false;
@@ -64,6 +105,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _changingLesson = false;
   bool _closingForAccess = false;
   bool _showControls = true;
+  bool _wasPlaying = false;
 
   Timer? _hideControlsTimer;
   int _seekFeedbackSeconds = 0;
@@ -77,7 +119,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _maxPlayheadSeconds = 0;
 
   Timer? _watermarkTimer;
-  Alignment _watermarkAlignment = const Alignment(0.7, -0.7);
+  final ValueNotifier<Alignment> _watermarkAlignmentNotifier =
+      ValueNotifier<Alignment>(const Alignment(0.7, -0.7));
   static const List<Alignment> _watermarkPositions = [
     Alignment(0.7, -0.7),
     Alignment(-0.7, -0.7),
@@ -111,14 +154,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     IpService().getClientIpInfo().then((info) {
       if (mounted) setState(() => _clientIpInfo = info);
     }).catchError((_) {});
-    _startPresenceHeartbeat();
 
     _accessSubscription = context.read<AuthCubit>().stream.listen((state) {
+      final isOpenCourse = widget.courseAccessMode == CourseAccessMode.open;
       final revoked = state is Unauthenticated ||
           state is AuthError ||
           (state is Authenticated &&
               (state.user.uid != widget.currentUser?.uid ||
                   (!widget.lesson.isFreePreview &&
+                      !isOpenCourse &&
                       !state.user.isEnrolled(widget.courseId))));
       if (revoked && mounted && !_closingForAccess) {
         _closingForAccess = true;
@@ -136,6 +180,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final uid = widget.currentUser?.uid;
     if (uid != null) {
       _watchQueue.flush(uid).catchError((Object _) {});
+      _submissionsSubscription =
+          FirestoreService().streamStudentSubmissions(uid).listen((subs) {
+        if (mounted) {
+          setState(() {
+            _submittedAssignmentIds =
+                subs.map((s) => s.assignmentId).toSet();
+          });
+        }
+      });
     }
     _startWatermarkAnimation();
   }
@@ -211,16 +264,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final rand = Random();
     _watermarkTimer = Timer.periodic(const Duration(seconds: 6), (_) {
       if (mounted) {
-        setState(() {
-          _watermarkAlignment =
-              _watermarkPositions[rand.nextInt(_watermarkPositions.length)];
-        });
+        _watermarkAlignmentNotifier.value =
+            _watermarkPositions[rand.nextInt(_watermarkPositions.length)];
       }
     });
   }
 
   void _startPresenceHeartbeat() {
     _presenceHeartbeatTimer?.cancel();
+    _sendPresenceHeartbeat();
     _presenceHeartbeatTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => _sendPresenceHeartbeat(),
@@ -271,6 +323,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _removePresenceHeartbeat() {
+    _presenceHeartbeatTimer?.cancel();
+    _presenceHeartbeatTimer = null;
     final user = widget.currentUser;
     if (user == null) return;
     FirestoreService()
@@ -331,7 +385,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final completionPct = totalDur > 0
         ? ((_maxPlayheadSeconds / totalDur) * 100).clamp(0.0, 100.0)
         : 0.0;
-    final isCompleted = completionPct >= 80.0 || _isCompleted;
+    final requiredThreshold = widget.lesson.completionThresholdPercentage;
+    final isCompleted = completionPct >= requiredThreshold || _isCompleted;
 
     try {
       await _watchQueue.enqueue(
@@ -352,6 +407,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       _pendingWatchedSeconds -= seconds;
       await _watchQueue.flush(widget.currentUser!.uid);
+      if (isCompleted && !_isCompleted) {
+        if (mounted) {
+          setState(() => _isCompleted = true);
+          HapticFeedback.mediumImpact();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: AppColors.success,
+              content: Text('player.lesson_auto_completed_earned'.tr()),
+            ),
+          );
+        }
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -368,6 +436,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _initializeVideo() async {
+    if (!widget.lesson.isAvailableNow) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = widget.lesson.isScheduled
+              ? 'هذه المحاضرة مجدولة وستتاح تلقائياً للطلاب في موعدها المحدد.'
+              : 'هذه المحاضرة غير متاحة حالياً (قيد الإعداد والمراجعة).';
+        });
+      }
+      return;
+    }
+
     String streamUrl = widget.lesson.videoStreamUrl;
     try {
       final resolved = await _learningRepository.resolveLessonPlayback(
@@ -390,8 +470,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _resolvedThumbnailUrl = widget.lesson.thumbnailUrl;
     }
 
+    _baseStreamUrl = streamUrl;
+    final targetUri = _selectedQuality.buildStreamUri(streamUrl);
+
     final ctrl = VideoPlayerController.networkUrl(
-      Uri.parse(streamUrl),
+      targetUri,
       httpHeaders: const {'User-Agent': 'AlameenPlayer/1.0 (Flutter)'},
     );
     _controller = ctrl;
@@ -423,9 +506,102 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (!mounted) return;
-    ctrl.addListener(() {
-      if (mounted) setState(() {});
+    ctrl.addListener(_onControllerStateChanged);
+  }
+
+  void _onControllerStateChanged() {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    final isPlaying = ctrl.value.isPlaying;
+    if (isPlaying != _wasPlaying) {
+      _wasPlaying = isPlaying;
+      if (isPlaying) {
+        _startPresenceHeartbeat();
+      } else {
+        _removePresenceHeartbeat();
+      }
+    }
+  }
+
+  Future<void> _changeQuality(VideoQuality quality) async {
+    if (quality == _selectedQuality || _isChangingQuality) return;
+    final oldCtrl = _controller;
+    if (!_isInitialized || oldCtrl == null || _baseStreamUrl.isEmpty) return;
+
+    HapticFeedback.selectionClick();
+    _hideControlsTimer?.cancel();
+
+    setState(() {
+      _isChangingQuality = true;
     });
+
+    final currentPosition = oldCtrl.value.position;
+    final wasPlaying = oldCtrl.value.isPlaying;
+    final currentSpeed = oldCtrl.value.playbackSpeed;
+
+    try {
+      final newUri = quality.buildStreamUri(_baseStreamUrl);
+      final newCtrl = VideoPlayerController.networkUrl(
+        newUri,
+        httpHeaders: const {'User-Agent': 'AlameenPlayer/1.0 (Flutter)'},
+      );
+
+      await newCtrl.initialize();
+      if (!mounted) {
+        await newCtrl.dispose();
+        return;
+      }
+
+      if (currentPosition > Duration.zero &&
+          currentPosition < newCtrl.value.duration) {
+        await newCtrl.seekTo(currentPosition);
+      }
+      await newCtrl.setPlaybackSpeed(currentSpeed);
+      final isVolumeZero =
+          _isMuted || (_screenCaptureNotifier?.value == true);
+      await newCtrl.setVolume(isVolumeZero ? 0.0 : 1.0);
+
+      if (wasPlaying && _screenCaptureNotifier?.value != true) {
+        await newCtrl.play();
+      }
+
+      newCtrl.addListener(_onControllerStateChanged);
+      oldCtrl.removeListener(_onControllerStateChanged);
+
+      if (mounted) {
+        setState(() {
+          _controller = newCtrl;
+          _selectedQuality = quality;
+          _isChangingQuality = false;
+        });
+        _scheduleHideControls();
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            content: Text('تم ضبط جودة الفيديو: ${quality.label}'),
+          ),
+        );
+      }
+      await oldCtrl.dispose();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isChangingQuality = false;
+        });
+        _scheduleHideControls();
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.error,
+            content:
+                Text('تعذر تغيير جودة الفيديو، تم الإبقاء على الجودة الحالية.'),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -505,11 +681,53 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() => _isMuted = nextMuted);
   }
 
+  Future<void> _showAssignmentModal() async {
+    final user = widget.currentUser;
+    final assignmentId = widget.lesson.assignmentId;
+    if (user == null || assignmentId == null || assignmentId.isEmpty) return;
+    try {
+      final assignment = await FirestoreService().getAssignment(assignmentId);
+      if (assignment == null || !mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        builder: (_) => SubmitAssignmentSheet(
+          assignment: assignment,
+          user: user,
+        ),
+      );
+    } catch (_) {}
+  }
+
   Future<void> _openLesson(Lesson lesson) async {
     if (_changingLesson) return;
+    if (_lockedReasons.containsKey(lesson.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'course_details.must_submit_assignment_for_lesson'.tr(
+              args: [_lockedReasons[lesson.id] ?? ''],
+            ),
+          ),
+          backgroundColor: const Color(0xFFB45309),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
     final state = context.read<AuthCubit>().state;
+    final isOpenCourse = widget.courseAccessMode == CourseAccessMode.open;
     if (state is! Authenticated ||
-        (!lesson.isFreePreview && !state.user.isEnrolled(widget.courseId))) {
+        (!lesson.isFreePreview &&
+            !isOpenCourse &&
+            !state.user.isEnrolled(widget.courseId))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('player.no_permission'.tr())),
+      );
       return;
     }
     _changingLesson = true;
@@ -526,6 +744,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             lesson: lesson,
             courseId: widget.courseId,
             courseTitle: widget.courseTitle,
+            courseAccessMode: widget.courseAccessMode,
             currentUser: state.user,
             playlist: widget.playlist,
           ),
@@ -535,7 +754,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _changingLesson = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح المحاضرة، حاول مرة أخرى.')),
+          SnackBar(content: Text('player.open_error'.tr())),
         );
       }
     }
@@ -543,8 +762,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _toggleCompletion() async {
     if (_savingCompletion || widget.currentUser == null) return;
-    setState(() => _savingCompletion = true);
     final target = !_isCompleted;
+
+    final ctrl = _controller;
+    final totalDur = (ctrl != null && ctrl.value.isInitialized)
+        ? ctrl.value.duration.inSeconds
+        : widget.lesson.durationInSeconds;
+    final completionPct = totalDur > 0
+        ? ((_maxPlayheadSeconds / totalDur) * 100).clamp(0.0, 100.0)
+        : 0.0;
+    final threshold = widget.lesson.completionThresholdPercentage;
+
+    if (target && completionPct < threshold) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            'يجب إكمال مشاهدة $threshold% على الأقل من المحاضرة لاحتسابها مكتملة والتأهل للشهادة (أنجزت ${completionPct.toStringAsFixed(0)}%).',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _savingCompletion = true);
     try {
       await _learningRepository.toggleLessonCompletion(
         uid: widget.currentUser!.uid,
@@ -583,6 +825,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void dispose() {
     _screenCaptureNotifier?.removeListener(_handleScreenCaptureChanged);
     _accessSubscription?.cancel();
+    _submissionsSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _hideControlsTimer?.cancel();
     _seekFeedbackTimer?.cancel();
@@ -592,7 +835,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _flushWatchTime();
     _watchTrackerTimer?.cancel();
     _watermarkTimer?.cancel();
+    _watermarkAlignmentNotifier.dispose();
     _restoreSystemUiAndOrientation();
+    _controller?.removeListener(_onControllerStateChanged);
     _controller?.dispose();
     super.dispose();
   }
@@ -618,9 +863,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       showTopBar: showTopBar,
       isFullscreen: _fullscreen,
       isMuted: _isMuted,
+      selectedQuality: _selectedQuality,
+      isChangingQuality: _isChangingQuality,
       seekFeedbackSeconds: _seekFeedbackSeconds,
       isSeekingRight: _isSeekingRight,
-      watermarkAlignment: _watermarkAlignment,
+      watermarkAlignment: _watermarkAlignmentNotifier.value,
+      watermarkNotifier: _watermarkAlignmentNotifier,
       studentName: studentName,
       studentEmail: studentEmail,
       studentUid: studentUid,
@@ -666,6 +914,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _controller?.setPlaybackSpeed(speed);
         _scheduleHideControls();
       },
+      onSelectQuality: _changeQuality,
     );
   }
 
@@ -750,6 +999,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       canComplete: widget.currentUser != null,
                                       playlist: widget.playlist,
                                       showInlinePlaylist: false,
+                                      lockedReasons: _lockedReasons,
+                                      isAssignmentSubmitted: _submittedAssignmentIds
+                                          .contains(widget.lesson.assignmentId),
+                                      onOpenAssignmentSheet: widget.lesson.hasAssignment
+                                          ? _showAssignmentModal
+                                          : null,
                                       onToggleCompletion: _toggleCompletion,
                                       onSelectLesson: _openLesson,
                                     ),
@@ -780,11 +1035,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       lessons: widget.playlist,
                                       selectedId: widget.lesson.id,
                                       enrolled:
-                                          user?.isEnrolled(widget.courseId) ??
-                                              false,
+                                          (user?.isEnrolled(widget.courseId) ??
+                                                  false) ||
+                                              widget.courseAccessMode ==
+                                                  CourseAccessMode.open,
                                       completedIds: {
                                         ...?user?.completedLessonIds,
                                       },
+                                      lockedReasons: _lockedReasons,
                                       onSelected: _openLesson,
                                     );
                                   },
@@ -813,9 +1071,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           child: Container(
                             color: Colors.white,
                             child: ListView(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: context.horizontalPagePadding,
-                                vertical: 20,
+                              padding: EdgeInsets.fromLTRB(
+                                context.horizontalPagePadding,
+                                20,
+                                context.horizontalPagePadding,
+                                MediaQuery.paddingOf(context).bottom + 28,
                               ),
                               children: [
                                 Center(
@@ -831,6 +1091,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       canComplete: widget.currentUser != null,
                                       playlist: widget.playlist,
                                       showInlinePlaylist: true,
+                                      lockedReasons: _lockedReasons,
+                                      isAssignmentSubmitted: _submittedAssignmentIds
+                                          .contains(widget.lesson.assignmentId),
+                                      onOpenAssignmentSheet: widget.lesson.hasAssignment
+                                          ? _showAssignmentModal
+                                          : null,
                                       onToggleCompletion: _toggleCompletion,
                                       onSelectLesson: _openLesson,
                                     ),

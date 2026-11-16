@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -39,6 +40,8 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
   void _submitEmailLogin() {
     if (!_formKey.currentState!.validate()) return;
+    HapticFeedback.lightImpact();
+    FocusScope.of(context).unfocus();
     context.read<AuthCubit>().signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,

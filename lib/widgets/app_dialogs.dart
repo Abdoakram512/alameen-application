@@ -288,7 +288,10 @@ class _BaseAppDialog extends StatelessWidget {
                   color: iconBgColor,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: iconColor, size: 32),
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Icon(icon, color: iconColor, size: 32),
+                ),
               ),
               const SizedBox(height: 16),
               Text(

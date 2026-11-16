@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_directional_icons.dart';
 import '../../../../logic/access/access_cubit.dart';
 import '../../../../logic/access/access_state.dart';
 import '../../../../models/access_request.dart';
@@ -123,7 +124,12 @@ class _StudentRequestTile extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 13, color: fgColor),
+                    request.status == AccessStatus.approved
+                        ? AppDirectionalIcons.checkCircle(
+                            size: 13,
+                            color: fgColor,
+                          )
+                        : Icon(icon, size: 13, color: fgColor),
                     const SizedBox(width: 5),
                     Text(
                       label,

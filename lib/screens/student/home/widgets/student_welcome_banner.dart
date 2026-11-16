@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -13,6 +14,16 @@ class StudentWelcomeBanner extends StatelessWidget {
     required this.totalCourses,
     required this.enrolledCount,
   });
+
+  String _safeTr(String key, String fallback, {List<String>? args}) {
+    try {
+      final val = key.tr(args: args);
+      if (val.isEmpty || val == key) return fallback;
+      return val;
+    } catch (_) {
+      return fallback;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +47,7 @@ class StudentWelcomeBanner extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Image.asset(
-              'assets/images/website-logo.png',
+              'assets/images/logo.png',
               fit: BoxFit.contain,
             ),
           ),
@@ -46,7 +57,7 @@ class StudentWelcomeBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'مركز الأمين للتخاطب وتنمية المهارات',
+                  _safeTr('app_name', 'مركز الأمين للتخاطب'),
                   style: AppTextStyles.heading3.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w800,
@@ -54,7 +65,7 @@ class StudentWelcomeBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'استعرض البرامج التدريبية المعتمدة وتابع محاضراتك بالترتيب المنهجي.',
+                  _safeTr('app_tagline', 'بوابة المتدرب التفاعلية'),
                   style: AppTextStyles.bodyMedium,
                 ),
                 const SizedBox(height: 10),
@@ -64,14 +75,22 @@ class StudentWelcomeBanner extends StatelessWidget {
                   children: [
                     _MetricChip(
                       icon: PhosphorIconsRegular.books,
-                      label: '$totalCourses دورة متاحة',
+                      label: _safeTr(
+                        'home.courses_available_count',
+                        '$totalCourses دورة متاحة',
+                        args: ['$totalCourses'],
+                      ),
                       bgColor: AppColors.primaryLight,
                       fgColor: AppColors.primary,
                     ),
                     if (enrolledCount > 0)
                       _MetricChip(
                         icon: PhosphorIconsFill.sealCheck,
-                        label: '$enrolledCount مشترك بها',
+                        label: _safeTr(
+                          'home.courses_enrolled_count',
+                          '$enrolledCount مشترك بها',
+                          args: ['$enrolledCount'],
+                        ),
                         bgColor: AppColors.successLight,
                         fgColor: AppColors.successDark,
                       ),

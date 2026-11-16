@@ -10,29 +10,33 @@ import 'package:secure_screen_app/screens/student/home/widgets/student_welcome_b
 import 'package:secure_screen_app/screens/student/profile/widgets/student_profile_header_card.dart';
 import 'package:secure_screen_app/screens/student/profile/widgets/student_stats_grid.dart';
 import 'package:secure_screen_app/screens/student/video_player/widgets/video_watermark_overlay.dart';
+import '../test_localization_helper.dart';
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    await initTestLocalization();
+  });
   group('Student Scenario Suite 1: Home Catalog, Welcome Banner & Search Filter', () {
     testWidgets('Scenario 1.1: StudentWelcomeBanner displays total courses and enrolled count', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: Directionality(
-              textDirection: TextDirection.rtl,
-              child: SingleChildScrollView(
-                child: StudentWelcomeBanner(
-                  totalCourses: 14,
-                  enrolledCount: 3,
-                ),
-              ),
-            ),
+        testAppWrapper(
+          child: const StudentWelcomeBanner(
+            totalCourses: 14,
+            enrolledCount: 3,
           ),
         ),
       );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StudentWelcomeBanner), findsOneWidget);
+      expect(find.text('14 دورة متاحة'), findsOneWidget);
+      expect(find.text('3 مشترك بها'), findsOneWidget);
+      expect(find.text('مركز الأمين للتخاطب'), findsOneWidget);
 
       expect(find.text('14 دورة متاحة'), findsOneWidget);
       expect(find.text('3 مشترك بها'), findsOneWidget);
-      expect(find.text('مركز الأمين للتخاطب وتنمية المهارات'), findsOneWidget);
+      expect(find.text('مركز الأمين للتخاطب'), findsOneWidget);
     });
 
     testWidgets('Scenario 1.2: CourseSearchFilterBar filters by category query and triggers callback', (tester) async {
@@ -264,21 +268,21 @@ void main() {
 
     testWidgets('Scenario 4.2: StudentStatsGrid displays watch time, completed lessons, and enrolled courses', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
+        testAppWrapper(
+          wrapInScaffold: false,
+          child: const Scaffold(
             body: Directionality(
               textDirection: TextDirection.rtl,
-              child: SingleChildScrollView(
-                child: StudentStatsGrid(
-                  enrolledCount: 3,
-                  completedLessonsCount: 8,
-                  watchTimeFormatted: '4 ساعات و15 دقيقة',
-                ),
+              child: StudentStatsGrid(
+                enrolledCount: 3,
+                completedLessonsCount: 8,
+                watchTimeFormatted: '4 ساعات و15 دقيقة',
               ),
             ),
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
       expect(find.text('3'), findsOneWidget);
       expect(find.text('دورات مشترك بها'), findsOneWidget);

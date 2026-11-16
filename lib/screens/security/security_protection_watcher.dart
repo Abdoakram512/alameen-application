@@ -171,7 +171,7 @@ class _SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
               child: ScreenCaptureShieldOverlay(
                 title: 'تم رصد تسجيل نشط للشاشة',
                 description:
-                    'محتوى مركز الأمين للتخاطب وتنمية المهارات محمي لحفظ حقوق الملكية الفكرية للمحاضرات.\n\n'
+                    'محتوى مركز الأمين للتخاطب محمي لحفظ حقوق الملكية الفكرية للمحاضرات.\n\n'
                     'تم إيقاف التشغيل وحجب الشاشة مؤقتاً بسبب تشغيل أداة تسجيل شاشة على جهازك. '
                     'يرجى إيقاف التسجيل تماماً ثم الضغط على إعادة الفحص للمتابعة.',
                 onRetryCheck: () async {

@@ -5,17 +5,28 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/app_lottie_box.dart';
 import '../onboarding/widgets/onboarding_backdrop_painter.dart';
 
-/// شاشة البداية المؤسسية لبوابة المتدرب — مركز الأمين للتخاطب وتنمية المهارات.
+/// شاشة البداية المؤسسية لبوابة المتدرب — مركز الأمين للتخاطب.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
+
+  String _safeTr(String key, String fallback) {
+    try {
+      final val = key.tr();
+      if (val.isEmpty || val == key) return fallback;
+      return val;
+    } catch (_) {
+      return fallback;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
-      body: CustomPaint(
-        painter: const OnboardingBackdropPainter(pageProgress: 0.5),
-        child: SafeArea(
+      body: RepaintBoundary(
+        child: CustomPaint(
+          painter: const OnboardingBackdropPainter(pageProgress: 0.5),
+          child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -38,13 +49,13 @@ class SplashScreen extends StatelessWidget {
                         boxShadow: AppColors.heroShadow,
                       ),
                       child: Image.asset(
-                        'assets/images/website-logo.png',
+                        'assets/images/logo.png',
                         fit: BoxFit.contain,
                       ),
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'app_name'.tr(),
+                      _safeTr('app_name', 'مركز الأمين للتخاطب'),
                       textAlign: TextAlign.center,
                       style: AppTextStyles.displayLarge.copyWith(
                         fontSize: 26,
@@ -53,7 +64,7 @@ class SplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'app_tagline'.tr(),
+                      _safeTr('app_tagline', 'بوابة المتدرب التفاعلية'),
                       textAlign: TextAlign.center,
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontSize: 14,
@@ -68,7 +79,7 @@ class SplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'splash_loading'.tr(),
+                      _safeTr('splash_loading', 'جاري تهيئة بوابة مركز الأمين للتخاطب...'),
                       textAlign: TextAlign.center,
                       style: AppTextStyles.caption,
                     ),
@@ -77,6 +88,7 @@ class SplashScreen extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

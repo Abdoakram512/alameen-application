@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/injection_container.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/app_validators.dart';
 import '../../../core/utils/network_error_mapper.dart';
+import '../../../core/widgets/app_directional_icons.dart';
 import '../../../models/assignment.dart';
 import '../../../models/assignment_submission.dart';
 import '../../../models/user_profile.dart';
@@ -32,6 +34,7 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
   final _linkController = TextEditingController();
   File? _pickedImageAttachment;
   bool _isSubmitting = false;
+  String _statusMessage = 'جاري إرسال تسليم التكليف...';
 
   StudentLearningRepository get _repository =>
       sl.isRegistered<StudentLearningRepository>()
@@ -64,8 +67,14 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
 
     final solution = _solutionController.text.trim();
     final link = _linkController.text.trim();
+    final parentMessenger = ScaffoldMessenger.of(context);
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _statusMessage = _pickedImageAttachment != null
+          ? 'جاري ضغط ورفع المرفق وحفظ التسليم...'
+          : 'جاري تسجيل تسليم التكليف سحابياً...';
+    });
 
     try {
       final newSub = AssignmentSubmission(
@@ -89,15 +98,15 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'تم إرسال التكليف بنجاح، وستظهر نتيجة التقييم فور مراجعته من المحاضر.',
-            ),
-            backgroundColor: AppColors.success,
-          ),
-        );
       }
+      parentMessenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'تم تسليم المهمة التطبيقية بنجاح، ويمكنك الآن متابعة الدرس التالي فوراً.',
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -173,6 +182,64 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                         ),
                       ),
                     ],
+                    if (widget.assignment.hasAttachment) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFECACA)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.picture_as_pdf_rounded,
+                              color: Color(0xFFDC2626),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.assignment.pdfAttachmentName ?? 'ملف ورقة عمل التكليف (PDF)',
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF991B1B),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    'مرفق معتمد من المدرب لمساعدتك في إنجاز المهمة',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: const Color(0xFFB91C1C),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFDC2626),
+                                side: const BorderSide(color: Color(0xFFDC2626)),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                alignment: Alignment.center,
+                              ),
+                              icon: const Icon(Icons.download_rounded, size: 16),
+                              label: const Text('فتح / تنزيل'),
+                              onPressed: () {
+                                final uri = Uri.tryParse(widget.assignment.attachmentUrl);
+                                if (uri != null) {
+                                  launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Text(
                       'الإجابة أو ملاحظات الجلسة التطبيقية *',
@@ -197,13 +264,19 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: _isSubmitting ? null : _pickAttachmentImage,
-                            icon: Icon(
-                              _pickedImageAttachment != null
-                                  ? Icons.check_circle_rounded
-                                  : Icons.attach_file_rounded,
-                              size: 18,
+                            style: OutlinedButton.styleFrom(
+                              alignment: Alignment.center,
                             ),
+                            onPressed: _isSubmitting ? null : _pickAttachmentImage,
+                            icon: _pickedImageAttachment != null
+                                ? AppDirectionalIcons.checkCircle(
+                                    color: AppColors.success,
+                                    size: 18,
+                                  )
+                                : const Icon(
+                                    Icons.attach_file_rounded,
+                                    size: 18,
+                                  ),
                             label: Text(
                               _pickedImageAttachment != null
                                   ? 'تم إرفاق صورة للتكليف'
@@ -242,10 +315,25 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                       ),
                     ),
                     const SizedBox(height: 20),
+                    if (_isSubmitting) ...[
+                      Center(
+                        child: Text(
+                          _statusMessage,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          alignment: Alignment.center,
+                        ),
                         onPressed: _isSubmitting ? null : _submit,
                         child: _isSubmitting
                             ? const SizedBox(
@@ -259,6 +347,15 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                             : const Text('إرسال التكليف للتقييم'),
                       ),
                     ),
+                    if (_isSubmitting) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('إغلاق والمتابعة في الخلفية'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

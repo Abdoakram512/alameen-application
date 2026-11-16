@@ -1,6 +1,6 @@
 {
-  "app_name": "Elameen Center",
-  "app_tagline": "Encrypted & Secure Mux Streaming & Courses Platform",
+  "app_name": "Elameen Center for Speech & Skills",
+  "app_tagline": "Browse certified programs and follow your lectures sequentially.",
   "student_portal": "Student Portal • Encrypted Lectures Platform",
   "security_shield_desc": "Hardware Encrypted Protection Against Screen Capture & Recording",
   "splash_loading": "Initializing security & lecture resources...",
@@ -101,7 +101,9 @@
     "enrolled_courses": "Enrolled Courses",
     "app_settings": "App Settings",
     "change_language": "Change App Language",
-    "current_lang": "English"
+    "current_lang": "English",
+    "google_linked": "Linked with Google",
+    "verified_account": "Verified Student Account"
   },
 
   "security": {
@@ -125,6 +127,51 @@
     "submit_btn": "Submit Enrollment Request",
     "submitting": "Submitting request and verifying receipt...",
     "cash_center_note": "When paying in cash, please visit the center cash desk to activate your course immediately."
+  },
+
+  "nav": {
+    "courses": "Courses",
+    "assignments": "Assignments",
+    "analytics": "Analytics",
+    "profile": "Profile",
+    "center_brand": "Elameen Center"
+  },
+
+  "player": {
+    "lesson_completed_title": "Lecture Completed Successfully ✓",
+    "lesson_auto_track_title": "Automated Lecture Tracker",
+    "lesson_completed_desc": "Your complete watch progress has been recorded and verified.",
+    "lesson_auto_track_desc": "Lesson is automatically completed when you reach {} watch time or more.",
+    "lesson_auto_completed_earned": "Congratulations! Required watch threshold completed successfully.",
+    "next_lesson": "Next Lecture: {}",
+    "must_submit_assignment_first": "You must submit this lecture's assignment before unlocking the next one.",
+    "no_permission": "You do not have permission to watch this lecture.",
+    "open_error": "Failed to open lecture, please try again.",
+    "saved_position_hint": "Your playback position is saved automatically on this device."
+  },
+
+  "home": {
+    "welcome_back": "Welcome back",
+    "available_courses": "Available Courses",
+    "courses_count": "{} Courses",
+    "courses_available_count": "{} Available Courses",
+    "courses_enrolled_count": "{} Enrolled",
+    "no_matching_courses": "No courses match your current search",
+    "try_different_search": "Try selecting another category or clearing search query.",
+    "all_categories": "All",
+    "student_fallback": "Elameen Center Trainee"
+  },
+
+  "course_details": {
+    "title": "Course Details",
+    "not_found": "The requested course is currently unavailable.",
+    "load_error": "Check your internet connection and try again.",
+    "assigned_only_warning": "This course is restricted to trainees designated by administration.",
+    "must_submit_assignment_for_lesson": "You must submit assignment for \"{}\" first to unlock this lecture.",
+    "open_course_badge": "Open & Free",
+    "open_course_desc": "This course is open to all students for free without needing payment or approvals.",
+    "start_open_course": "Start Course Now for Free",
+    "locked_for_subscribers": "This lecture is available to course subscribers. Request enrollment to unlock."
   }
 }
 

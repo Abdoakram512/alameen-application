@@ -74,7 +74,7 @@ class _EditStudentProfileSheetState extends State<EditStudentProfileSheet> {
     try {
       final normalizedPhone = AppValidators.cleanEgyptianPhone(_phoneController.text);
       await context.read<AuthCubit>().updateProfileInfo(
-            displayName: _nameController.text.trim(),
+            displayName: widget.initialName,
             phone: normalizedPhone,
           );
       if (!mounted) return;
@@ -205,21 +205,59 @@ class _EditStudentProfileSheetState extends State<EditStudentProfileSheet> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    Text('الاسم الثلاثي', style: AppTextStyles.label),
+                    Row(
+                      children: [
+                        Text('الاسم الثلاثي المعتمد', style: AppTextStyles.label),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          PhosphorIconsRegular.lockSimple,
+                          size: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _nameController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        hintText: 'اكتب اسمك كما يظهر للشهادة والإدارة',
-                        prefixIcon: Icon(PhosphorIconsRegular.user, size: 19),
+                      readOnly: true,
+                      enabled: false,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: AppColors.surfaceLevel2,
+                        prefixIcon: const Icon(PhosphorIconsRegular.user, size: 19),
+                        suffixIcon: const Tooltip(
+                          message: 'الاسم مقفل للاعتماد بالشهادات',
+                          child: Icon(PhosphorIconsRegular.lockKey, size: 18),
+                        ),
                       ),
-                      validator: (v) {
-                        if (v == null || v.trim().length < 3) {
-                          return 'يرجى إدخال اسم واضح لا يقل عن 3 أحرف';
-                        }
-                        return null;
-                      },
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            PhosphorIconsRegular.info,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'الاسم المعتمد في الشهادات والبطاقات لا يمكن تغييره. في حال وجود خطأ يرجى التواصل مع الدعم الفني.',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.primary,
+                                fontSize: 11,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 14),
                     Text('رقم الهاتف / واتساب', style: AppTextStyles.label),

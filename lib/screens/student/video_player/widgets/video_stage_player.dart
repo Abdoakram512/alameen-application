@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/widgets/app_cached_image.dart';
+import '../../../../models/video_quality.dart';
 import 'video_controls_overlay.dart';
 import 'video_seek_feedback_badge.dart';
 import 'video_watermark_overlay.dart';
@@ -17,9 +18,12 @@ class VideoStagePlayer extends StatelessWidget {
   final bool showTopBar;
   final bool isFullscreen;
   final bool isMuted;
+  final VideoQuality selectedQuality;
+  final bool isChangingQuality;
   final int seekFeedbackSeconds;
   final bool isSeekingRight;
   final Alignment watermarkAlignment;
+  final ValueNotifier<Alignment>? watermarkNotifier;
   final String studentName;
   final String studentEmail;
   final String studentUid;
@@ -34,6 +38,7 @@ class VideoStagePlayer extends StatelessWidget {
   final VoidCallback onToggleFullscreen;
   final VoidCallback onExitTopBar;
   final ValueChanged<double> onSelectSpeed;
+  final ValueChanged<VideoQuality>? onSelectQuality;
 
   const VideoStagePlayer({
     super.key,
@@ -47,9 +52,12 @@ class VideoStagePlayer extends StatelessWidget {
     required this.showTopBar,
     required this.isFullscreen,
     required this.isMuted,
+    this.selectedQuality = VideoQuality.auto,
+    this.isChangingQuality = false,
     required this.seekFeedbackSeconds,
     required this.isSeekingRight,
     required this.watermarkAlignment,
+    this.watermarkNotifier,
     required this.studentName,
     required this.studentEmail,
     required this.studentUid,
@@ -64,6 +72,7 @@ class VideoStagePlayer extends StatelessWidget {
     required this.onToggleFullscreen,
     required this.onExitTopBar,
     required this.onSelectSpeed,
+    this.onSelectQuality,
   });
 
   double get _safeIntrinsicAspectRatio {
@@ -89,7 +98,9 @@ class VideoStagePlayer extends StatelessWidget {
               Center(
                 child: AspectRatio(
                   aspectRatio: _safeIntrinsicAspectRatio,
-                  child: VideoPlayer(activeController),
+                  child: RepaintBoundary(
+                    child: VideoPlayer(activeController),
+                  ),
                 ),
               )
             else if (hasError)
@@ -193,18 +204,79 @@ class VideoStagePlayer extends StatelessWidget {
               isForward: isSeekingRight,
               seconds: seekFeedbackSeconds,
             ),
-            if (ready && activeController.value.isBuffering)
-              const IgnorePointer(
+            if (ready)
+              ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: activeController,
+                builder: (context, val, _) {
+                  if (val.isBuffering && !isChangingQuality) {
+                    return const IgnorePointer(
+                      child: Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            if (isChangingQuality)
+              IgnorePointer(
                 child: Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'جارٍ ضبط دقة الفيديو...',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            VideoWatermarkOverlay(
-              alignment: watermarkAlignment,
-              studentName: studentName,
-              studentEmail: studentEmail,
-              studentUid: studentUid,
-              studentIp: studentIp,
+            RepaintBoundary(
+              child: watermarkNotifier != null
+                  ? ValueListenableBuilder<Alignment>(
+                      valueListenable: watermarkNotifier!,
+                      builder: (context, align, _) => VideoWatermarkOverlay(
+                        alignment: align,
+                        studentName: studentName,
+                        studentEmail: studentEmail,
+                        studentUid: studentUid,
+                        studentIp: studentIp,
+                      ),
+                    )
+                  : VideoWatermarkOverlay(
+                      alignment: watermarkAlignment,
+                      studentName: studentName,
+                      studentEmail: studentEmail,
+                      studentUid: studentUid,
+                      studentIp: studentIp,
+                    ),
             ),
             if (ready)
               Positioned.fill(
@@ -219,6 +291,8 @@ class VideoStagePlayer extends StatelessWidget {
                       showTopBar: showTopBar,
                       isFullscreen: isFullscreen,
                       isMuted: isMuted,
+                      selectedQuality: selectedQuality,
+                      isChangingQuality: isChangingQuality,
                       onTogglePlay: onTogglePlay,
                       onSeekBackward: onSeekBackward,
                       onSeekForward: onSeekForward,
@@ -226,6 +300,7 @@ class VideoStagePlayer extends StatelessWidget {
                       onToggleFullscreen: onToggleFullscreen,
                       onExitTopBar: onExitTopBar,
                       onSelectSpeed: onSelectSpeed,
+                      onSelectQuality: onSelectQuality,
                     ),
                   ),
                 ),

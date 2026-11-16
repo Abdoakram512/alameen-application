@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -6,11 +7,15 @@ import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/app_lottie_box.dart';
+import '../../core/widgets/app_lottie_loading.dart';
 import '../../core/widgets/feedback/app_error_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
 import '../../logic/courses/courses_state.dart';
+import '../../models/course.dart';
+import '../../models/course_access_mode.dart';
+import '../../models/user_profile.dart';
 import 'home/widgets/course_search_filter_bar.dart';
 import 'home/widgets/student_course_card.dart';
 import 'home/widgets/student_home_app_bar.dart';
@@ -20,44 +25,52 @@ import 'resume_learning_card.dart';
 class StudentHomeScreen extends StatelessWidget {
   const StudentHomeScreen({super.key});
 
+  bool _isCourseVisibleToStudent(Course c, UserModel? user) {
+    if (c.accessMode == CourseAccessMode.closed) return false;
+    if (c.accessMode == CourseAccessMode.assignedOnly) {
+      if (user == null) return false;
+      return c.allowedStudentIds.contains(user.uid) || user.isEnrolled(c.id);
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthCubit, AuthState>(
-      builder: (context, authState) {
-        final currentUser = authState is Authenticated ? authState.user : null;
-        final displayName = currentUser?.displayName.trim().isNotEmpty == true
-            ? currentUser!.displayName
-            : 'متدرب مركز الأمين';
-        final photoUrl = currentUser?.photoUrl ?? '';
+    return Scaffold(
+      backgroundColor: AppColors.scaffoldBackground,
+      appBar: const StudentHomeAppBar(),
+      body: BlocBuilder<CoursesCubit, CoursesState>(
+        builder: (context, coursesState) {
+          final currentUser = context.select<AuthCubit, UserModel?>((c) {
+            final s = c.state;
+            return s is Authenticated ? s.user : null;
+          });
+          if (coursesState is CoursesLoading) {
+            return const AppLottieLoading(
+              message: 'جاري تحميل البرامج التدريبية المعتمدة...',
+            );
+          }
 
-        return Scaffold(
-          backgroundColor: AppColors.scaffoldBackground,
-          appBar: StudentHomeAppBar(
-            displayName: displayName,
-            photoUrl: photoUrl,
-          ),
-          body: BlocBuilder<CoursesCubit, CoursesState>(
-            builder: (context, coursesState) {
-              if (coursesState is CoursesLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          if (coursesState is CoursesError) {
+            return AppErrorState(
+              message:
+                  'تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.',
+              onRetry: () => context.read<CoursesCubit>().loadCourses(),
+            );
+          }
 
-              if (coursesState is CoursesError) {
-                return AppErrorState(
-                  message:
-                      'تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.',
-                  onRetry: () => context.read<CoursesCubit>().loadCourses(),
-                );
-              }
+          if (coursesState is! CoursesLoaded) {
+            return const AppLottieLoading();
+          }
 
-              if (coursesState is! CoursesLoaded) {
-                return const SizedBox.shrink();
-              }
-
-              final allCourses = coursesState.allCourses;
-              final filteredCourses = coursesState.filteredCourses;
+              final allCourses = coursesState.allCourses
+                  .where((c) => _isCourseVisibleToStudent(c, currentUser))
+                  .toList();
+              final filteredCourses = coursesState.filteredCourses
+                  .where((c) => _isCourseVisibleToStudent(c, currentUser))
+                  .toList();
               final categories = <String>{
-                'الكل',
+                'home.all_categories'.tr(),
                 ...allCourses
                     .map((c) => c.category.trim())
                     .where((c) => c.isNotEmpty),
@@ -103,11 +116,13 @@ class StudentHomeScreen extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'الدورات التدريبية المتاحة',
+                                'home.available_courses'.tr(),
                                 style: AppTextStyles.heading2,
                               ),
                               Text(
-                                '${filteredCourses.length} دورة',
+                                'home.courses_count'.tr(args: [
+                                  '${filteredCourses.length}',
+                                ]),
                                 style: AppTextStyles.caption.copyWith(
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -135,7 +150,7 @@ class StudentHomeScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'لا توجد دورات مطابقة لبحثك الحالي',
+                                    'home.no_matching_courses'.tr(),
                                     style: AppTextStyles.heading3.copyWith(
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -143,7 +158,7 @@ class StudentHomeScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'جرّب اختيار تخصص آخر أو مسح نص البحث.',
+                                    'home.try_different_search'.tr(),
                                     style: AppTextStyles.bodyMedium,
                                     textAlign: TextAlign.center,
                                   ),
@@ -171,6 +186,9 @@ class StudentHomeScreen extends StatelessWidget {
                                   ),
                               ],
                             ),
+                            const SizedBox(
+                              height: kBottomNavigationBarHeight + 24,
+                            ),
                         ],
                       ),
                     ),
@@ -180,7 +198,5 @@ class StudentHomeScreen extends StatelessWidget {
             },
           ),
         );
-      },
-    );
   }
 }

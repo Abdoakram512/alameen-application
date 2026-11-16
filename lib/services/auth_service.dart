@@ -159,15 +159,37 @@ class AuthService {
     return error.toString();
   }
 
-  /// تسجيل الخروج وتنظيف بيانات إشعارات الجلسة
+  /// حذف الحساب نهائياً من Firebase Auth مع حماية كاملة من التعليق وإعادة المصادقة
+  Future<void> deleteCurrentUser({String? password}) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      if (password != null && password.trim().isNotEmpty && user.email != null) {
+        final credential = EmailAuthProvider.credential(
+          email: user.email!,
+          password: password.trim(),
+        );
+        await user.reauthenticateWithCredential(credential);
+      }
+      try {
+        final uid = user.uid;
+        await NotificationService().clearFCMToken(uid).timeout(const Duration(seconds: 4));
+      } catch (_) {}
+      try {
+        await _googleSignIn.signOut().timeout(const Duration(seconds: 4));
+      } catch (_) {}
+      await user.delete().timeout(const Duration(seconds: 10));
+    }
+  }
+
+  /// تسجيل الخروج وتنظيف بيانات إشعارات الجلسة مع حماية من التعليق
   Future<void> signOut() async {
     try {
       final uid = _auth.currentUser?.uid;
-      await NotificationService().clearFCMToken(uid);
+      await NotificationService().clearFCMToken(uid).timeout(const Duration(seconds: 4));
     } catch (_) {}
     try {
-      await _googleSignIn.signOut();
+      await _googleSignIn.signOut().timeout(const Duration(seconds: 4));
     } catch (_) {}
-    await _auth.signOut();
+    await _auth.signOut().timeout(const Duration(seconds: 5));
   }
 }

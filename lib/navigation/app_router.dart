@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -9,8 +10,14 @@ import '../logic/auth/auth_cubit.dart';
 import '../logic/auth/auth_state.dart';
 import '../screens/auth/student_login_screen.dart';
 import '../screens/auth/student_register_screen.dart';
+import '../screens/info/about_us_screen.dart';
+import '../screens/info/faqs_screen.dart';
+import '../screens/info/privacy_policy_screen.dart';
+import '../screens/security/suspended_account_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/student/course_details_screen.dart';
+import '../screens/student/student_analytics_screen.dart';
+import '../screens/student/student_assignments_screen.dart';
 import '../screens/student/student_home_screen.dart';
 import '../screens/student/student_profile_screen.dart';
 import 'student_route_policy.dart';
@@ -20,12 +27,26 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(authCubit.stream),
-    redirect: (context, state) => policy.redirect(
-      state.uri,
-      signedIn: authCubit.state is Authenticated,
-      resolving:
-          authCubit.state is AuthInitial || authCubit.state is AuthLoading,
-    ),
+    redirect: (context, state) {
+      final authState = authCubit.state;
+      final isSuspended =
+          authState is Authenticated && authState.user.isSuspended;
+
+      if (isSuspended) {
+        if (state.uri.path == '/suspended') return null;
+        return '/suspended';
+      }
+      if (state.uri.path == '/suspended' && !isSuspended) {
+        return '/';
+      }
+
+      return policy.redirect(
+        state.uri,
+        signedIn: authState is Authenticated,
+        resolving:
+            authState is AuthInitial || authState is AuthLoading,
+      );
+    },
     routes: [
       GoRoute(
         path: '/splash',
@@ -38,6 +59,22 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const StudentRegisterScreen(),
+      ),
+      GoRoute(
+        path: '/suspended',
+        builder: (context, state) => const SuspendedAccountScreen(),
+      ),
+      GoRoute(
+        path: '/about',
+        builder: (context, state) => const AboutUsScreen(),
+      ),
+      GoRoute(
+        path: '/privacy-policy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/faqs',
+        builder: (context, state) => const FaqsScreen(),
       ),
       GoRoute(
         path: '/',
@@ -73,6 +110,8 @@ class _StudentMainNavigationScaffoldState
     final useRail = context.useNavigationRail;
     final pages = [
       const StudentHomeScreen(),
+      const StudentAssignmentsScreen(),
+      const StudentAnalyticsScreen(),
       StudentProfileScreen(
         onBrowseCourses: () => setState(() => _selectedTabIndex = 0),
       ),
@@ -117,7 +156,7 @@ class _StudentMainNavigationScaffoldState
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Image.asset(
-                                'assets/images/website-logo.png',
+                                'assets/images/logo.png',
                                 width: 38,
                                 height: 38,
                               ),
@@ -134,16 +173,26 @@ class _StudentMainNavigationScaffoldState
                             ],
                           ),
                         ),
-                        destinations: const [
+                        destinations: [
                           NavigationRailDestination(
-                            icon: Icon(PhosphorIconsRegular.graduationCap),
-                            selectedIcon: Icon(PhosphorIconsFill.graduationCap),
-                            label: Text('الدورات التدريبية'),
+                            icon: const Icon(PhosphorIconsRegular.graduationCap),
+                            selectedIcon: const Icon(PhosphorIconsFill.graduationCap),
+                            label: Text('nav.courses'.tr()),
                           ),
                           NavigationRailDestination(
-                            icon: Icon(PhosphorIconsRegular.chartPolar),
-                            selectedIcon: Icon(PhosphorIconsFill.chartPolar),
-                            label: Text('ملفي وتحليلي'),
+                            icon: const Icon(PhosphorIconsRegular.clipboardText),
+                            selectedIcon: const Icon(PhosphorIconsFill.clipboardText),
+                            label: Text('nav.assignments'.tr()),
+                          ),
+                          NavigationRailDestination(
+                            icon: const Icon(PhosphorIconsRegular.chartLineUp),
+                            selectedIcon: const Icon(PhosphorIconsFill.chartLineUp),
+                            label: Text('nav.analytics'.tr()),
+                          ),
+                          NavigationRailDestination(
+                            icon: const Icon(PhosphorIconsRegular.user),
+                            selectedIcon: const Icon(PhosphorIconsFill.user),
+                            label: Text('nav.profile'.tr()),
                           ),
                         ],
                       ),
@@ -170,32 +219,51 @@ class _StudentMainNavigationScaffoldState
                     top: BorderSide(color: AppColors.borderHairline, width: 1),
                   ),
                 ),
-                child: NavigationBar(
-                  backgroundColor: Colors.white,
-                  elevation: 0,
-                  indicatorColor: AppColors.primaryLight,
-                  selectedIndex: _selectedTabIndex,
-                  onDestinationSelected: (idx) {
-                    setState(() => _selectedTabIndex = idx);
-                  },
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(PhosphorIconsRegular.graduationCap),
-                      selectedIcon: Icon(
-                        PhosphorIconsFill.graduationCap,
-                        color: AppColors.primary,
+                child: SafeArea(
+                  top: false,
+                  child: NavigationBar(
+                    backgroundColor: Colors.white,
+                    elevation: 0,
+                    indicatorColor: AppColors.primaryLight,
+                    selectedIndex: _selectedTabIndex,
+                    onDestinationSelected: (idx) {
+                      setState(() => _selectedTabIndex = idx);
+                    },
+                    destinations: [
+                      NavigationDestination(
+                        icon: const Icon(PhosphorIconsRegular.graduationCap),
+                        selectedIcon: const Icon(
+                          PhosphorIconsFill.graduationCap,
+                          color: AppColors.primary,
+                        ),
+                        label: 'nav.courses'.tr(),
                       ),
-                      label: 'الدورات',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(PhosphorIconsRegular.chartPolar),
-                      selectedIcon: Icon(
-                        PhosphorIconsFill.chartPolar,
-                        color: AppColors.primary,
+                      NavigationDestination(
+                        icon: const Icon(PhosphorIconsRegular.clipboardText),
+                        selectedIcon: const Icon(
+                          PhosphorIconsFill.clipboardText,
+                          color: AppColors.primary,
+                        ),
+                        label: 'nav.assignments'.tr(),
                       ),
-                      label: 'ملفي وتحليلي',
-                    ),
-                  ],
+                      NavigationDestination(
+                        icon: const Icon(PhosphorIconsRegular.chartLineUp),
+                        selectedIcon: const Icon(
+                          PhosphorIconsFill.chartLineUp,
+                          color: AppColors.primary,
+                        ),
+                        label: 'nav.analytics'.tr(),
+                      ),
+                      NavigationDestination(
+                        icon: const Icon(PhosphorIconsRegular.user),
+                        selectedIcon: const Icon(
+                          PhosphorIconsFill.user,
+                          color: AppColors.primary,
+                        ),
+                        label: 'nav.profile'.tr(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
       );

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -21,24 +22,34 @@ class StudentStatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 430;
 
+    String safeTr(String key, String fallback) {
+      try {
+        final val = key.tr();
+        if (val.isEmpty || val == key) return fallback;
+        return val;
+      } catch (_) {
+        return fallback;
+      }
+    }
+
     final cards = [
       _StatTile(
         icon: PhosphorIconsRegular.graduationCap,
         accentColor: AppColors.primary,
         value: '$enrolledCount',
-        label: 'دورات مشترك بها',
+        label: safeTr('profile.enrolled_courses', 'دورات مشترك بها'),
       ),
       _StatTile(
         icon: PhosphorIconsRegular.checkCircle,
         accentColor: AppColors.success,
         value: '$completedLessonsCount',
-        label: 'محاضرة مكتملة',
+        label: safeTr('profile.completed_lessons', 'محاضرة مكتملة'),
       ),
       _StatTile(
         icon: PhosphorIconsRegular.clockCountdown,
         accentColor: const Color(0xFF1D4ED8),
         value: watchTimeFormatted,
-        label: 'وقت التعلم المسجل',
+        label: safeTr('profile.total_watch_time', 'وقت التعلم المسجل'),
       ),
     ];
 

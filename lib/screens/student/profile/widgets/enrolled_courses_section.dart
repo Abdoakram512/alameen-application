@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -36,7 +37,7 @@ class EnrolledCoursesSection extends StatelessWidget {
               size: 20,
             ),
             const SizedBox(width: 8),
-            Text('دوراتي المفعّلة', style: AppTextStyles.heading2),
+            Text('courses.my_courses'.tr(), style: AppTextStyles.heading2),
           ],
         ),
         const SizedBox(height: 12),

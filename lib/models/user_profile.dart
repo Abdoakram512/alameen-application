@@ -13,6 +13,9 @@ class UserModel extends Equatable {
   final int totalWatchSeconds;
   final DateTime createdAt;
   final DateTime? lastActiveAt;
+  final bool isSuspended;
+  final String? suspensionReason;
+  final Map<String, DateTime> courseExpiryDates; // تاريخ انتهاء الاشتراك لكل كورس
 
   const UserModel({
     required this.uid,
@@ -26,9 +29,23 @@ class UserModel extends Equatable {
     this.totalWatchSeconds = 0,
     required this.createdAt,
     this.lastActiveAt,
+    this.isSuspended = false,
+    this.suspensionReason,
+    this.courseExpiryDates = const {},
   });
 
-  bool isEnrolled(String courseId) => enrolledCourseIds.contains(courseId);
+  bool isCourseExpired(String courseId) {
+    if (!courseExpiryDates.containsKey(courseId)) return false;
+    final expiry = courseExpiryDates[courseId];
+    if (expiry == null) return false;
+    return DateTime.now().isAfter(expiry);
+  }
+
+  bool isEnrolled(String courseId) {
+    if (!enrolledCourseIds.contains(courseId)) return false;
+    return !isCourseExpired(courseId);
+  }
+
   bool isLessonCompleted(String lessonId) => completedLessonIds.contains(lessonId);
 
   double calculateCourseProgress(List<String> courseLessonIds) {
@@ -62,9 +79,26 @@ class UserModel extends Equatable {
         'totalWatchSeconds': totalWatchSeconds,
         'createdAt': createdAt.toIso8601String(),
         'lastActiveAt': lastActiveAt?.toIso8601String(),
+        'isSuspended': isSuspended,
+        'suspensionReason': suspensionReason,
+        'courseExpiryDates': courseExpiryDates.map((k, v) => MapEntry(k, v.toIso8601String())),
       };
 
   factory UserModel.fromMap(Map<String, dynamic> map, {String? uid}) {
+    DateTime? parseNullableDate(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
+
+    final rawExpiry = map['courseExpiryDates'] as Map<String, dynamic>? ?? {};
+    final expiryDates = <String, DateTime>{};
+    rawExpiry.forEach((k, v) {
+      final parsed = parseNullableDate(v);
+      if (parsed != null) expiryDates[k] = parsed;
+    });
+
     return UserModel(
       uid: uid ?? map['uid'] ?? '',
       displayName: map['displayName'] ?? map['name'] ?? 'طالب الأمين سنتر',
@@ -80,9 +114,10 @@ class UserModel extends Equatable {
       createdAt: map['createdAt'] != null
           ? (map['createdAt'] is Timestamp ? (map['createdAt'] as Timestamp).toDate() : DateTime.tryParse(map['createdAt'].toString())) ?? DateTime.now()
           : DateTime.now(),
-      lastActiveAt: map['lastActiveAt'] != null
-          ? (map['lastActiveAt'] is Timestamp ? (map['lastActiveAt'] as Timestamp).toDate() : DateTime.tryParse(map['lastActiveAt'].toString()))
-          : null,
+      lastActiveAt: parseNullableDate(map['lastActiveAt']),
+      isSuspended: map['isSuspended'] as bool? ?? false,
+      suspensionReason: map['suspensionReason'] as String?,
+      courseExpiryDates: expiryDates,
     );
   }
 
@@ -98,6 +133,9 @@ class UserModel extends Equatable {
     int? totalWatchSeconds,
     DateTime? createdAt,
     DateTime? lastActiveAt,
+    bool? isSuspended,
+    String? suspensionReason,
+    Map<String, DateTime>? courseExpiryDates,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -106,11 +144,14 @@ class UserModel extends Equatable {
       photoUrl: photoUrl ?? this.photoUrl,
       phone: phone ?? this.phone,
       role: role ?? this.role,
-      enrolledCourseIds: enrolledCourseIds ?? this.enrolledCourseIds,
-      completedLessonIds: completedLessonIds ?? this.completedLessonIds,
+      enrolledCourseIds: enrolledCourseIds ?? List.from(this.enrolledCourseIds),
+      completedLessonIds: completedLessonIds ?? List.from(this.completedLessonIds),
       totalWatchSeconds: totalWatchSeconds ?? this.totalWatchSeconds,
       createdAt: createdAt ?? this.createdAt,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
+      isSuspended: isSuspended ?? this.isSuspended,
+      suspensionReason: suspensionReason ?? this.suspensionReason,
+      courseExpiryDates: courseExpiryDates ?? Map.from(this.courseExpiryDates),
     );
   }
 
@@ -127,5 +168,8 @@ class UserModel extends Equatable {
         totalWatchSeconds,
         createdAt,
         lastActiveAt,
+        isSuspended,
+        suspensionReason,
+        courseExpiryDates,
       ];
 }

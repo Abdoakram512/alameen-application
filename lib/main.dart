@@ -1,8 +1,10 @@
 import 'dart:async';
-import 'package:easy_localization/easy_localization.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/onboarding/onboarding_screen.dart';
+import 'screens/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -20,25 +22,40 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // تهيئة الترجمة فورياً من الملفات المحلية قبل أول إطار
   await EasyLocalization.ensureInitialized();
 
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase init check: $e');
-  }
+  // 1. إظهار شاشة splash_screen.dart مع الترجمة المحلية فورياً في أول إطار
+  runApp(
+    EasyLocalization(
+      supportedLocales: AppConfig.supportedLocales,
+      path: AppConfig.translationsPath,
+      fallbackLocale: AppConfig.fallbackLocale,
+      saveLocale: true,
+      useOnlyLangCode: true,
+      child: const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: SplashScreen(),
+        ),
+      ),
+    ),
+  );
 
-  // تفعيل درع الحماية العتادي الشامل فور تشغيل التطبيق (يدعم أندرويد و iOS)
-  try {
-    await ScreenProtector.preventScreenshotOn();
-    await ScreenProtector.protectDataLeakageWithColor(AppConfig.securityShieldColor);
-  } catch (e) {
-    debugPrint('ScreenProtector init: $e');
-  }
+  // 2. تهيئة فيربيس وحقن التبعيات في الخلفية أثناء استمتاع المتدرب بشاشة السبلاش
+  await Future.wait<void>([
+    _initFirebase(),
+    initDependencies(),
+  ]);
 
-  await initDependencies();
-  await sl<NotificationService>().initialize();
+  // تشغيل الحماية الإضافية والإشعارات في الخلفية دون تعطيل أول إطار (First Frame)
+  // ملاحظة: حماية الشاشة الأصلية مفعلة بالفعل على مستوى Android OS في MainActivity.kt
+  unawaited(_enableScreenProtection());
+  unawaited(sl<NotificationService>().initialize());
 
+  // 3. تسليم التحكم الكامل لتطبيق SecureStudentApp
   runApp(
     EasyLocalization(
       supportedLocales: AppConfig.supportedLocales,
@@ -49,6 +66,27 @@ void main() async {
       child: const SecureStudentApp(),
     ),
   );
+}
+
+Future<void> _initFirebase() async {
+  try {
+    await Firebase.initializeApp();
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (e) {
+    debugPrint('Firebase init check: $e');
+  }
+}
+
+Future<void> _enableScreenProtection() async {
+  try {
+    await ScreenProtector.preventScreenshotOn();
+    await ScreenProtector.protectDataLeakageWithColor(AppConfig.securityShieldColor);
+  } catch (e) {
+    debugPrint('ScreenProtector init: $e');
+  }
 }
 
 class SecureStudentApp extends StatefulWidget {
@@ -102,6 +140,7 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
         BlocProvider<AccessCubit>.value(value: _accessCubit),
       ],
       child: MaterialApp.router(
+        key: ValueKey(context.locale.languageCode),
         title: 'app_name'.tr(),
         debugShowCheckedModeBanner: false,
         routerConfig: _router,

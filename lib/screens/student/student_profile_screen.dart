@@ -1,11 +1,15 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/app_directional_icons.dart';
+import '../../logic/access/access_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -16,16 +20,97 @@ import '../../widgets/language_switch_button.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'profile/widgets/edit_student_profile_sheet.dart';
 import 'profile/widgets/enrolled_courses_section.dart';
-import 'profile/widgets/student_analytics_overview_card.dart';
 import 'profile/widgets/student_profile_header_card.dart';
 import 'profile/widgets/student_requests_status_section.dart';
-import 'profile/widgets/student_stats_grid.dart';
-import 'profile/widgets/student_submissions_section.dart';
 
 class StudentProfileScreen extends StatelessWidget {
   final VoidCallback? onBrowseCourses;
 
   const StudentProfileScreen({super.key, this.onBrowseCourses});
+
+  Future<void> _handleSignOut(BuildContext context) async {
+    final confirm = await AppDialogs.showConfirm(
+      context,
+      title: 'تسجيل الخروج',
+      message: 'هل أنت متأكد من تسجيل الخروج من حسابك في مركز الأمين للتخاطب؟',
+      confirmText: 'تسجيل الخروج',
+      cancelText: 'إلغاء',
+      isDestructive: true,
+    );
+    if (confirm && context.mounted) {
+      context.read<AccessCubit>().clear();
+      await context.read<AuthCubit>().signOut();
+    }
+  }
+
+  Future<void> _handleDeleteAccount(BuildContext context) async {
+    final passwordController = TextEditingController();
+    bool obscurePassword = true;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(PhosphorIconsRegular.warningOctagon, color: AppColors.error),
+              SizedBox(width: 8),
+              Text('حذف الحساب نهائياً', style: TextStyle(color: AppColors.error)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'تحذير شديد: حذف الحساب سيؤدي إلى مسح جميع بياناتك وسجلات تقدمك وتسليماتك نهائياً من سنتر الأمين ولا يمكن التراجع عن ذلك.\n\nلتأكيد الحذف الأمني، يرجى كتابة كلمة المرور الحالية:',
+                style: TextStyle(height: 1.5, fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: passwordController,
+                obscureText: obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'كلمة المرور الحالية',
+                  prefixIcon: const Icon(PhosphorIconsRegular.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscurePassword
+                          ? PhosphorIconsRegular.eyeSlash
+                          : PhosphorIconsRegular.eye,
+                    ),
+                    onPressed: () => setDialogState(
+                      () => obscurePassword = !obscurePassword,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد الحذف النهائي'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final enteredPassword = passwordController.text.trim();
+    passwordController.dispose();
+
+    if (confirm == true && context.mounted) {
+      context.read<AccessCubit>().clear();
+      await context.read<AuthCubit>().deleteAccount(password: enteredPassword);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,40 +161,13 @@ class StudentProfileScreen extends StatelessWidget {
                       },
                     ),
                   IconButton(
-                    tooltip: 'جولة تعريفية بالمنصة',
-                    icon: const Icon(PhosphorIconsRegular.question, size: 21),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (pageContext) => OnboardingScreen(
-                            onComplete: () async {
-                              Navigator.of(pageContext).pop();
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  IconButton(
                     tooltip: 'auth.sign_out'.tr(),
                     icon: const Icon(
                       PhosphorIconsRegular.signOut,
                       color: AppColors.error,
                       size: 21,
                     ),
-                    onPressed: () async {
-                      final confirm = await AppDialogs.showConfirm(
-                        context,
-                        title: 'auth.sign_out'.tr(),
-                        message: 'auth.sign_out_confirm'.tr(),
-                        confirmText: 'auth.sign_out'.tr(),
-                        cancelText: 'dialogs.cancel'.tr(),
-                        isDestructive: true,
-                      );
-                      if (confirm && context.mounted) {
-                        await context.read<AuthCubit>().signOut();
-                      }
-                    },
+                    onPressed: () => _handleSignOut(context),
                   ),
                 ],
               ),
@@ -136,34 +194,333 @@ class StudentProfileScreen extends StatelessWidget {
                                   );
                                 },
                         ),
-                        const SizedBox(height: 16),
-                        StudentStatsGrid(
-                          enrolledCount: enrolledCourses.length,
-                          completedLessonsCount:
-                              currentUser?.completedLessonIds.length ?? 0,
-                          watchTimeFormatted:
-                              currentUser?.watchTimeFormatted ?? '0 دقيقة',
-                        ),
-                        const SizedBox(height: 24),
-                        StudentAnalyticsOverviewCard(
-                          currentUser: currentUser,
-                          enrolledCourses: enrolledCourses,
-                        ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         EnrolledCoursesSection(
                           enrolledCourses: enrolledCourses,
                           currentUser: currentUser,
                           onBrowseCourses: onBrowseCourses,
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         const StudentRequestsStatusSection(),
-                        StudentSubmissionsSection(studentId: currentUser?.uid),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 20),
+
+                        // ══════════════════════════════════════════════════════
+                        // خدمة الدعم الفني الرسمية
+                        // ══════════════════════════════════════════════════════
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: AppColors.borderHairline),
+                            boxShadow: AppColors.cardShadow,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFDCFCE7),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      PhosphorIconsRegular.headset,
+                                      size: 20,
+                                      color: Color(0xFF16A34A),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'خدمة الدعم الفني المباشر',
+                                          style: AppTextStyles.bodyMedium.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        Text(
+                                          'فريق مركز الأمين متاح للرد على استفساراتك',
+                                          style: AppTextStyles.caption,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 46,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF25D366),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    alignment: Alignment.center,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    PhosphorIconsRegular.whatsappLogo,
+                                    size: 20,
+                                  ),
+                                  label: Text(
+                                    'تواصل مع الدعم الفني (${AppConstants.supportPhone})',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13.5,
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    AppConstants.launchWhatsApp(
+                                      customMessage:
+                                          'السلام عليكم، أود التواصل مع دعم مركز الأمين للتخاطب بخصوص حسابي.\nالاسم: $displayName',
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+
+                        // ══════════════════════════════════════════════════════
+                        // روابط المعلومات والسياسات
+                        // ══════════════════════════════════════════════════════
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: AppColors.borderHairline),
+                            boxShadow: AppColors.cardShadow,
+                          ),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    PhosphorIconsRegular.buildings,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'من نحن - مركز الأمين للتخاطب',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  AppDirectionalIcons.chevronDetail(context),
+                                  size: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onTap: () => context.push('/about'),
+                              ),
+                              const Divider(
+                                height: 1,
+                                color: AppColors.divider,
+                                indent: 56,
+                              ),
+                              ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    PhosphorIconsRegular.shieldCheck,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'سياسة الخصوصية والاستخدام',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  AppDirectionalIcons.chevronDetail(context),
+                                  size: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onTap: () => context.push('/privacy-policy'),
+                              ),
+                              const Divider(
+                                height: 1,
+                                color: AppColors.divider,
+                                indent: 56,
+                              ),
+                              ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    PhosphorIconsRegular.question,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'الأسئلة الشائعة والإرشادات',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  AppDirectionalIcons.chevronDetail(context),
+                                  size: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onTap: () => context.push('/faqs'),
+                              ),
+                              const Divider(
+                                height: 1,
+                                color: AppColors.divider,
+                                indent: 56,
+                              ),
+                              ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    PhosphorIconsRegular.compass,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'جولة تعريفية بالمنصة',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  AppDirectionalIcons.chevronDetail(context),
+                                  size: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (pageContext) =>
+                                          OnboardingScreen(
+                                        onComplete: () async {
+                                          Navigator.of(pageContext).pop();
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ══════════════════════════════════════════════════════
+                        // إجراءات الحساب (تسجيل خروج بارز وحذف حساب نهائي)
+                        // ══════════════════════════════════════════════════════
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: AppColors.borderHairline),
+                            boxShadow: AppColors.cardShadow,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Prominent Sign Out Button
+                              SizedBox(
+                                height: 46,
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    side: const BorderSide(
+                                      color: AppColors.errorBorder,
+                                    ),
+                                    alignment: Alignment.center,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    PhosphorIconsRegular.signOut,
+                                    size: 19,
+                                  ),
+                                  label: const Text(
+                                    'تسجيل الخروج من الحساب',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  onPressed: () => _handleSignOut(context),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Account Deletion
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.textSecondary,
+                                  alignment: Alignment.center,
+                                ),
+                                icon: const Icon(
+                                  PhosphorIconsRegular.trash,
+                                  size: 16,
+                                  color: AppColors.error,
+                                ),
+                                label: const Text(
+                                  'حذف الحساب نهائياً من المنصة',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                                onPressed: () => _handleDeleteAccount(context),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
                         Center(
                           child: Text(
-                            'مركز الأمين للتخاطب وتنمية المهارات',
-                            style: AppTextStyles.caption,
+                            'مركز الأمين للتخاطب والتأهيل',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
                           ),
+                        ),
+                        const SizedBox(
+                          height: kBottomNavigationBarHeight + 24,
                         ),
                       ],
                     ),

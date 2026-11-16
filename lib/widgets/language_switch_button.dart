@@ -20,7 +20,8 @@ class LanguageSwitchButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () async {
-          final nextLocale = isArabic ? AppConfig.englishLocale : AppConfig.arabicLocale;
+          final nextLocale =
+              isArabic ? AppConfig.englishLocale : AppConfig.arabicLocale;
           await context.setLocale(nextLocale);
         },
         borderRadius: BorderRadius.circular(20),

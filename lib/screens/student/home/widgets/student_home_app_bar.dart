@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,18 +9,20 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/student_avatar.dart';
 import '../../../../logic/access/access_cubit.dart';
 import '../../../../logic/access/access_state.dart';
+import '../../../../logic/auth/auth_cubit.dart';
+import '../../../../logic/auth/auth_state.dart';
 import '../../../../models/access_request.dart';
 import '../../../../widgets/language_switch_button.dart';
 
 /// الشريط العلوي لبوابة المتدرب مع عداد فعلي لحالة طلبات الالتحاق (بدلاً من الأرقام الوهمية).
 class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
-  final String displayName;
-  final String photoUrl;
+  final String? displayName;
+  final String? photoUrl;
 
   const StudentHomeAppBar({
     super.key,
-    required this.displayName,
-    required this.photoUrl,
+    this.displayName,
+    this.photoUrl,
   });
 
   @override
@@ -27,6 +30,22 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveName = displayName ??
+        context.select<AuthCubit, String>((c) {
+          final s = c.state;
+          if (s is Authenticated) {
+            return s.user.displayName.trim().isNotEmpty
+                ? s.user.displayName
+                : 'home.student_fallback'.tr();
+          }
+          return 'home.student_fallback'.tr();
+        });
+    final effectivePhoto = photoUrl ??
+        context.select<AuthCubit, String>((c) {
+          final s = c.state;
+          return s is Authenticated ? s.user.photoUrl : '';
+        });
+
     return AppBar(
       elevation: 0,
       backgroundColor: Colors.white,
@@ -34,8 +53,8 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Row(
         children: [
           StudentAvatar(
-            name: displayName,
-            photoUrl: photoUrl,
+            name: effectiveName,
+            photoUrl: effectivePhoto,
             radius: 19,
           ),
           const SizedBox(width: 10),
@@ -44,9 +63,9 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('مرحباً بعودتك', style: AppTextStyles.caption),
+                Text('home.welcome_back'.tr(), style: AppTextStyles.caption),
                 Text(
-                  displayName,
+                  effectiveName,
                   style: AppTextStyles.heading3.copyWith(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,

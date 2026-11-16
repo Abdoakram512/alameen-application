@@ -4,10 +4,11 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../core/utils/app_media_compressor.dart';
 
 class StorageService {
   static const String mediaScheme = 'firestore-media://';
-  static const int _maxVaultBytes = 4 * 1024 * 1024; // 4 MB
+  static const int _maxVaultBytes = 12 * 1024 * 1024; // 12 MB
   static const int _inlineBase64Limit = 680000;
   static const int _chunkBase64Size = 650000;
   static const int _maxMemoryCacheEntries = 40;
@@ -157,7 +158,7 @@ class StorageService {
     required String contentType,
     required File file,
   }) async {
-    if (!_firebaseStorageUnavailable) {
+    if (!Platform.isWindows && !_firebaseStorageUnavailable) {
       try {
         _storage.setMaxUploadRetryTime(const Duration(seconds: 3));
         _storage.setMaxOperationRetryTime(const Duration(seconds: 3));
@@ -180,13 +181,15 @@ class StorageService {
       }
     }
 
-    final bytes = await file.readAsBytes();
+    final isImage = contentType.startsWith('image/');
+    final uploadFile = isImage ? await AppMediaCompressor.compressImage(file) : file;
+    final bytes = await uploadFile.readAsBytes();
     if (bytes.isEmpty) {
       throw StateError('الملف المختار فارغ.');
     }
     if (bytes.length > _maxVaultBytes) {
       throw StateError(
-        'حجم الملف يتجاوز الحد المسموح (4 ميجابايت)، يرجى اختيار صورة أو ملف أصغر.',
+        'حجم الملف يتجاوز الحد المسموح (12 ميجابايت)، يرجى اختيار صورة أو ملف أصغر.',
       );
     }
 
@@ -202,7 +205,7 @@ class StorageService {
         'chunkCount': 0,
         'inlineData': encoded,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      }).timeout(const Duration(seconds: 15));
     } else {
       final parts = <String>[];
       for (var i = 0; i < encoded.length; i += _chunkBase64Size) {
@@ -220,7 +223,7 @@ class StorageService {
         'chunkCount': parts.length,
         'inlineData': '',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      }).timeout(const Duration(seconds: 15));
 
       final batch = _db.batch();
       for (var i = 0; i < parts.length; i++) {
@@ -234,7 +237,7 @@ class StorageService {
           'data': parts[i],
         });
       }
-      await batch.commit();
+      await batch.commit().timeout(const Duration(seconds: 20));
     }
 
     final uri = '$mediaScheme$mediaId';

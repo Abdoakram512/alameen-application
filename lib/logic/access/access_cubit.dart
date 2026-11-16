@@ -18,6 +18,9 @@ class AccessCubit extends Cubit<AccessState> {
   final Map<String, CourseAccessRequest> _requestsByCourse = {};
   bool _initialSnapshotHandled = false;
 
+  /// كاش فوري في الذاكرة لعرض طلبات المتدرب بـ 0ms تأخير
+  static final Map<String, List<CourseAccessRequest>> _cachedRequests = {};
+
   AccessCubit({
     FirestoreService? firestoreService,
     StorageService? storageService,
@@ -25,12 +28,40 @@ class AccessCubit extends Cubit<AccessState> {
         _storageService = storageService ?? StorageService(),
         super(AccessInitial());
 
+  void clear() {
+    _requestsSubscription?.cancel();
+    _requestsSubscription = null;
+    _statuses.clear();
+    _requestsByCourse.clear();
+    _initialSnapshotHandled = false;
+    emit(AccessInitial());
+  }
+
   void listenToStudentRequests(String studentId) {
     _requestsSubscription?.cancel();
     _initialSnapshotHandled = false;
+
+    // بث فوري فوري للبيانات المحفوظة مسبقاً دون انتظار الشبكة
+    if (_cachedRequests.containsKey(studentId) &&
+        _cachedRequests[studentId]!.isNotEmpty) {
+      _statuses.clear();
+      _requestsByCourse.clear();
+      for (final req in _cachedRequests[studentId]!) {
+        _statuses[req.courseId] = req.status;
+        _requestsByCourse[req.courseId] = req;
+      }
+      emit(
+        AccessLoaded(
+          Map.unmodifiable(_statuses),
+          requestsByCourse: Map.unmodifiable(_requestsByCourse),
+        ),
+      );
+    }
+
     _requestsSubscription =
         _firestoreService.streamStudentRequests(studentId).listen(
       (requests) {
+        _cachedRequests[studentId] = requests;
         final previousStatuses = Map<String, AccessStatus>.from(_statuses);
         _statuses.clear();
         _requestsByCourse.clear();
@@ -73,6 +104,12 @@ class AccessCubit extends Cubit<AccessState> {
         );
       },
       onError: (e) {
+        if (_requestsSubscription == null) return;
+        final msg = e.toString();
+        if (msg.contains('permission-denied') ||
+            msg.contains('PERMISSION_DENIED')) {
+          return;
+        }
         emit(
           AccessError(
             'تعذر تحديث حالة طلبات الانضمام حالياً.',
@@ -140,6 +177,41 @@ class AccessCubit extends Cubit<AccessState> {
       final arabicError = NetworkErrorMapper.toArabicMessage(
         e,
         defaultMessage: 'تعذر إرسال طلب الانضمام، يرجى التحقق من الاتصال والمحاولة مرة أخرى.',
+      );
+      emit(
+        AccessError(
+          arabicError,
+          courseStatuses: Map.unmodifiable(_statuses),
+          requestsByCourse: Map.unmodifiable(_requestsByCourse),
+        ),
+      );
+    }
+  }
+
+  Future<void> enrollInOpenCourse({
+    required String uid,
+    required Course course,
+  }) async {
+    try {
+      emit(
+        AccessLoading(
+          courseStatuses: Map.unmodifiable(_statuses),
+          requestsByCourse: Map.unmodifiable(_requestsByCourse),
+        ),
+      );
+      await _firestoreService.enrollInOpenCourse(uid, course.id);
+      emit(
+        AccessActionSuccess(
+          'تم تسجيلك في دورة "${course.title}" بنجاح! يمكنك البدء الآن.',
+          courseStatuses: Map.unmodifiable(_statuses),
+          requestsByCourse: Map.unmodifiable(_requestsByCourse),
+        ),
+      );
+    } catch (e) {
+      final arabicError = NetworkErrorMapper.toArabicMessage(
+        e,
+        defaultMessage:
+            'تعذر التسجيل في الدورة، يرجى المحاولة مرة أخرى.',
       );
       emit(
         AccessError(

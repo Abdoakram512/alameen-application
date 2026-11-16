@@ -1,0 +1,259 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Dynamic Admin check querying /admins/{uid} in Firestore (No hardcoded emails or UIDs)
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('isActive', false) == true
+        )
+      );
+    }
+
+    function getAdminData() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAdmin() && (
+        request.auth.token.admin == true ||
+        getAdminData().get('role', '') == 'super_admin'
+      );
+    }
+
+    function hasAdminPerm(permission) {
+      return isAdmin() && (
+        isSuperAdmin() ||
+        permission in getAdminData().get('permissions', [])
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isOpenCourse(courseId) {
+      return exists(/databases/$(database)/documents/courses/$(courseId)) &&
+        get(/databases/$(database)/documents/courses/$(courseId)).data.get('accessMode', 'closed') == 'open';
+    }
+
+    function isEnrolledInCourse(courseId) {
+      return isAuthenticated() && (
+        isOpenCourse(courseId) ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          courseId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('enrolledCourseIds', [])
+        )
+      );
+    }
+
+    // Courses catalog — public metadata readable for guest catalog browsing;
+    // paid lesson playback IDs are isolated in /protected_lessons below.
+    match /courses/{courseId} {
+      allow read: if true;
+      allow create, delete: if hasAdminPerm('manage_courses');
+      // Admin can update all fields, and authenticated users can increment enrolledCount for open courses
+      allow update: if hasAdminPerm('manage_courses') || (
+        isAuthenticated() &&
+        resource.data.get('accessMode', 'closed') == 'open' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['enrolledCount'])
+      );
+
+      // Protected lesson playback identifiers — strictly accessible to Admin or Enrolled Students (and open courses)
+      match /protected_lessons/{lessonId} {
+        allow read: if isAdmin() || isEnrolledInCourse(courseId);
+        allow create, update, delete: if hasAdminPerm('manage_courses');
+      }
+    }
+
+    // Users collection — strict owner/admin read & privilege-escalation prevention
+    match /users/{userId} {
+      allow read: if isOwner(userId) || hasAdminPerm('manage_students');
+
+      // Students can only create their own profile with role == 'student' and zero enrolledCourseIds
+      allow create: if hasAdminPerm('manage_students') || (
+        isOwner(userId) &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'student') &&
+        (!('enrolledCourseIds' in request.resource.data) || request.resource.data.enrolledCourseIds.size() == 0)
+      );
+
+      // Students cannot modify role or escalate privileges. They can add open courses or update personal info
+      allow update: if hasAdminPerm('manage_students') || (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isBlocked', 'isAdmin']) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['enrolledCourseIds']) ||
+          request.resource.data.enrolledCourseIds.hasAll(resource.data.get('enrolledCourseIds', []))
+        )
+      );
+
+      allow delete: if isOwner(userId) || hasAdminPerm('manage_students');
+    }
+
+    // Admin team & RBAC permissions management
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      // Admin can update their own device token / profile, or admins with manage_admins can update other admins
+      allow update: if (isOwner(adminId) && isAdmin()) || hasAdminPerm('manage_admins');
+      // Adding or deleting an admin requires manage_admins permission
+      allow create, delete: if hasAdminPerm('manage_admins');
+    }
+
+    // Course Access Requests — supports initial pending create + resubmission after rejection
+    match /access_requests/{requestId} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        resource.data.studentId == request.auth.uid ||
+        hasAdminPerm('manage_requests')
+      );
+      allow list: if hasAdminPerm('manage_requests') || (
+        isAuthenticated() && resource.data.studentId == request.auth.uid
+      );
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+
+      allow update: if hasAdminPerm('manage_requests') || (
+        isAuthenticated() &&
+        resource.data.studentId == request.auth.uid &&
+        request.resource.data.studentId == request.auth.uid &&
+        resource.data.courseId == request.resource.data.courseId &&
+        resource.data.status == 'rejected' &&
+        request.resource.data.status == 'pending'
+      );
+
+      allow delete: if hasAdminPerm('manage_requests');
+    }
+
+    // Assignments
+    match /assignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminPerm('manage_assignments') || hasAdminPerm('manage_courses');
+    }
+
+    // Assignment Submissions
+    match /submissions/{submissionId} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        resource.data.studentId == request.auth.uid ||
+        hasAdminPerm('manage_assignments')
+      );
+      allow list: if hasAdminPerm('manage_assignments') || (
+        isAuthenticated() && resource.data.studentId == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.studentId == request.auth.uid &&
+        (!('status' in request.resource.data) || request.resource.data.status == 'pending') &&
+        (!('score' in request.resource.data) || request.resource.data.score == null) &&
+        (!('grade' in request.resource.data) || request.resource.data.grade == null);
+      allow update: if hasAdminPerm('manage_assignments') || (
+        isAuthenticated() &&
+        resource.data.studentId == request.auth.uid &&
+        request.resource.data.studentId == request.auth.uid &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'pending' &&
+        (!('score' in request.resource.data) || request.resource.data.score == null)
+      );
+      allow delete: if hasAdminPerm('manage_assignments');
+    }
+
+    // Watch logs
+    match /watch_logs/{logId} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        resource.data.studentId == request.auth.uid ||
+        hasAdminPerm('view_analytics')
+      );
+      allow list: if hasAdminPerm('view_analytics') || (
+        isAuthenticated() && resource.data.studentId == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.studentId == request.auth.uid &&
+        (
+          (request.resource.data.durationSeconds is int &&
+           request.resource.data.durationSeconds > 0 &&
+           request.resource.data.durationSeconds <= 14400) ||
+          (request.resource.data.secondsWatched is int &&
+           request.resource.data.secondsWatched > 0 &&
+           request.resource.data.secondsWatched <= 14400)
+        );
+      allow update, delete: if hasAdminPerm('view_analytics');
+    }
+
+    // Live active watch sessions / presence radar
+    match /active_watch_sessions/{sessionId} {
+      allow get: if isAdmin() || (isAuthenticated() && resource.data.get('studentId', '') == request.auth.uid);
+      allow list: if isAdmin() || isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        (request.resource.data.get('studentUid', '') == request.auth.uid ||
+         request.resource.data.get('studentId', '') == request.auth.uid);
+      allow delete: if (isAuthenticated() &&
+        (resource.data.get('studentUid', '') == request.auth.uid ||
+         resource.data.get('studentId', '') == request.auth.uid)) ||
+        isAdmin();
+    }
+
+    // Screen capture / security audit alerts
+    match /security_alerts/{alertId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    // Protected Media Vault (Spark-compatible storage for receipts, submissions, covers, thumbnails & attachments)
+    match /media_vault/{mediaId} {
+      allow get, list: if
+        (resource != null && resource.data.scope in ['public_course', 'public_lesson_thumb', 'assignment_attachment']) ||
+        (isAuthenticated() && (
+          resource == null ||
+          isAdmin() ||
+          resource.data.ownerId == request.auth.uid
+        ));
+
+      allow create, update: if isAuthenticated() && (
+        isAdmin() ||
+        (
+          request.resource.data.ownerId == request.auth.uid &&
+          request.resource.data.scope in ['receipt', 'submission', 'public_course', 'public_lesson_thumb', 'assignment_attachment'] &&
+          request.resource.data.byteLength is int &&
+          request.resource.data.byteLength > 0 &&
+          request.resource.data.byteLength <= 12582912
+        )
+      );
+
+      allow delete: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow get, list: if
+          (resource != null && resource.data.scope in ['public_course', 'public_lesson_thumb', 'assignment_attachment']) ||
+          (isAuthenticated() && (
+            resource == null ||
+            isAdmin() ||
+            resource.data.ownerId == request.auth.uid
+          ));
+
+        allow create, update: if isAuthenticated() && (
+          isAdmin() ||
+          (
+            request.resource.data.ownerId == request.auth.uid &&
+            request.resource.data.scope in ['receipt', 'submission', 'public_course', 'public_lesson_thumb', 'assignment_attachment'] &&
+            request.resource.data.data is string &&
+            request.resource.data.data.size() <= 850000
+          )
+        );
+
+        allow delete: if isAdmin();
+      }
+    }
+  }
+}

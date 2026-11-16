@@ -171,16 +171,21 @@ class NotificationService {
   Future<void> clearFCMToken(String? uid) async {
     try {
       if (uid != null && uid.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).set(
-          {
-            'fcmToken': FieldValue.delete(),
-            'lastTokenUpdate': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set(
+              {
+                'fcmToken': FieldValue.delete(),
+                'lastTokenUpdate': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            )
+            .timeout(const Duration(seconds: 4))
+            .catchError((_) => null);
       }
       // ignore: deprecated_member_use
-      await _fcm.deleteToken();
+      await _fcm.deleteToken().timeout(const Duration(seconds: 4)).catchError((_) => null);
     } catch (e) {
       debugPrint('clearFCMToken error: $e');
     }

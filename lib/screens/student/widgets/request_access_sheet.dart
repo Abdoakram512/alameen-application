@@ -39,6 +39,7 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
   bool _isSubmitting = false;
 
   static const _paymentMethods = [
+    'طلب انضمام مباشر (بدون إيصال / موافقة الإدارة)',
     'فودافون كاش (Vodafone Cash)',
     'أورنج كاش (Orange Cash)',
     'اتصالات كاش (Etisalat Cash)',
@@ -48,7 +49,14 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
     'سداد نقدي بمقر المركز',
   ];
 
+  bool get _isDirectRequest => _selectedMethod.startsWith('طلب انضمام مباشر');
   bool get _isCashAtCenter => _selectedMethod == 'سداد نقدي بمقر المركز';
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMethod = _paymentMethods.first;
+  }
 
   @override
   void dispose() {
@@ -70,7 +78,32 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
     }
   }
 
+  void _submitDirectRequest() {
+    HapticFeedback.mediumImpact();
+    if (_isSubmitting) return;
+
+    final rawRef = _refController.text.trim();
+    setState(() => _isSubmitting = true);
+
+    context.read<AccessCubit>().sendRequest(
+          course: widget.course,
+          user: widget.user,
+          paymentMethod: 'طلب انضمام مباشر (موافقة الإدارة)',
+          senderNumberOrRef: rawRef.isNotEmpty
+              ? rawRef
+              : (widget.user.phone.isNotEmpty
+                  ? widget.user.phone
+                  : 'طلب مباشر عبر التطبيق'),
+          receiptFile: null,
+        );
+  }
+
   void _submit() {
+    if (_isDirectRequest) {
+      _submitDirectRequest();
+      return;
+    }
+
     HapticFeedback.mediumImpact();
     if (_isSubmitting) return;
 
@@ -90,7 +123,7 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
           paymentMethod: _selectedMethod,
           senderNumberOrRef: normalizedRef.isNotEmpty
               ? normalizedRef
-              : (_isCashAtCenter ? 'مراجعة خزينة المركز' : 'مرفق إيصال'),
+              : (_isCashAtCenter ? 'مراجعة خزينة المركز' : 'طلب بدون إيصال'),
           receiptFile: _pickedReceiptFile,
         );
   }
@@ -262,11 +295,45 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                 }
                               },
                       ),
-                      const SizedBox(height: 16),
+                      if (_isDirectRequest) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.successLight.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.successBorder),
+                          ),
+                          child: Row(
+                            children: const [
+                              Icon(
+                                PhosphorIconsRegular.checkCircle,
+                                color: AppColors.success,
+                                size: 22,
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'طلب مباشر بدون إيصال: سيصل طلبك فورياً لإدارة سنتر الأمين لتفعيله لك مباشرة دون الحاجة لرفع أي إيصالات.',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 12.5,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       Text(
-                        _isCashAtCenter
-                            ? 'اسم السداد أو ملاحظة المقر (اختياري)'
-                            : 'رقم المحفظة المحوّل منها أو الرقم المرجعي',
+                        _isDirectRequest
+                            ? 'رقم الهاتف للتواصل أو ملاحظة للمركز (اختياري)'
+                            : (_isCashAtCenter
+                                ? 'اسم السداد أو ملاحظة المقر (اختياري)'
+                                : 'رقم المحفظة المحوّل منها أو الرقم المرجعي'),
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w700,
@@ -276,9 +343,9 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                       TextFormField(
                         controller: _refController,
                         enabled: !_isSubmitting,
-                        keyboardType: _isCashAtCenter ? TextInputType.text : TextInputType.phone,
+                        keyboardType: _isCashAtCenter || _isDirectRequest ? TextInputType.text : TextInputType.phone,
                         validator: (value) {
-                          if (_isCashAtCenter) return null;
+                          if (_isDirectRequest || _isCashAtCenter) return null;
                           if (_pickedReceiptFile != null && (value == null || value.trim().isEmpty)) {
                             // If receipt is attached, ref is optional
                             return null;
@@ -286,141 +353,145 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                           return AppValidators.validatePaymentIdentifier(value, _selectedMethod);
                         },
                         decoration: InputDecoration(
-                          hintText: _isCashAtCenter
-                              ? 'مثال: تم السداد بفرع المركز أو رقم الإيصال الورقي'
-                              : 'مثال: 010XXXXXXXX أو اسم المستخدم بإنستاباي',
+                          hintText: _isDirectRequest
+                              ? (widget.user.phone.isNotEmpty ? widget.user.phone : 'مثال: 010XXXXXXXX أو اكتب ملاحظة للإدارة')
+                              : (_isCashAtCenter
+                                  ? 'مثال: تم السداد بفرع المركز أو رقم الإيصال الورقي'
+                                  : 'مثال: 010XXXXXXXX أو اسم المستخدم بإنستاباي'),
                           prefixIcon: const Icon(
                             PhosphorIconsRegular.hash,
                             size: 19,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          Text(
-                            'صورة إيصال السداد',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.scaffoldBackground,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: AppColors.borderHairline),
-                            ),
-                            child: Text(
-                              'اختياري مع الرقم',
-                              style: AppTextStyles.caption.copyWith(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      if (_pickedReceiptFile != null) ...[
-                        Stack(
+                      if (!_isDirectRequest) ...[
+                        const SizedBox(height: 18),
+                        Row(
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Image.file(
-                                _pickedReceiptFile!,
-                                height: 148,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
+                            Text(
+                              'صورة إيصال السداد',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: Material(
-                                color: Colors.black54,
-                                shape: const CircleBorder(),
-                                child: IconButton(
-                                  tooltip: 'حذف الصورة',
-                                  icon: const Icon(
-                                    PhosphorIconsRegular.trash,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                  onPressed: _isSubmitting
-                                      ? null
-                                      : () => setState(() => _pickedReceiptFile = null),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.scaffoldBackground,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: AppColors.borderHairline),
+                              ),
+                              child: Text(
+                                'اختياري مع الرقم',
+                                style: AppTextStyles.caption.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                      ] else
-                        CustomPaint(
-                          painter: DashedBorderPainter(
-                            color: AppColors.borderHairline,
-                            strokeWidth: 1.4,
-                            dashLength: 7,
-                            dashGap: 5,
-                            radius: 14,
-                          ),
-                          child: InkWell(
-                            onTap: _isSubmitting ? null : _pickImage,
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 18,
-                                horizontal: 16,
+                        const SizedBox(height: 8),
+                        if (_pickedReceiptFile != null) ...[
+                          Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.file(
+                                  _pickedReceiptFile!,
+                                  height: 148,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 42,
-                                    height: 42,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryLight,
-                                      borderRadius: BorderRadius.circular(12),
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                child: Material(
+                                  color: Colors.black54,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    tooltip: 'حذف الصورة',
+                                    icon: const Icon(
+                                      PhosphorIconsRegular.trash,
+                                      color: Colors.white,
+                                      size: 18,
                                     ),
-                                    child: const Icon(
-                                      PhosphorIconsRegular.cloudArrowUp,
-                                      size: 22,
-                                      color: AppColors.primary,
-                                    ),
+                                    onPressed: _isSubmitting
+                                        ? null
+                                        : () => setState(() => _pickedReceiptFile = null),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'إرفاق صورة الإيصال (اختياري)',
-                                          style: AppTextStyles.bodyMedium.copyWith(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'يمكنك إرفاق لقطة شاشة للتحويل البنكي أو رسالة المحفظة لتسريع اعتماد الطلب',
-                                          style: AppTextStyles.caption.copyWith(
-                                            fontSize: 11.5,
-                                          ),
-                                        ),
-                                      ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else
+                          CustomPaint(
+                            painter: DashedBorderPainter(
+                              color: AppColors.borderHairline,
+                              strokeWidth: 1.4,
+                              dashLength: 7,
+                              dashGap: 5,
+                              radius: 14,
+                            ),
+                            child: InkWell(
+                              onTap: _isSubmitting ? null : _pickImage,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 18,
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryLight,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        PhosphorIconsRegular.cloudArrowUp,
+                                        size: 22,
+                                        color: AppColors.primary,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'إرفاق صورة الإيصال (اختياري)',
+                                            style: AppTextStyles.bodyMedium.copyWith(
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'يمكنك إرفاق لقطة شاشة للتحويل البنكي أو رسالة المحفظة لتسريع اعتماد الطلب',
+                                            style: AppTextStyles.caption.copyWith(
+                                              fontSize: 11.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                      ],
                       const SizedBox(height: 22),
                       SizedBox(
                         width: double.infinity,
@@ -449,7 +520,9 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                           ? (context.locale.languageCode == 'ar'
                                               ? 'إعادة إرسال الطلب للمراجعة'
                                               : 'Resubmit for Review')
-                                          : 'requests.submit_btn'.tr(),
+                                          : (_isDirectRequest
+                                              ? 'إرسال طلب الانضمام المباشر للأدمن'
+                                              : 'requests.submit_btn'.tr()),
                                     ),
                                   ],
                                 ),

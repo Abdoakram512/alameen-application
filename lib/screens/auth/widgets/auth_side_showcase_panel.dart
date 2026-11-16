@@ -28,13 +28,13 @@ class AuthSideShowcasePanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
             ),
             child: Image.asset(
-              'assets/images/website-logo.png',
+              'assets/images/logo.png',
               fit: BoxFit.contain,
             ),
           ),
           const SizedBox(height: 28),
           Text(
-            'منصة مركز الأمين\nللتخاطب وتنمية المهارات',
+            'منصة مركز الأمين\nللتخاطب',
             style: AppTextStyles.displayLarge.copyWith(
               color: Colors.white,
               fontSize: 26,

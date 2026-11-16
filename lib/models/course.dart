@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'course_access_mode.dart';
 import 'course_level.dart';
 
 class Course extends Equatable {
@@ -11,6 +12,11 @@ class Course extends Equatable {
   final List<CourseLevel> levels;
   final int enrolledCount;
   final double price;
+  final CourseAccessMode accessMode;
+  final List<String> allowedStudentIds;
+  final int validityDays; // مدة الصلاحية بالأيام (0 = دائم / غير محدود)
+  final bool isEnrollmentClosed; // إغلاق الدورة بالكامل وإلغاء اشتراك الجميع
+  final DateTime? fixedExpiryDate; // تاريخ إغلاق موحد محدد
 
   const Course({
     required this.id,
@@ -22,6 +28,11 @@ class Course extends Equatable {
     required this.levels,
     this.enrolledCount = 0,
     this.price = 0.0,
+    this.accessMode = CourseAccessMode.approvalRequired,
+    this.allowedStudentIds = const [],
+    this.validityDays = 0,
+    this.isEnrollmentClosed = false,
+    this.fixedExpiryDate,
   });
 
   int get totalLessonsCount {
@@ -44,6 +55,11 @@ class Course extends Equatable {
         'thumbnailUrl': thumbnailUrl,
         'enrolledCount': enrolledCount,
         'price': price,
+        'accessMode': accessMode.name,
+        'allowedStudentIds': allowedStudentIds,
+        'validityDays': validityDays,
+        'isEnrollmentClosed': isEnrollmentClosed,
+        'fixedExpiryDate': fixedExpiryDate?.toIso8601String(),
         'levels': levels.map((lvl) => lvl.toMap()).toList(),
       };
 
@@ -68,6 +84,16 @@ class Course extends Equatable {
           ? double.tryParse(map['price'].toString()) ?? 0.0
           : 0.0,
       levels: parsedLevels,
+      accessMode: CourseAccessMode.fromName(map['accessMode'] as String?),
+      allowedStudentIds:
+          List<String>.from(map['allowedStudentIds'] as List? ?? const []),
+      validityDays: map['validityDays'] != null
+          ? int.tryParse(map['validityDays'].toString()) ?? 0
+          : 0,
+      isEnrollmentClosed: map['isEnrollmentClosed'] == true,
+      fixedExpiryDate: map['fixedExpiryDate'] != null
+          ? DateTime.tryParse(map['fixedExpiryDate'].toString())
+          : null,
     );
   }
 
@@ -81,6 +107,11 @@ class Course extends Equatable {
     List<CourseLevel>? levels,
     int? enrolledCount,
     double? price,
+    CourseAccessMode? accessMode,
+    List<String>? allowedStudentIds,
+    int? validityDays,
+    bool? isEnrollmentClosed,
+    DateTime? fixedExpiryDate,
   }) {
     return Course(
       id: id ?? this.id,
@@ -92,6 +123,11 @@ class Course extends Equatable {
       levels: levels ?? List.from(this.levels),
       enrolledCount: enrolledCount ?? this.enrolledCount,
       price: price ?? this.price,
+      accessMode: accessMode ?? this.accessMode,
+      allowedStudentIds: allowedStudentIds ?? this.allowedStudentIds,
+      validityDays: validityDays ?? this.validityDays,
+      isEnrollmentClosed: isEnrollmentClosed ?? this.isEnrollmentClosed,
+      fixedExpiryDate: fixedExpiryDate ?? this.fixedExpiryDate,
     );
   }
 
@@ -106,5 +142,10 @@ class Course extends Equatable {
         levels,
         enrolledCount,
         price,
+        accessMode,
+        allowedStudentIds,
+        validityDays,
+        isEnrollmentClosed,
+        fixedExpiryDate,
       ];
 }

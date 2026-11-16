@@ -91,4 +91,9 @@ class AppTextStyles {
     height: 1.25,
     fontFamilyFallback: fontFallbacks,
   );
+
+  // Material 3 semantic convenience aliases
+  static const TextStyle titleMedium = heading3;
+  static const TextStyle headlineSmall = heading2;
+  static const TextStyle bodySmall = caption;
 }

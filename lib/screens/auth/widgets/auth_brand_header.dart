@@ -33,7 +33,7 @@ class AuthBrandHeader extends StatelessWidget {
             boxShadow: AppColors.heroShadow,
           ),
           child: Image.asset(
-            'assets/images/website-logo.png',
+            'assets/images/logo.png',
             fit: BoxFit.contain,
           ),
         ),

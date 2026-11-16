@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -16,7 +17,10 @@ class LessonDetailsPanel extends StatelessWidget {
   final bool canComplete;
   final List<Lesson> playlist;
   final bool showInlinePlaylist;
-  final VoidCallback onToggleCompletion;
+  final Map<String, String> lockedReasons;
+  final bool isAssignmentSubmitted;
+  final VoidCallback? onOpenAssignmentSheet;
+  final VoidCallback? onToggleCompletion;
   final ValueChanged<Lesson> onSelectLesson;
 
   const LessonDetailsPanel({
@@ -28,7 +32,10 @@ class LessonDetailsPanel extends StatelessWidget {
     required this.canComplete,
     required this.playlist,
     required this.showInlinePlaylist,
-    required this.onToggleCompletion,
+    this.lockedReasons = const {},
+    this.isAssignmentSubmitted = false,
+    this.onOpenAssignmentSheet,
+    this.onToggleCompletion,
     required this.onSelectLesson,
   });
 
@@ -94,6 +101,106 @@ class LessonDetailsPanel extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
+          if (lesson.hasAssignment) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isAssignmentSubmitted
+                    ? AppColors.successLight
+                    : const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isAssignmentSubmitted
+                      ? AppColors.successBorder
+                      : const Color(0xFFFDE68A),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isAssignmentSubmitted
+                            ? Icons.check_circle_rounded
+                            : Icons.assignment_outlined,
+                        color: isAssignmentSubmitted
+                            ? AppColors.success
+                            : const Color(0xFFB45309),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isAssignmentSubmitted
+                              ? 'تم تسليم تكليف هذه المحاضرة'
+                              : 'تكليف عملي خاص بهذه المحاضرة',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: isAssignmentSubmitted
+                                ? AppColors.successDark
+                                : const Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
+                      if (lesson.lockNextUntilSubmitted)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEE2E2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'إلزامي لفتح الدرس التالي',
+                            style: TextStyle(
+                              color: Color(0xFF991B1B),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (onOpenAssignmentSheet != null) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: isAssignmentSubmitted
+                              ? AppColors.successDark
+                              : const Color(0xFF92400E),
+                          side: BorderSide(
+                            color: isAssignmentSubmitted
+                                ? AppColors.successBorder
+                                : const Color(0xFFB45309),
+                          ),
+                        ),
+                        onPressed: onOpenAssignmentSheet,
+                        icon: Icon(
+                          isAssignmentSubmitted
+                              ? Icons.visibility_outlined
+                              : Icons.upload_file_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          isAssignmentSubmitted
+                              ? 'عرض التكليف المُسلّم'
+                              : 'تسليم التكليف الآن',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(12),
@@ -112,7 +219,7 @@ class LessonDetailsPanel extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'يُحفظ موضع التوقف تلقائياً على هذا الجهاز للعودة إلى نفس النقطة لاحقاً.',
+                    'player.saved_position_hint'.tr(),
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.primary,
                       fontSize: 12.5,
@@ -123,24 +230,63 @@ class LessonDetailsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: savingCompletion || !canComplete
-                ? null
-                : onToggleCompletion,
-            icon: Icon(
-              isCompleted
-                  ? Icons.check_circle_rounded
-                  : Icons.check_circle_outline_rounded,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: isCompleted
+                  ? AppColors.successLight
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isCompleted
+                    ? AppColors.successBorder
+                    : AppColors.borderHairline,
+              ),
             ),
-            label: Text(
-              isCompleted
-                  ? 'مكتمل — اضغط لإلغاء علامة الإكمال'
-                  : 'تحديد المحاضرة كمكتملة',
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor:
-                  isCompleted ? AppColors.success : AppColors.primary,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              children: [
+                Icon(
+                  isCompleted
+                      ? Icons.verified_rounded
+                      : Icons.timelapse_rounded,
+                  color:
+                      isCompleted ? AppColors.successDark : AppColors.primary,
+                  size: 26,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isCompleted
+                            ? 'player.lesson_completed_title'.tr()
+                            : 'player.lesson_auto_track_title'.tr(),
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isCompleted
+                              ? AppColors.successDark
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isCompleted
+                            ? 'player.lesson_completed_desc'.tr()
+                            : 'player.lesson_auto_track_desc'.tr(args: [
+                                '${lesson.completionThresholdPercentage}%',
+                              ]),
+                        style: AppTextStyles.caption.copyWith(
+                          color: isCompleted
+                              ? AppColors.successDark.withValues(alpha: 0.85)
+                              : AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           if (playlist.isNotEmpty)
@@ -154,8 +300,11 @@ class LessonDetailsPanel extends StatelessWidget {
                     currentIndex >= 0 && currentIndex + 1 < playlist.length
                         ? playlist[currentIndex + 1]
                         : null;
+                final isNextLockedByAssignment =
+                    next != null && lockedReasons.containsKey(next.id);
                 final canOpenNext = next != null &&
                     user != null &&
+                    !isNextLockedByAssignment &&
                     (next.isFreePreview || user.isEnrolled(courseId));
 
                 return Column(
@@ -168,9 +317,42 @@ class LessonDetailsPanel extends StatelessWidget {
                             canOpenNext ? () => onSelectLesson(next) : null,
                         icon: const Icon(Icons.skip_next_rounded),
                         label: Text(
-                          'المحاضرة التالية: ${next.title}',
+                          'player.next_lesson'.tr(args: [next.title]),
                         ),
                       ),
+                      if (isNextLockedByAssignment)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.lock_clock_rounded,
+                                size: 16,
+                                color: Color(0xFFB45309),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'player.must_submit_assignment_first'.tr(),
+                                  style: const TextStyle(
+                                    color: Color(0xFF92400E),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                     if (showInlinePlaylist) ...[
                       const SizedBox(height: 22),
@@ -179,6 +361,7 @@ class LessonDetailsPanel extends StatelessWidget {
                         selectedId: lesson.id,
                         enrolled: user?.isEnrolled(courseId) ?? false,
                         completedIds: {...?user?.completedLessonIds},
+                        lockedReasons: lockedReasons,
                         onSelected: onSelectLesson,
                       ),
                     ],
@@ -191,4 +374,3 @@ class LessonDetailsPanel extends StatelessWidget {
     );
   }
 }
-

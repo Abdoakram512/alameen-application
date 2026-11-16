@@ -1,5 +1,21 @@
 import 'package:equatable/equatable.dart';
 
+/// توقيت ظهور التكليف بالنسبة لفيديو الدرس.
+enum AssignmentTiming {
+  /// يظهر مع الدرس أثناء المشاهدة (على مستوى الدرس).
+  duringLesson,
+
+  /// يظهر بعد انتهاء مشاهدة الدرس.
+  afterLesson;
+
+  static AssignmentTiming fromName(String? name) {
+    for (final t in AssignmentTiming.values) {
+      if (t.name == name) return t;
+    }
+    return AssignmentTiming.afterLesson;
+  }
+}
+
 class Assignment extends Equatable {
   final String id;
   final String courseId;
@@ -11,6 +27,16 @@ class Assignment extends Equatable {
   final int maxScore;
   final DateTime? deadline;
   final DateTime createdAt;
+  final AssignmentTiming timing;
+
+  /// رابط ملف مرفق أو ورقة عمل إضافية من قبل الإدارة
+  final String attachmentUrl;
+
+  /// اسم ملف الـ PDF المرفق (اختياري)
+  final String? pdfAttachmentName;
+
+  /// عند `true` لا يُفتح الدرس التالي قبل تسليم هذا التكليف.
+  final bool blocksNextLesson;
 
   const Assignment({
     required this.id,
@@ -23,7 +49,19 @@ class Assignment extends Equatable {
     this.maxScore = 100,
     this.deadline,
     required this.createdAt,
+    this.timing = AssignmentTiming.afterLesson,
+    this.attachmentUrl = '',
+    this.pdfAttachmentName,
+    this.blocksNextLesson = false,
   });
+
+  bool get hasAttachment => attachmentUrl.trim().isNotEmpty;
+  bool get hasPdfAttachment =>
+      attachmentUrl.trim().isNotEmpty &&
+      (attachmentUrl.toLowerCase().contains('.pdf') ||
+          attachmentUrl.contains('/o/assignments%2F') ||
+          (pdfAttachmentName != null &&
+              pdfAttachmentName!.toLowerCase().endsWith('.pdf')));
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -36,6 +74,10 @@ class Assignment extends Equatable {
         'maxScore': maxScore,
         'deadline': deadline?.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
+        'timing': timing.name,
+        'attachmentUrl': attachmentUrl,
+        'pdfAttachmentName': pdfAttachmentName,
+        'blocksNextLesson': blocksNextLesson,
       };
 
   factory Assignment.fromMap(Map<String, dynamic> map, {String? id}) {
@@ -54,6 +96,10 @@ class Assignment extends Equatable {
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      timing: AssignmentTiming.fromName(map['timing'] as String?),
+      attachmentUrl: map['attachmentUrl'] ?? '',
+      pdfAttachmentName: map['pdfAttachmentName'] as String?,
+      blocksNextLesson: map['blocksNextLesson'] ?? false,
     );
   }
 
@@ -69,5 +115,9 @@ class Assignment extends Equatable {
         maxScore,
         deadline,
         createdAt,
+        timing,
+        attachmentUrl,
+        pdfAttachmentName,
+        blocksNextLesson,
       ];
 }

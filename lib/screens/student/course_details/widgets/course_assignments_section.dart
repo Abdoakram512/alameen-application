@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -177,6 +178,53 @@ class _AssignmentItemCard extends StatelessWidget {
           if (assignment.instructions.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(assignment.instructions, style: AppTextStyles.bodyMedium),
+          ],
+          if (assignment.hasAttachment) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.picture_as_pdf_rounded,
+                    color: Color(0xFFDC2626),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      assignment.pdfAttachmentName ?? 'ملف ورقة عمل التكليف (PDF)',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF991B1B),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFDC2626),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      alignment: Alignment.center,
+                    ),
+                    icon: const Icon(Icons.download_rounded, size: 16),
+                    label: const Text('فتح PDF'),
+                    onPressed: () {
+                      final uri = Uri.tryParse(assignment.attachmentUrl);
+                      if (uri != null) {
+                        launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
           ],
           if (submission != null &&
               submission!.adminFeedback.trim().isNotEmpty) ...[

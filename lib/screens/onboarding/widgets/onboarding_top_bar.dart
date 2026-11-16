@@ -36,7 +36,7 @@ class OnboardingTopBar extends StatelessWidget {
               border: Border.all(color: AppColors.borderHairline),
             ),
             child: Image.asset(
-              'assets/images/website-logo.png',
+              'assets/images/logo.png',
               fit: BoxFit.contain,
             ),
           ),

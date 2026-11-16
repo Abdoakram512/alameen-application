@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/access_request.dart';
 import '../models/active_watch_session.dart';
 import '../models/assignment.dart';
@@ -36,6 +37,9 @@ class FirestoreService {
 
   CollectionReference<Map<String, dynamic>> get _activeSessionsRef =>
       _db.collection('active_watch_sessions');
+
+  CollectionReference<Map<String, dynamic>> get _appContentRef =>
+      _db.collection('app_content');
 
   // --- Realtime Streams ---
 
@@ -93,6 +97,16 @@ class FirestoreService {
     });
   }
 
+  Future<Assignment?> getAssignment(String assignmentId) async {
+    try {
+      final doc = await _assignmentsRef.doc(assignmentId).get();
+      if (!doc.exists || doc.data() == null) return null;
+      return Assignment.fromMap(doc.data()!, id: doc.id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Stream<List<AssignmentSubmission>> streamStudentSubmissions(String studentId) {
     return _submissionsRef
         .where('studentId', isEqualTo: studentId)
@@ -140,22 +154,40 @@ class FirestoreService {
 
   Future<UserModel> syncUserProfile(UserModel user) async {
     final docRef = _usersRef.doc(user.uid);
-    final existingSnap = await docRef.get();
-    final existingData = existingSnap.data();
+    DocumentSnapshot<Map<String, dynamic>>? existingSnap;
+    try {
+      existingSnap = await docRef.get().timeout(
+            const Duration(seconds: 4),
+            onTimeout: () => docRef.get(const GetOptions(source: Source.cache)),
+          );
+    } catch (_) {
+      try {
+        existingSnap = await docRef.get(const GetOptions(source: Source.cache));
+      } catch (_) {}
+    }
+    final existingData = existingSnap?.data();
+    final docExists = existingSnap?.exists ?? false;
 
     final payload = <String, dynamic>{
       'uid': user.uid,
+      'id': user.uid,
       'email': user.email,
       'role': 'student',
+      'appOrigin': 'alameen_speech_center',
+      'registeredPlatform': 'alameen_mobile_app',
       'lastActiveAt': FieldValue.serverTimestamp(),
     };
 
-    if (!existingSnap.exists) {
+    if (!docExists) {
       payload['displayName'] = user.displayName;
+      payload['name'] = user.displayName;
       payload['photoUrl'] = user.photoUrl;
       payload['phone'] = user.phone;
       payload['createdAt'] = FieldValue.serverTimestamp();
+      payload['joinedAt'] = FieldValue.serverTimestamp();
+      payload['enrolledCourseIds'] = <String>[];
     } else {
+      payload['name'] = user.displayName;
       if (user.displayName.trim().isNotEmpty &&
           user.displayName != 'طالب الأمين سنتر') {
         payload['displayName'] = user.displayName.trim();
@@ -168,7 +200,13 @@ class FirestoreService {
       }
     }
 
-    await docRef.set(payload, SetOptions(merge: true));
+    try {
+      await docRef.set(payload, SetOptions(merge: true)).timeout(
+            const Duration(seconds: 8),
+          );
+    } catch (e) {
+      debugPrint('Firestore syncUserProfile set error: $e');
+    }
 
     if (existingData != null) {
       final merged = Map<String, dynamic>.from(existingData);
@@ -201,6 +239,23 @@ class FirestoreService {
     });
   }
 
+  Future<void> enrollInOpenCourse(String uid, String courseId) async {
+    await _usersRef.doc(uid).set(
+      {
+        'enrolledCourseIds': FieldValue.arrayUnion([courseId]),
+      },
+      SetOptions(merge: true),
+    );
+    try {
+      await _coursesRef.doc(courseId).set(
+        {
+          'enrolledCount': FieldValue.increment(1),
+        },
+        SetOptions(merge: true),
+      );
+    } catch (_) {}
+  }
+
   Future<void> toggleLessonCompletion(
     String uid,
     String lessonId,
@@ -231,6 +286,65 @@ class FirestoreService {
     );
   }
 
+  Future<void> updateStudentPhoto({
+    required String uid,
+    required String photoUrl,
+  }) async {
+    await _usersRef.doc(uid).set(
+      {
+        'photoUrl': photoUrl.trim(),
+        'lastActiveAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> deleteStudentAccount(String uid) async {
+    try {
+      final sessions = await _activeSessionsRef
+          .where('studentId', isEqualTo: uid)
+          .get()
+          .timeout(const Duration(seconds: 4));
+      for (final doc in sessions.docs) {
+        try {
+          await doc.reference.delete().timeout(const Duration(seconds: 2));
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    try {
+      final requests = await _requestsRef
+          .where('studentId', isEqualTo: uid)
+          .get()
+          .timeout(const Duration(seconds: 4));
+      for (final doc in requests.docs) {
+        try {
+          await doc.reference.delete().timeout(const Duration(seconds: 2));
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    try {
+      await _usersRef.doc(uid).delete().timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('deleteStudentAccount usersRef error: $e');
+    }
+  }
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamAppContent(String docId) {
+    return _appContentRef.doc(docId).snapshots();
+  }
+
+  Future<Map<String, dynamic>?> getAppContent(String docId) async {
+    try {
+      final doc = await _appContentRef.doc(docId).get();
+      if (doc.exists && doc.data() != null) {
+        return doc.data();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> submitAssignment(AssignmentSubmission submission) async {
     await _submissionsRef.doc(submission.id).set(submission.toMap());
   }
@@ -258,6 +372,8 @@ class FirestoreService {
     final seconds = event['seconds'] as int;
     if (seconds <= 0) return;
     final log = _watchLogsRef.doc('${uid}_${event['id']}');
+    final isCompleted = event['isCompleted'] == true;
+    final lessonId = event['lessonId'] as String?;
     await _db.runTransaction((transaction) async {
       final existing = await transaction.get(log);
       if (existing.exists) return;
@@ -267,6 +383,8 @@ class FirestoreService {
           'totalWatchSeconds': FieldValue.increment(seconds),
           'lastActiveAt': FieldValue.serverTimestamp(),
           if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
+          if (isCompleted && lessonId != null)
+            'completedLessonIds': FieldValue.arrayUnion([lessonId]),
         },
         SetOptions(merge: true),
       );

@@ -43,9 +43,9 @@ class ActiveWatchSession extends Equatable {
     required this.lastHeartbeatAt,
   });
 
-  /// تعتبر الجلسة منتهية أو متوقفة إذا مرت 45 ثانية دون أي نبضة جديدة
+  /// تعتبر الجلسة منتهية أو متوقفة إذا مرت 60 ثانية دون أي نبضة جديدة
   bool get isStale =>
-      DateTime.now().difference(lastHeartbeatAt).inSeconds > 45;
+      DateTime.now().difference(lastHeartbeatAt).inSeconds > 60;
 
   String get currentPositionFormatted {
     final m = currentPositionSeconds ~/ 60;
@@ -78,7 +78,7 @@ class ActiveWatchSession extends Equatable {
 
     return ActiveWatchSession(
       id: id ?? (map['id'] as String? ?? ''),
-      studentId: map['studentId'] as String? ?? '',
+      studentId: (map['studentId'] ?? map['studentUid']) as String? ?? '',
       studentName: map['studentName'] as String? ?? '',
       studentEmail: map['studentEmail'] as String? ?? '',
       studentPhone: map['studentPhone'] as String? ?? '',
@@ -102,6 +102,7 @@ class ActiveWatchSession extends Equatable {
     return {
       'id': id,
       'studentId': studentId,
+      'studentUid': studentId,
       'studentName': studentName,
       'studentEmail': studentEmail,
       'studentPhone': studentPhone,

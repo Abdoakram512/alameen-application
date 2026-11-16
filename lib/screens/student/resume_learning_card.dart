@@ -5,6 +5,7 @@ import '../../core/painters/learning_progress_ring_painter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/course.dart';
+import '../../models/course_access_mode.dart';
 import '../../models/learning_history.dart';
 import '../../models/user_profile.dart';
 import 'video_player_screen.dart';
@@ -71,7 +72,10 @@ class _ResumeLearningCardState extends State<ResumeLearningCard> {
     final found = lessons.where((lesson) => lesson.id == recent.lessonId);
     if (found.isEmpty) return const SizedBox.shrink();
     final lesson = found.first;
-    if (!widget.user.isEnrolled(course.id) && !lesson.isFreePreview) {
+    final isOpenCourse = course.accessMode == CourseAccessMode.open;
+    if (!widget.user.isEnrolled(course.id) &&
+        !lesson.isFreePreview &&
+        !isOpenCourse) {
       return const SizedBox.shrink();
     }
 
@@ -170,6 +174,7 @@ class _ResumeLearningCardState extends State<ResumeLearningCard> {
           lesson: lesson,
           courseId: course.id,
           courseTitle: course.title,
+          courseAccessMode: course.accessMode,
           currentUser: widget.user,
           playlist: lessons.cast(),
         ),
