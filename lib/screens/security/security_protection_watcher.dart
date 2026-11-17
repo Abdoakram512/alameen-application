@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:screen_protector/screen_protector.dart';
-import '../../core/di/injection_container.dart';
-import '../../core/network/api_client.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/screen_capture_shield_overlay.dart';
 
@@ -131,22 +129,6 @@ class _SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
 
     try {
       final platformName = mounted ? Theme.of(context).platform.name : 'unknown';
-
-      // 1. Primary: Report directly to Laravel REST API security violation endpoint
-      if (sl.isRegistered<ApiClient>()) {
-        try {
-          await sl<ApiClient>().post(
-            '/student/security/violation',
-            data: {
-              'type': alertType,
-              'details': 'platform: $platformName, email: ${widget.studentEmail ?? ""}',
-            },
-          );
-          return;
-        } catch (_) {}
-      }
-
-      // 2. Legacy fallback: Log to Firestore security_alerts
       await FirebaseFirestore.instance.collection('security_alerts').add({
         'userId': uid,
         'studentId': uid,

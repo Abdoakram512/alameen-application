@@ -17,7 +17,6 @@ class CoursesCubit extends Cubit<CoursesState> {
 
   CoursesCubit({
     StudentCoursesRepository? coursesRepository,
-    dynamic firestoreService,
   })  : _coursesRepository = coursesRepository ??
             (sl.isRegistered<StudentCoursesRepository>()
                 ? sl<StudentCoursesRepository>()

@@ -2,28 +2,38 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/di/injection_container.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../services/firestore_service.dart';
+import '../../repositories/student_content_repository.dart';
 
 class AboutUsScreen extends StatelessWidget {
   const AboutUsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final contentRepo = sl.isRegistered<StudentContentRepository>()
+        ? sl<StudentContentRepository>()
+        : null;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       appBar: AppBar(
         title: const Text('من نحن'),
         centerTitle: true,
       ),
-      body: StreamBuilder(
-        stream: FirestoreService().streamAppContent('about_us'),
+      body: FutureBuilder<Map<String, String>>(
+        future: contentRepo?.getAboutUs() ??
+            Future.value(const {
+              'title': 'مركز الأمين للتخاطب والتأهيل',
+              'content':
+                  'مرحباً بكم في مركز الأمين للتخاطب والتأهيل.\n\nصرح تدريبي واستشاري رائد ومتخصص في إعداد وتأهيل أخصائيي التخاطب وصعوبات التعلم وتعديل السلوك وتنمية المهارات بأعلى معايير الجودة المهنية.\n\nيقدم المركز برامج تدريبية ودورات معتمدة بإشراف نخبة من كبار الخبراء والاستشاريين بهدف تزويد المتدربين بالمهارات التطبيقية والعملية اللازمة للتميز في سوق العمل وخدمة أصحاب الهمم وأولياء الأمور بكفاءة واقتدار.',
+            }),
         builder: (context, snapshot) {
-          final data = snapshot.data?.data();
-          final content = data?['content'] as String? ??
+          final data = snapshot.data;
+          final title = data?['title'] ?? 'مركز الأمين للتخاطب والتأهيل';
+          final content = data?['content'] ??
               'مرحباً بكم في مركز الأمين للتخاطب والتأهيل.\n\nصرح تدريبي واستشاري رائد ومتخصص في إعداد وتأهيل أخصائيي التخاطب وصعوبات التعلم وتعديل السلوك وتنمية المهارات بأعلى معايير الجودة المهنية.\n\nيقدم المركز برامج تدريبية ودورات معتمدة بإشراف نخبة من كبار الخبراء والاستشاريين بهدف تزويد المتدربين بالمهارات التطبيقية والعملية اللازمة للتميز في سوق العمل وخدمة أصحاب الهمم وأولياء الأمور بكفاءة واقتدار.';
-          final title = data?['title'] as String? ?? 'مركز الأمين للتخاطب والتأهيل';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -44,7 +54,7 @@ class AboutUsScreen extends StatelessWidget {
                       Container(
                         width: 72,
                         height: 72,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: AppColors.primaryLight,
                           shape: BoxShape.circle,
                         ),

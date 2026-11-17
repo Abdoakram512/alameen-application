@@ -1,28 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../core/di/injection_container.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../services/firestore_service.dart';
+import '../../repositories/student_content_repository.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final contentRepo = sl.isRegistered<StudentContentRepository>()
+        ? sl<StudentContentRepository>()
+        : null;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       appBar: AppBar(
         title: const Text('سياسة الخصوصية'),
         centerTitle: true,
       ),
-      body: StreamBuilder(
-        stream: FirestoreService().streamAppContent('privacy_policy'),
+      body: FutureBuilder<Map<String, String>>(
+        future: contentRepo?.getPrivacyPolicy() ??
+            Future.value(const {
+              'title': 'سياسة الخصوصية والأمان',
+              'content':
+                  'نولي في مركز الأمين للتخاطب والتأهيل أولوية قصوى لحماية خصوصيتك وسرية بياناتك الشخصية.\n\n١. جمع البيانات:\nنقوم بجمع بيانات الاسم ورقم الهاتف والبريد الإلكتروني فقط لأغراض التوثيق الأكاديمي، إصدار الشهادات المعتمدة، وتوفير الدعم الفني اللازم.\n\n٢. سرية المحتوى والأمان:\nجميع الدروس والمحاضرات الرقمية والتسجيلات محمية بحقوق ملكية فكرية بموجب القانون. يُمنع تصوير الشاشة أو تسجيل المحاضرات أو مشاركة الحسابات مع أطراف أخرى.\n\n٣. مشاركة البيانات:\nنلتزم التزاماً كاملاً بعدم بيع أو مشاركة بياناتك الشخصية مع أي أطراف ثالثة أو شركات تسويقية إطلاقاً.\n\n٤. حذف الحساب والبيانات:\nيحق للمتدرب في أي وقت طلب حذف حسابه بالكامل من التطبيق عبر الذهاب للملف الشخصي واختيار "حذف الحساب نهائياً"، وسيتم مسح جميع بياناته فوراً وبشكل دائم.',
+            }),
         builder: (context, snapshot) {
-          final data = snapshot.data?.data();
-          final content = data?['content'] as String? ??
+          final data = snapshot.data;
+          final content = data?['content'] ??
               'نولي في مركز الأمين للتخاطب والتأهيل أولوية قصوى لحماية خصوصيتك وسرية بياناتك الشخصية.\n\n١. جمع البيانات:\nنقوم بجمع بيانات الاسم ورقم الهاتف والبريد الإلكتروني فقط لأغراض التوثيق الأكاديمي، إصدار الشهادات المعتمدة، وتوفير الدعم الفني اللازم.\n\n٢. سرية المحتوى والأمان:\nجميع الدروس والمحاضرات الرقمية والتسجيلات محمية بحقوق ملكية فكرية بموجب القانون. يُمنع تصوير الشاشة أو تسجيل المحاضرات أو مشاركة الحسابات مع أطراف أخرى.\n\n٣. مشاركة البيانات:\nنلتزم التزاماً كاملاً بعدم بيع أو مشاركة بياناتك الشخصية مع أي أطراف ثالثة أو شركات تسويقية إطلاقاً.\n\n٤. حذف الحساب والبيانات:\nيحق للمتدرب في أي وقت طلب حذف حسابه بالكامل من التطبيق عبر الذهاب للملف الشخصي واختيار "حذف الحساب نهائياً"، وسيتم مسح جميع بياناته فوراً وبشكل دائم.';
-          final title = data?['title'] as String? ?? 'سياسة الخصوصية والأمان';
+          final title = data?['title'] ?? 'سياسة الخصوصية والأمان';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),

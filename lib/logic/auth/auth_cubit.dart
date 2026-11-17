@@ -16,7 +16,6 @@ class AuthCubit extends Cubit<AuthState> {
   AuthCubit({
     StudentAuthRepository? authRepository,
     StudentProfileRepository? profileRepository,
-    dynamic firestoreService,
   })  : _authRepository = authRepository ?? sl<StudentAuthRepository>(),
         _profileRepository = profileRepository,
         super(AuthInitial()) {

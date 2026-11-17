@@ -9,7 +9,6 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
 
   StudentProfileRepositoryImpl({
     AuthRemoteDataSource? authRemoteDataSource,
-    dynamic firestore,
   }) : _explicitAuthRemoteDataSource = authRemoteDataSource;
 
   AuthRemoteDataSource? get _remote {
@@ -18,11 +17,6 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
       return sl<AuthRemoteDataSource>();
     }
     return null;
-  }
-
-  @override
-  Stream<UserModel?> streamUser(String uid) {
-    return const Stream.empty();
   }
 
   @override
@@ -36,11 +30,6 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
       }
     }
     return null;
-  }
-
-  @override
-  Future<UserModel> syncUserProfile(UserModel user) async {
-    return user;
   }
 
   @override
@@ -62,22 +51,6 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
         bio: bio,
         locale: locale,
         avatarFilePath: avatarFilePath,
-      );
-      return;
-    }
-  }
-
-  @override
-  Future<void> updateStudentPhoto({
-    required String uid,
-    required String photoUrl,
-  }) async {
-    final remote = _remote;
-    if (remote != null) {
-      // Photo update is part of multipart updateProfile in Laravel REST API
-      await remote.updateProfile(
-        name: '',
-        phone: '',
       );
       return;
     }

@@ -4,7 +4,6 @@ import '../models/active_watch_session.dart';
 import '../models/assignment.dart';
 import '../models/assignment_submission.dart';
 import '../models/course.dart';
-import '../models/user_profile.dart';
 import '../models/watch_log_entry.dart';
 import '../repositories/student_assignments_repository.dart';
 import '../repositories/student_content_repository.dart';
@@ -37,11 +36,11 @@ class FirestoreService {
   FirestoreService._internal({FirebaseFirestore? firestore})
       : _explicitFirestore = firestore,
         _coursesRepository = StudentCoursesRepositoryImpl(firestore: firestore),
-        _profileRepository = StudentProfileRepositoryImpl(firestore: firestore),
+        _profileRepository = StudentProfileRepositoryImpl(),
         _requestsRepository = StudentRequestsRepositoryImpl(firestore: firestore),
         _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: firestore),
         _watchRepository = StudentWatchRepositoryImpl(firestore: firestore),
-        _contentRepository = StudentContentRepositoryImpl(firestore: firestore);
+        _contentRepository = StudentContentRepositoryImpl();
 
   FirestoreService.withRepositories({
     FirebaseFirestore? firestore,
@@ -53,20 +52,20 @@ class FirestoreService {
     StudentContentRepository? contentRepository,
   })  : _explicitFirestore = firestore,
         _coursesRepository = coursesRepository ?? StudentCoursesRepositoryImpl(firestore: firestore),
-        _profileRepository = profileRepository ?? StudentProfileRepositoryImpl(firestore: firestore),
+        _profileRepository = profileRepository ?? StudentProfileRepositoryImpl(),
         _requestsRepository = requestsRepository ?? StudentRequestsRepositoryImpl(firestore: firestore),
         _assignmentsRepository = assignmentsRepository ?? StudentAssignmentsRepositoryImpl(firestore: firestore),
         _watchRepository = watchRepository ?? StudentWatchRepositoryImpl(firestore: firestore),
-        _contentRepository = contentRepository ?? StudentContentRepositoryImpl(firestore: firestore);
+        _contentRepository = contentRepository ?? StudentContentRepositoryImpl();
 
   FirestoreService.forDatabase(FirebaseFirestore database)
       : _explicitFirestore = database,
         _coursesRepository = StudentCoursesRepositoryImpl(firestore: database),
-        _profileRepository = StudentProfileRepositoryImpl(firestore: database),
+        _profileRepository = StudentProfileRepositoryImpl(),
         _requestsRepository = StudentRequestsRepositoryImpl(firestore: database),
         _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: database),
         _watchRepository = StudentWatchRepositoryImpl(firestore: database),
-        _contentRepository = StudentContentRepositoryImpl(firestore: database);
+        _contentRepository = StudentContentRepositoryImpl();
 
   FirebaseFirestore get db => _explicitFirestore ?? FirebaseFirestore.instance;
 
@@ -93,8 +92,6 @@ class FirestoreService {
 
   Future<List<Course>> getCourses({Source? source}) =>
       _coursesRepository.getCourses();
-
-  Stream<UserModel?> streamUser(String uid) => _profileRepository.streamUser(uid);
 
   Stream<List<CourseAccessRequest>> streamStudentRequests(String studentId) =>
       _requestsRepository.streamStudentRequests(studentId);
@@ -125,9 +122,6 @@ class FirestoreService {
 
   // --- عمليات التعديل والكتابة ---
 
-  Future<UserModel> syncUserProfile(UserModel user) =>
-      _profileRepository.syncUserProfile(user);
-
   Future<void> sendAccessRequest(CourseAccessRequest request) =>
       _requestsRepository.sendAccessRequest(request);
 
@@ -152,23 +146,8 @@ class FirestoreService {
         phone: phone,
       );
 
-  Future<void> updateStudentPhoto({
-    required String uid,
-    required String photoUrl,
-  }) =>
-      _profileRepository.updateStudentPhoto(
-        uid: uid,
-        photoUrl: photoUrl,
-      );
-
   Future<void> deleteStudentAccount(String uid) =>
       _profileRepository.deleteStudentAccount(uid);
-
-  Stream<DocumentSnapshot<Map<String, dynamic>>> streamAppContent(String docId) =>
-      _contentRepository.streamAppContent(docId);
-
-  Future<Map<String, dynamic>?> getAppContent(String docId) =>
-      _contentRepository.getAppContent(docId);
 
   Future<void> submitAssignment(AssignmentSubmission submission) =>
       _assignmentsRepository.submitAssignment(submission);

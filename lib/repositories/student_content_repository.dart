@@ -1,11 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/bootstrap_data.dart';
 import '../models/contact_info_data.dart';
 
 abstract class StudentContentRepository {
-  Stream<DocumentSnapshot<Map<String, dynamic>>> streamAppContent(String docId);
-  Future<Map<String, dynamic>?> getAppContent(String docId);
-
   /// Fetch global platform bootstrap config
   Future<BootstrapData?> getBootstrapConfig();
 
@@ -14,4 +10,13 @@ abstract class StudentContentRepository {
 
   /// Fetch platform contact and support channels
   Future<ContactInfoData?> getContactInfo();
+
+  /// Fetch About Us profile details from Laravel API or bundled verified CMS
+  Future<Map<String, String>> getAboutUs();
+
+  /// Fetch FAQ list from Laravel API (/public/home) or bundled verified CMS
+  Future<List<Map<String, String>>> getFaqs();
+
+  /// Fetch Privacy Policy legal content
+  Future<Map<String, String>> getPrivacyPolicy();
 }

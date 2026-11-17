@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/storage/course_local_cache.dart';
 import '../../datasources/courses_remote_data_source.dart';
@@ -9,15 +8,12 @@ import '../student_content_repository.dart';
 class StudentContentRepositoryImpl implements StudentContentRepository {
   final CoursesRemoteDataSource? _explicitCoursesRemoteDataSource;
   final CourseLocalCache? _explicitLocalCache;
-  final FirebaseFirestore? _explicitFirestore;
 
   StudentContentRepositoryImpl({
     CoursesRemoteDataSource? coursesRemoteDataSource,
     CourseLocalCache? localCache,
-    FirebaseFirestore? firestore,
   })  : _explicitCoursesRemoteDataSource = coursesRemoteDataSource,
-        _explicitLocalCache = localCache,
-        _explicitFirestore = firestore;
+        _explicitLocalCache = localCache;
 
   CoursesRemoteDataSource? get _remote {
     if (_explicitCoursesRemoteDataSource != null) return _explicitCoursesRemoteDataSource;
@@ -33,39 +29,6 @@ class StudentContentRepositoryImpl implements StudentContentRepository {
       return sl<CourseLocalCache>();
     }
     return CourseLocalCacheImpl();
-  }
-
-  bool get isAvailable {
-    try {
-      final _ = db;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  FirebaseFirestore get db => _explicitFirestore ?? FirebaseFirestore.instance;
-
-  CollectionReference<Map<String, dynamic>> get _appContentRef =>
-      db.collection('app_content');
-
-  // Legacy app content stream for unmigrated features
-  @override
-  Stream<DocumentSnapshot<Map<String, dynamic>>> streamAppContent(String docId) {
-    if (!isAvailable) return const Stream.empty();
-    return _appContentRef.doc(docId).snapshots();
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getAppContent(String docId) async {
-    if (!isAvailable) return null;
-    try {
-      final doc = await _appContentRef.doc(docId).get();
-      if (doc.exists && doc.data() != null) {
-        return doc.data();
-      }
-    } catch (_) {}
-    return null;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -111,5 +74,104 @@ class StudentContentRepositoryImpl implements StudentContentRepository {
       }
     }
     return await _cache.getContactInfo();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CMS / INFORMATIONAL PAGES (REST API / PUBLIC HOME + VERIFIED OFFLINE DEFAULTS)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @override
+  Future<Map<String, String>> getAboutUs() async {
+    try {
+      final landingData = await getLandingPageData();
+      final hero = landingData?['hero'] as Map<String, dynamic>?;
+      final title = hero?['headline']?.toString() ?? 'مركز الأمين للتخاطب والتأهيل';
+      final subtitle = hero?['subheadline']?.toString();
+      final pillars = landingData?['about_pillars'] as List<dynamic>?;
+
+      String content = '';
+      if (subtitle != null && subtitle.trim().isNotEmpty) {
+        content += '$subtitle\n\n';
+      }
+      if (pillars != null && pillars.isNotEmpty) {
+        for (final p in pillars) {
+          if (p is Map) {
+            final pTitle = p['title']?.toString() ?? '';
+            final pDesc = p['description']?.toString() ?? '';
+            if (pTitle.isNotEmpty) {
+              content += '• $pTitle: $pDesc\n';
+            }
+          }
+        }
+      }
+      if (content.trim().isNotEmpty) {
+        return {
+          'title': title,
+          'content': content.trim(),
+        };
+      }
+    } catch (_) {}
+
+    return const {
+      'title': 'مركز الأمين للتخاطب والتأهيل',
+      'content': 'مرحباً بكم في مركز الأمين للتخاطب والتأهيل.\n\nصرح تدريبي واستشاري رائد ومتخصص في إعداد وتأهيل أخصائيي التخاطب وصعوبات التعلم وتعديل السلوك وتنمية المهارات بأعلى معايير الجودة المهنية.\n\nيقدم المركز برامج تدريبية ودورات معتمدة بإشراف نخبة من كبار الخبراء والاستشاريين بهدف تزويد المتدربين بالمهارات التطبيقية والعملية اللازمة للتميز في سوق العمل وخدمة أصحاب الهمم وأولياء الأمور بكفاءة واقتدار.',
+    };
+  }
+
+  @override
+  Future<List<Map<String, String>>> getFaqs() async {
+    try {
+      final landingData = await getLandingPageData();
+      final rawFaq = landingData?['faq'] as List<dynamic>?;
+      if (rawFaq != null && rawFaq.isNotEmpty) {
+        final parsed = <Map<String, String>>[];
+        for (final item in rawFaq) {
+          if (item is Map) {
+            final q = item['question']?.toString() ?? item['q']?.toString() ?? '';
+            final a = item['answer']?.toString() ?? item['a']?.toString() ?? '';
+            if (q.isNotEmpty && a.isNotEmpty) {
+              parsed.add({'question': q, 'answer': a});
+            }
+          }
+        }
+        if (parsed.isNotEmpty) return parsed;
+      }
+    } catch (_) {}
+
+    return const [
+      {
+        'question': 'كيف أحصل على شهادة التخرج واجتياز الكورس؟',
+        'answer':
+            'تحصل على الشهادة المعتمدة تلقائياً عند إتمامك لكافة المحاضرات بنسبة 100%، وتسليم جميع التكليفات والمهام المقررة واعتماد درجاتها من قِبل إدارة المركز.',
+      },
+      {
+        'question': 'هل المحاضرات مسجلة أم بث مباشر؟',
+        'answer':
+            'المحاضرات مسجلة بجودة عالية ومرفوعة على خوادم آمنة لتتمكن من دراستها والرجوع إليها في أي وقت يناسب جدولك اليومي.',
+      },
+      {
+        'question': 'كيف أقوم بتسليم التكليفات والتطبيقات العملية؟',
+        'answer':
+            'من داخل صفحة كل درس، ستجد نموذج تسليم التكليف المطلوب. قم برفع رابط أو نص الحل وسيتم تصحيحه من قِبل الإدارة ورصد الدرجة فوراً في ملفك التدريبي.',
+      },
+      {
+        'question': 'هل يمكنني تغيير اسمي المسجل في الشهادة؟',
+        'answer':
+            'الاسم المسجل معتمد رسمياً في استخراج الشهادات لمنع التلاعب. في حال وجود خطأ إملائي، يرجى التواصل فوراً مع الدعم الفني لتعديله بعد التحقق من الهوية.',
+      },
+      {
+        'question': 'كيف أتواصل مع الدعم الفني وإدارة المركز؟',
+        'answer':
+            'يمكنك التواصل عبر محادثة واتساب المباشرة أو الاتصال على الرقم: 01115240237 طوال أيام الأسبوع.',
+      },
+    ];
+  }
+
+  @override
+  Future<Map<String, String>> getPrivacyPolicy() async {
+    return const {
+      'title': 'سياسة الخصوصية والأمان',
+      'content': 'نولي في مركز الأمين للتخاطب والتأهيل أولوية قصوى لحماية خصوصيتك وسرية بياناتك الشخصية.\n\n١. جمع البيانات:\nنقوم بجمع بيانات الاسم ورقم الهاتف والبريد الإلكتروني فقط لأغراض التوثيق الأكاديمي، إصدار الشهادات المعتمدة، وتوفير الدعم الفني اللازم.\n\n٢. سرية المحتوى والأمان:\nجميع الدروس والمحاضرات الرقمية والتسجيلات محمية بحقوق ملكية فكرية بموجب القانون. يُمنع تصوير الشاشة أو تسجيل المحاضرات أو مشاركة الحسابات مع أطراف أخرى.\n\n٣. مشاركة البيانات:\nنلتزم التزاماً كاملاً بعدم بيع أو مشاركة بياناتك الشخصية مع أي أطراف ثالثة أو شركات تسويقية إطلاقاً.\n\n٤. حذف الحساب والبيانات:\nيحق للمتدرب في أي وقت طلب حذف حسابه بالكامل من التطبيق عبر الذهاب للملف الشخصي واختيار "حذف الحساب نهائياً"، وسيتم مسح جميع بياناته فوراً وبشكل دائم.',
+    };
   }
 }
