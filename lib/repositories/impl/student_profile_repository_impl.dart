@@ -1,13 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import '../../core/di/injection_container.dart';
+import '../../datasources/auth_remote_data_source.dart';
 import '../../models/user_profile.dart';
 import '../student_profile_repository.dart';
 
 class StudentProfileRepositoryImpl implements StudentProfileRepository {
+  final AuthRemoteDataSource? _explicitAuthRemoteDataSource;
   final FirebaseFirestore? _explicitFirestore;
 
-  StudentProfileRepositoryImpl({FirebaseFirestore? firestore})
-      : _explicitFirestore = firestore;
+  StudentProfileRepositoryImpl({
+    AuthRemoteDataSource? authRemoteDataSource,
+    FirebaseFirestore? firestore,
+  })  : _explicitAuthRemoteDataSource = authRemoteDataSource,
+        _explicitFirestore = firestore;
+
+  AuthRemoteDataSource? get _remote {
+    if (_explicitAuthRemoteDataSource != null) return _explicitAuthRemoteDataSource;
+    if (sl.isRegistered<AuthRemoteDataSource>()) {
+      return sl<AuthRemoteDataSource>();
+    }
+    return null;
+  }
 
   bool get isAvailable {
     try {
@@ -36,6 +50,19 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
       if (!doc.exists || doc.data() == null) return null;
       return UserModel.fromMap(doc.data()!, uid: doc.id);
     });
+  }
+
+  @override
+  Future<UserModel?> getProfile() async {
+    final remote = _remote;
+    if (remote != null) {
+      try {
+        return await remote.getProfile();
+      } catch (e) {
+        debugPrint('getProfile error: $e');
+      }
+    }
+    return null;
   }
 
   @override
@@ -102,21 +129,11 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
           existingData['phone'] != payload['phone']) {
         needsWrite = true;
       }
-      final lastActive = existingData['lastActiveAt'];
-      if (lastActive is Timestamp) {
-        if (DateTime.now().difference(lastActive.toDate()).inMinutes > 30) {
-          needsWrite = true;
-        }
-      } else {
-        needsWrite = true;
-      }
     }
 
     if (needsWrite) {
       try {
-        await docRef.set(payload, SetOptions(merge: true)).timeout(
-              const Duration(seconds: 8),
-            );
+        await docRef.set(payload, SetOptions(merge: true));
       } catch (e) {
         debugPrint('Firestore syncUserProfile set error: $e');
       }
@@ -144,16 +161,42 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
     required String uid,
     required String displayName,
     required String phone,
+    String? email,
+    String? bio,
+    String? locale,
+    String? avatarFilePath,
   }) async {
-    if (!isAvailable) return;
-    await _usersRef.doc(uid).set(
-      {
-        'displayName': displayName.trim(),
-        'phone': phone.trim(),
-        'lastActiveAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    // 1. Primary: update via Laravel REST API
+    final remote = _remote;
+    if (remote != null) {
+      try {
+        await remote.updateProfile(
+          name: displayName,
+          phone: phone,
+          email: email,
+          bio: bio,
+          locale: locale,
+          avatarFilePath: avatarFilePath,
+        );
+      } catch (e) {
+        debugPrint('REST updateProfile error: $e');
+        if (!isAvailable) rethrow;
+      }
+    }
+
+    // 2. Secondary sync to Firestore if available
+    if (isAvailable) {
+      try {
+        await _usersRef.doc(uid).set(
+          {
+            'displayName': displayName.trim(),
+            'phone': phone.trim(),
+            'lastActiveAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      } catch (_) {}
+    }
   }
 
   @override
@@ -162,17 +205,34 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
     required String photoUrl,
   }) async {
     if (!isAvailable) return;
-    await _usersRef.doc(uid).set(
-      {
-        'photoUrl': photoUrl.trim(),
-        'lastActiveAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    try {
+      await _usersRef.doc(uid).set(
+        {
+          'photoUrl': photoUrl.trim(),
+          'lastActiveAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } catch (_) {}
   }
 
   @override
-  Future<void> deleteStudentAccount(String uid) async {
+  Future<void> deleteStudentAccount(
+    String uid, {
+    String? currentPassword,
+  }) async {
+    // 1. Primary: delete via Laravel REST API
+    final remote = _remote;
+    if (remote != null && currentPassword != null && currentPassword.isNotEmpty) {
+      try {
+        await remote.deleteAccount(currentPassword: currentPassword);
+      } catch (e) {
+        debugPrint('REST deleteAccount error: $e');
+        if (!isAvailable) rethrow;
+      }
+    }
+
+    // 2. Secondary cleanup in Firestore if available
     if (!isAvailable) return;
     try {
       final sessions = await _activeSessionsRef

@@ -4,11 +4,18 @@ import '../network/api_client.dart';
 import '../network/auth_interceptor.dart';
 import '../storage/secure_token_storage.dart';
 import '../../datasources/auth_remote_data_source.dart';
+import '../../datasources/courses_remote_data_source.dart';
 import '../../logic/access/access_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/courses/courses_cubit.dart';
+import '../../repositories/impl/student_content_repository_impl.dart';
+import '../../repositories/impl/student_courses_repository_impl.dart';
+import '../../repositories/impl/student_profile_repository_impl.dart';
 import '../../repositories/student_auth_repository.dart';
+import '../../repositories/student_content_repository.dart';
+import '../../repositories/student_courses_repository.dart';
 import '../../repositories/student_learning_repository.dart';
+import '../../repositories/student_profile_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
@@ -46,6 +53,13 @@ Future<void> initDependencies() async {
       ),
     );
   }
+  if (!sl.isRegistered<CoursesRemoteDataSource>()) {
+    sl.registerLazySingleton<CoursesRemoteDataSource>(
+      () => CoursesRemoteDataSourceImpl(
+        apiClient: sl<ApiClient>(),
+      ),
+    );
+  }
 
   // 2. Services
   if (!sl.isRegistered<AuthService>()) {
@@ -70,6 +84,27 @@ Future<void> initDependencies() async {
       ),
     );
   }
+  if (!sl.isRegistered<StudentCoursesRepository>()) {
+    sl.registerLazySingleton<StudentCoursesRepository>(
+      () => StudentCoursesRepositoryImpl(
+        remoteDataSource: sl<CoursesRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<StudentProfileRepository>()) {
+    sl.registerLazySingleton<StudentProfileRepository>(
+      () => StudentProfileRepositoryImpl(
+        authRemoteDataSource: sl<AuthRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<StudentContentRepository>()) {
+    sl.registerLazySingleton<StudentContentRepository>(
+      () => StudentContentRepositoryImpl(
+        coursesRemoteDataSource: sl<CoursesRemoteDataSource>(),
+      ),
+    );
+  }
   if (!sl.isRegistered<StudentLearningRepository>()) {
     sl.registerLazySingleton<StudentLearningRepository>(
       () => StudentLearningRepositoryImpl(
@@ -84,6 +119,7 @@ Future<void> initDependencies() async {
     sl.registerFactory<AuthCubit>(
       () => AuthCubit(
         authRepository: sl<StudentAuthRepository>(),
+        profileRepository: sl<StudentProfileRepository>(),
         firestoreService: sl<FirestoreService>(),
       ),
     );
@@ -92,6 +128,7 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<CoursesCubit>()) {
     sl.registerFactory<CoursesCubit>(
       () => CoursesCubit(
+        coursesRepository: sl<StudentCoursesRepository>(),
         firestoreService: sl<FirestoreService>(),
       ),
     );

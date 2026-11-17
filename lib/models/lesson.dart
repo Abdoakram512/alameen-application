@@ -46,6 +46,15 @@ class Lesson extends Equatable {
   /// رابط الغلاف/الصورة المصغرة المخصصة للدرس (اختياري)
   final String? customThumbnailUrl;
 
+  /// معرّف السلاج الخاص بـ Laravel REST API
+  final String? slug;
+
+  /// مصدر الفيديو: bunny | mux | youtube | custom
+  final String? videoSource;
+
+  /// هل الدرس متاح لفتح وتشغيل الفيديو لهذا الطالب
+  final bool isAccessible;
+
   const Lesson({
     required this.id,
     required this.title,
@@ -67,6 +76,9 @@ class Lesson extends Equatable {
     this.isPublished = true,
     this.scheduledPublishAt,
     this.customThumbnailUrl,
+    this.slug,
+    this.videoSource,
+    this.isAccessible = true,
   });
 
   bool get isAssignmentLesson =>
@@ -137,7 +149,47 @@ class Lesson extends Equatable {
         'customThumbnailUrl': customThumbnailUrl,
       };
 
-  factory Lesson.fromMap(Map<String, dynamic> map) => Lesson(
+  factory Lesson.fromLaravelVideoJson(Map<String, dynamic> json) {
+    final durSec = (json['duration_seconds'] is num)
+        ? (json['duration_seconds'] as num).toInt()
+        : 0;
+    final durMin = (json['duration_minutes'] is num)
+        ? (json['duration_minutes'] as num).toInt()
+        : (durSec / 60).round();
+    final durationStr = durSec > 0 ? '$durMin دقيقة' : '15:00';
+
+    final progressMap = json['progress'] is Map ? json['progress'] as Map : null;
+    final isCompleted = json['is_completed'] == true ||
+        (progressMap != null && progressMap['is_completed'] == true);
+
+    return Lesson(
+      id: json['id']?.toString() ?? '',
+      slug: json['slug']?.toString(),
+      title: json['title']?.toString() ?? json['title_ar']?.toString() ?? '',
+      description: json['description']?.toString() ?? json['description_ar']?.toString() ?? '',
+      duration: durationStr,
+      muxPlaybackId: json['video_source'] == 'mux'
+          ? (json['slug']?.toString() ?? json['id']?.toString() ?? '')
+          : (json['slug']?.toString() ?? json['id']?.toString() ?? ''),
+      videoSource: json['video_source']?.toString() ?? 'bunny',
+      order: (json['sort_order'] is num)
+          ? (json['sort_order'] as num).toInt()
+          : ((json['order'] is num) ? (json['order'] as num).toInt() : 1),
+      isFreePreview: json['is_free_preview'] == true,
+      isAccessible: json['is_accessible'] != false,
+      isCompleted: isCompleted,
+      completionThresholdPercentage: (json['min_completion_percentage'] is num)
+          ? (json['min_completion_percentage'] as num).toInt()
+          : 95,
+      isPublished: json['is_published'] != false,
+    );
+  }
+
+  factory Lesson.fromMap(Map<String, dynamic> map) {
+    if (map.containsKey('duration_seconds') || map.containsKey('video_source')) {
+      return Lesson.fromLaravelVideoJson(map);
+    }
+    return Lesson(
         id: map['id']?.toString() ?? '',
         title: map['title']?.toString() ?? '',
         description: map['description']?.toString() ?? '',
@@ -146,6 +198,7 @@ class Lesson extends Equatable {
         muxAssetId: map['muxAssetId'] as String?,
         order: (map['order'] is num) ? (map['order'] as num).toInt() : 1,
         isFreePreview: map['isFreePreview'] == true,
+        isCompleted: map['isCompleted'] == true || map['is_completed'] == true,
         type: map['type']?.toString() ?? 'video',
         assignmentId: map['assignmentId'] as String?,
         lockNextUntilSubmitted: map['lockNextUntilSubmitted'] == true,
@@ -163,7 +216,11 @@ class Lesson extends Equatable {
         scheduledPublishAt:
             FirestoreDateTimeConverter.fromValue(map['scheduledPublishAt']),
         customThumbnailUrl: map['customThumbnailUrl'] as String?,
+        slug: map['slug']?.toString(),
+        videoSource: map['videoSource']?.toString() ?? map['video_source']?.toString(),
+        isAccessible: map['isAccessible'] != false && map['is_accessible'] != false,
       );
+  }
 
   Lesson copyWith({
     String? id,
@@ -186,6 +243,9 @@ class Lesson extends Equatable {
     bool? isPublished,
     DateTime? scheduledPublishAt,
     String? customThumbnailUrl,
+    String? slug,
+    String? videoSource,
+    bool? isAccessible,
   }) {
     return Lesson(
       id: id ?? this.id,
@@ -210,6 +270,9 @@ class Lesson extends Equatable {
       isPublished: isPublished ?? this.isPublished,
       scheduledPublishAt: scheduledPublishAt ?? this.scheduledPublishAt,
       customThumbnailUrl: customThumbnailUrl ?? this.customThumbnailUrl,
+      slug: slug ?? this.slug,
+      videoSource: videoSource ?? this.videoSource,
+      isAccessible: isAccessible ?? this.isAccessible,
     );
   }
 
@@ -235,5 +298,8 @@ class Lesson extends Equatable {
         isPublished,
         scheduledPublishAt,
         customThumbnailUrl,
+        slug,
+        videoSource,
+        isAccessible,
       ];
 }

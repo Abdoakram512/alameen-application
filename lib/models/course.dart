@@ -19,6 +19,12 @@ class Course extends Equatable {
   final int validityDays; // مدة الصلاحية بالأيام (0 = دائم / غير محدود)
   final bool isEnrollmentClosed; // إغلاق الدورة بالكامل وإلغاء اشتراك الجميع
   final DateTime? fixedExpiryDate; // تاريخ إغلاق موحد محدد
+  final String? slug;
+  final double? originalPrice;
+  final String? currencySymbol;
+  final String? currencyName;
+  final int? videosCount;
+  final bool isPublished;
 
   const Course({
     required this.id,
@@ -35,10 +41,19 @@ class Course extends Equatable {
     this.validityDays = 0,
     this.isEnrollmentClosed = false,
     this.fixedExpiryDate,
+    this.slug,
+    this.originalPrice,
+    this.currencySymbol,
+    this.currencyName,
+    this.videosCount,
+    this.isPublished = true,
   });
 
   int get totalLessonsCount {
-    return levels.fold(0, (sum, lvl) => sum + lvl.lessons.length);
+    if (levels.isNotEmpty) {
+      return levels.fold(0, (sum, lvl) => sum + lvl.lessons.length);
+    }
+    return videosCount ?? 0;
   }
 
   List<String> get allLessonIds {
@@ -51,6 +66,7 @@ class Course extends Equatable {
 
   Map<String, dynamic> toMap() => {
         'id': id,
+        'slug': slug,
         'title': title,
         'description': description,
         'instructor': instructor,
@@ -58,15 +74,93 @@ class Course extends Equatable {
         'thumbnailUrl': thumbnailUrl,
         'enrolledCount': enrolledCount,
         'price': price,
+        'originalPrice': originalPrice,
+        'currencySymbol': currencySymbol,
+        'currencyName': currencyName,
         'accessMode': accessMode.name,
         'allowedStudentIds': allowedStudentIds,
         'validityDays': validityDays,
         'isEnrollmentClosed': isEnrollmentClosed,
         'fixedExpiryDate': fixedExpiryDate?.toIso8601String(),
+        'videosCount': videosCount,
+        'isPublished': isPublished,
         'levels': levels.map((lvl) => lvl.toMap()).toList(),
       };
 
+  factory Course.fromLaravelSummaryJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ?? '';
+    final slug = json['slug']?.toString() ?? id;
+    final title = json['title']?.toString() ?? json['title_ar']?.toString() ?? '';
+    final description = json['description']?.toString() ?? json['description_ar']?.toString() ?? '';
+    final price = (json['price'] is num)
+        ? (json['price'] as num).toDouble()
+        : (double.tryParse(json['price']?.toString() ?? '') ?? 0.0);
+    final originalPrice = (json['original_price'] is num)
+        ? (json['original_price'] as num).toDouble()
+        : null;
+    final currencySymbol = json['currency_symbol']?.toString() ?? 'ج.م';
+    final currencyName = json['currency_name']?.toString() ?? 'جنيه مصري';
+    final accessDurationDays = (json['access_duration_days'] is num)
+        ? (json['access_duration_days'] as num).toInt()
+        : 365;
+    final thumbnail = json['thumbnail']?.toString() ?? '';
+    final videosCount = (json['videos_count'] is num)
+        ? (json['videos_count'] as num).toInt()
+        : null;
+    final isPublished = json['is_published'] != false;
+
+    return Course(
+      id: id,
+      slug: slug,
+      title: title,
+      description: description,
+      instructor: 'أكاديمية الأمين',
+      category: 'تخاطب سريري',
+      thumbnailUrl: thumbnail,
+      levels: const [],
+      enrolledCount: 0,
+      price: price,
+      originalPrice: originalPrice,
+      currencySymbol: currencySymbol,
+      currencyName: currencyName,
+      accessMode: price > 0 ? CourseAccessMode.approvalRequired : CourseAccessMode.open,
+      validityDays: accessDurationDays,
+      videosCount: videosCount,
+      isPublished: isPublished,
+    );
+  }
+
+  factory Course.fromLaravelDetailsJson(Map<String, dynamic> json) {
+    final courseData = json['course'] is Map<String, dynamic>
+        ? json['course'] as Map<String, dynamic>
+        : json;
+    final baseCourse = Course.fromLaravelSummaryJson(courseData);
+
+    final rawLevels = json['levels'] as List? ?? [];
+    final parsedLevels = rawLevels
+        .map((lvl) => CourseLevel.fromLaravelJson(Map<String, dynamic>.from(lvl as Map)))
+        .toList();
+    parsedLevels.sort((a, b) => a.order.compareTo(b.order));
+
+    final totalVideos = (json['total_videos'] is num)
+        ? (json['total_videos'] as num).toInt()
+        : baseCourse.videosCount;
+
+    return baseCourse.copyWith(
+      levels: parsedLevels,
+      videosCount: totalVideos,
+    );
+  }
+
   factory Course.fromMap(Map<String, dynamic> map) {
+    // If it's a Laravel API response object with slug and currency
+    if (map.containsKey('slug') && (map.containsKey('currency_symbol') || map.containsKey('access_duration_days'))) {
+      if (map.containsKey('levels') || map.containsKey('course')) {
+        return Course.fromLaravelDetailsJson(map);
+      }
+      return Course.fromLaravelSummaryJson(map);
+    }
+
     final rawLevels = map['levels'] as List? ?? [];
     final parsedLevels = rawLevels
         .map((lvl) => CourseLevel.fromMap(Map<String, dynamic>.from(lvl as Map)))
@@ -75,6 +169,7 @@ class Course extends Equatable {
 
     return Course(
       id: map['id']?.toString() ?? '',
+      slug: map['slug']?.toString(),
       title: map['title']?.toString() ?? '',
       description: map['description']?.toString() ?? '',
       instructor: map['instructor']?.toString() ?? '',
@@ -86,6 +181,13 @@ class Course extends Equatable {
       price: (map['price'] is num)
           ? (map['price'] as num).toDouble()
           : (double.tryParse(map['price']?.toString() ?? '') ?? 0.0),
+      originalPrice: (map['originalPrice'] is num)
+          ? (map['originalPrice'] as num).toDouble()
+          : null,
+      currencySymbol: map['currencySymbol']?.toString(),
+      currencyName: map['currencyName']?.toString(),
+      videosCount: (map['videosCount'] is num) ? (map['videosCount'] as num).toInt() : null,
+      isPublished: map['isPublished'] != false,
       levels: parsedLevels,
       accessMode: CourseAccessMode.fromName(map['accessMode'] as String?),
       allowedStudentIds:
@@ -114,6 +216,12 @@ class Course extends Equatable {
     int? validityDays,
     bool? isEnrollmentClosed,
     DateTime? fixedExpiryDate,
+    String? slug,
+    double? originalPrice,
+    String? currencySymbol,
+    String? currencyName,
+    int? videosCount,
+    bool? isPublished,
   }) {
     return Course(
       id: id ?? this.id,
@@ -130,6 +238,12 @@ class Course extends Equatable {
       validityDays: validityDays ?? this.validityDays,
       isEnrollmentClosed: isEnrollmentClosed ?? this.isEnrollmentClosed,
       fixedExpiryDate: fixedExpiryDate ?? this.fixedExpiryDate,
+      slug: slug ?? this.slug,
+      originalPrice: originalPrice ?? this.originalPrice,
+      currencySymbol: currencySymbol ?? this.currencySymbol,
+      currencyName: currencyName ?? this.currencyName,
+      videosCount: videosCount ?? this.videosCount,
+      isPublished: isPublished ?? this.isPublished,
     );
   }
 
@@ -149,5 +263,11 @@ class Course extends Equatable {
         validityDays,
         isEnrollmentClosed,
         fixedExpiryDate,
+        slug,
+        originalPrice,
+        currencySymbol,
+        currencyName,
+        videosCount,
+        isPublished,
       ];
 }

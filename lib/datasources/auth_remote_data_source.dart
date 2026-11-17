@@ -75,6 +75,19 @@ abstract class AuthRemoteDataSource {
     required String passwordConfirmation,
     String? deviceName,
   });
+
+  Future<UserModel> getProfile();
+
+  Future<UserModel> updateProfile({
+    required String name,
+    required String phone,
+    String? email,
+    String? bio,
+    String? locale,
+    String? avatarFilePath,
+  });
+
+  Future<bool> deleteAccount({required String currentPassword});
 }
 
 /// Implementation of [AuthRemoteDataSource] using [ApiClient] and multipart/form-data.
@@ -405,5 +418,84 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       message: message,
       user: user,
     );
+  }
+
+  @override
+  Future<UserModel> getProfile() async {
+    try {
+      final response = await _apiClient.get('/student/settings/profile');
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['data'] != null) {
+        final innerData = data['data'];
+        final userMap = (innerData is Map && innerData['user'] is Map)
+            ? innerData['user'] as Map
+            : (innerData is Map ? innerData : <String, dynamic>{});
+        return UserModel.fromLaravelJson(Map<String, dynamic>.from(userMap));
+      }
+      throw const ApiException('تعذر جلب بيانات الملف الشخصي.');
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
+  }
+
+  @override
+  Future<UserModel> updateProfile({
+    required String name,
+    required String phone,
+    String? email,
+    String? bio,
+    String? locale,
+    String? avatarFilePath,
+  }) async {
+    try {
+      final map = <String, dynamic>{
+        'name': name.trim(),
+        'phone': phone.trim(),
+      };
+      if (email != null && email.trim().isNotEmpty) {
+        map['email'] = email.trim();
+      }
+      if (bio != null) {
+        map['bio'] = bio;
+      }
+      if (locale != null) {
+        map['locale'] = locale;
+      }
+      if (avatarFilePath != null && avatarFilePath.trim().isNotEmpty) {
+        map['avatar'] = await MultipartFile.fromFile(avatarFilePath);
+      }
+
+      final formData = FormData.fromMap(map);
+      final response = await _apiClient.postMultipart(
+        '/student/settings/profile',
+        formData: formData,
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['data'] != null) {
+        final innerData = data['data'];
+        final userMap = (innerData is Map && innerData['user'] is Map)
+            ? innerData['user'] as Map
+            : (innerData is Map ? innerData : <String, dynamic>{});
+        return UserModel.fromLaravelJson(Map<String, dynamic>.from(userMap));
+      }
+      return await getMe();
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
+  }
+
+  @override
+  Future<bool> deleteAccount({required String currentPassword}) async {
+    try {
+      final response = await _apiClient.delete(
+        '/student/settings/profile',
+        data: {'current_password': currentPassword},
+      );
+      final data = response.data;
+      return (data is Map<String, dynamic> && data['success'] == true);
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
   }
 }
