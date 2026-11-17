@@ -245,29 +245,6 @@ class StorageService {
     return uri;
   }
 
-  /// رفع إيصال سداد الدورة (يدعم Firebase Storage ويتراجع تلقائياً لخزنة Firestore على خطة Spark)
-  Future<String> uploadReceipt({
-    required String studentId,
-    required String courseId,
-    required File file,
-  }) async {
-    final ext = _extractExtension(file.path, fallback: 'jpg');
-    final safeExt = const {'jpg', 'jpeg', 'png', 'webp', 'pdf'}.contains(ext)
-        ? ext
-        : 'jpg';
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final mediaId = 'rcpt_${studentId}_${courseId}_$timestamp.$safeExt';
-
-    return _uploadWithVaultFallback(
-      storagePath: 'receipts/$studentId/${courseId}_$timestamp.$safeExt',
-      mediaId: mediaId,
-      ownerId: studentId,
-      scope: 'receipt',
-      contentType: _resolveContentType(safeExt),
-      file: file,
-    );
-  }
-
   /// رفع ملف حل الواجب أو التدريب العملي (يعمل على خطتي Spark و Blaze)
   Future<String> uploadAssignmentAttachment({
     required String studentId,

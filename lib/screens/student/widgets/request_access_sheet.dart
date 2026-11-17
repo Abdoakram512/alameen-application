@@ -112,6 +112,31 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
       return;
     }
 
+    final file = _pickedReceiptFile!;
+    final fileLength = file.lengthSync();
+    if (fileLength > 5 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('حجم صورة الإيصال يتجاوز 5 ميجابايت، يرجى اختيار صورة أصغر.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final ext = file.path.split('.').last.toLowerCase();
+    if (!const {'jpg', 'jpeg', 'png', 'webp'}.contains(ext)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('صيغة ملف الإيصال غير مدعومة (المسموح: JPG, PNG, WEBP).'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     HapticFeedback.mediumImpact();
     setState(() => _isSubmitting = true);
 
@@ -267,36 +292,6 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Level purchase notice banner
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.royalNavy.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.royalNavy.withValues(alpha: 0.15)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              PhosphorIconsRegular.info,
-                              color: AppColors.royalNavy,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'الاشتراك يشمل كامل مستويات الدورة التدريبية. شراء المستويات الفردية قيد التجهيز مع إدارة المركز.',
-                                style: AppTextStyles.caption.copyWith(
-                                  color: AppColors.royalNavy,
-                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),

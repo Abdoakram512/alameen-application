@@ -58,6 +58,22 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
         );
       }
 
+      final fileLength = await file.length();
+      if (fileLength > 5 * 1024 * 1024) {
+        throw const ApiException(
+          'حجم صورة إيصال السداد يتجاوز الحد الأقصى المسموح (5 ميجابايت).',
+          statusCode: 422,
+        );
+      }
+
+      final ext = receiptFilePath.split('.').last.toLowerCase();
+      if (!const {'jpg', 'jpeg', 'png', 'webp'}.contains(ext)) {
+        throw const ApiException(
+          'صيغة ملف الإيصال غير مقبولة. الصيغ المدعومة هي: JPG, JPEG, PNG, WEBP.',
+          statusCode: 422,
+        );
+      }
+
       final normalizedMethod = normalizePaymentMethod(paymentMethod);
       final fileName = receiptFilePath.split(Platform.pathSeparator).last;
 

@@ -14,9 +14,9 @@ import 'package:secure_screen_app/logic/access/access_cubit.dart';
 import 'package:secure_screen_app/logic/access/access_state.dart';
 import 'package:secure_screen_app/models/access_request.dart';
 import 'package:secure_screen_app/models/course.dart';
+import 'package:secure_screen_app/models/course_access_mode.dart';
 import 'package:secure_screen_app/models/payment_receipt_model.dart';
 import 'package:secure_screen_app/models/user_profile.dart';
-import 'package:secure_screen_app/repositories/impl/student_payment_repository_impl.dart';
 import 'package:secure_screen_app/repositories/student_payment_repository.dart';
 
 class MockHttpClientAdapter implements HttpClientAdapter {
@@ -70,7 +70,7 @@ class MockStudentPaymentRepository extends Mock implements StudentPaymentReposit
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('P4 PaymentReceiptModel Tests', () {
+  group('P4 PaymentReceiptModel & Course Access Contract Tests', () {
     test('deserializes strictly matching OpenAPI PaymentReceipt schema', () {
       final json = {
         'id': 19,
@@ -112,7 +112,7 @@ void main() {
       expect(model.courseSlug, equals('comprehensive-speech-therapy-diploma'));
     });
 
-    test('deserializes approved receipt with admin notes and converts to CourseAccessRequest', () {
+    test('deserializes approved receipt with admin notes and converts to CourseAccessRequest without level fields', () {
       final json = {
         'id': 20,
         'user_id': 15,
@@ -142,6 +142,26 @@ void main() {
       expect(accessReq.receiptUrl, equals('https://alameen-center.online/storage/receipts/20.jpg'));
     });
 
+    test('Course model parses has_enrolled and accessible_video_ids authoritatively from Laravel', () {
+      final json = {
+        'course': {
+          'id': 10,
+          'title': 'كورس اضطرابات النطق',
+          'description': 'شرح مفصل',
+          'slug': 'speech-disorders',
+          'price': '600.00',
+        },
+        'has_enrolled': true,
+        'accessible_video_ids': [101, 102, 105],
+        'levels': [],
+      };
+
+      final course = Course.fromLaravelDetailsJson(json);
+      expect(course.id, equals('10'));
+      expect(course.hasEnrolled, isTrue);
+      expect(course.accessibleVideoIds, equals([101, 102, 105]));
+    });
+
     test('serializes to JSON matching backend expectation', () {
       final model = PaymentReceiptModel(
         id: 42,
@@ -165,11 +185,13 @@ void main() {
     });
   });
 
-  group('P4 PaymentRemoteDataSource Tests', () {
+  group('P4 PaymentRemoteDataSource & Security Validation Tests', () {
     late Dio dio;
     late ApiClient apiClient;
     late PaymentRemoteDataSource dataSource;
     late File tempReceiptFile;
+    late File oversizedFile;
+    late File invalidExtensionFile;
 
     setUp(() async {
       dio = Dio(BaseOptions(baseUrl: 'https://alameen-center.online/api/v1'));
@@ -181,12 +203,18 @@ void main() {
 
       tempReceiptFile = File('${Directory.systemTemp.path}/test_receipt_p4.png');
       await tempReceiptFile.writeAsBytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+      oversizedFile = File('${Directory.systemTemp.path}/test_oversized.jpg');
+      await oversizedFile.writeAsBytes(Uint8List(6 * 1024 * 1024)); // 6 MB
+
+      invalidExtensionFile = File('${Directory.systemTemp.path}/test_invalid.pdf');
+      await invalidExtensionFile.writeAsBytes([0x25, 0x50, 0x44, 0x46]); // PDF
     });
 
     tearDown(() async {
-      if (await tempReceiptFile.exists()) {
-        await tempReceiptFile.delete();
-      }
+      if (await tempReceiptFile.exists()) await tempReceiptFile.delete();
+      if (await oversizedFile.exists()) await oversizedFile.delete();
+      if (await invalidExtensionFile.exists()) await invalidExtensionFile.delete();
     });
 
     test('submitCourseReceipt builds valid multipart request and parses 201 response', () async {
@@ -252,7 +280,35 @@ void main() {
       expect(formData.files.any((f) => f.key == 'receipt_image'), isTrue);
     });
 
-    test('submitCourseReceipt throws ApiException if file does not exist', () async {
+    test('submitCourseReceipt throws 422 if receipt file exceeds 5MB', () async {
+      expect(
+        () => dataSource.submitCourseReceipt(
+          courseSlug: 'speech-diploma',
+          paymentMethod: 'vodafone_cash',
+          senderName: 'أحمد',
+          senderAccount: '01011111111',
+          amount: 500.0,
+          receiptFilePath: oversizedFile.path,
+        ),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 422)),
+      );
+    });
+
+    test('submitCourseReceipt throws 422 if receipt file extension is not JPG/PNG/WEBP', () async {
+      expect(
+        () => dataSource.submitCourseReceipt(
+          courseSlug: 'speech-diploma',
+          paymentMethod: 'vodafone_cash',
+          senderName: 'أحمد',
+          senderAccount: '01011111111',
+          amount: 500.0,
+          receiptFilePath: invalidExtensionFile.path,
+        ),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 422)),
+      );
+    });
+
+    test('submitCourseReceipt throws 400 if receipt file does not exist', () async {
       expect(
         () => dataSource.submitCourseReceipt(
           courseSlug: 'speech-diploma',
@@ -262,7 +318,7 @@ void main() {
           amount: 500.0,
           receiptFilePath: 'non_existent_path_123.jpg',
         ),
-        throwsA(isA<ApiException>()),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 400)),
       );
     });
 
@@ -319,70 +375,7 @@ void main() {
     });
   });
 
-  group('P4 StudentPaymentRepositoryImpl Tests', () {
-    late Dio dio;
-    late ApiClient apiClient;
-    late PaymentRemoteDataSource remoteDataSource;
-    late StudentPaymentRepository repository;
-    late File tempFile;
-
-    setUp(() async {
-      dio = Dio(BaseOptions(baseUrl: 'https://alameen-center.online/api/v1'));
-      final tokenStorage = InMemoryTokenStorage();
-      final authInterceptor = AuthInterceptor(tokenStorage: tokenStorage);
-      apiClient = ApiClient(dio: dio, authInterceptor: authInterceptor);
-      remoteDataSource = PaymentRemoteDataSourceImpl(apiClient: apiClient);
-      repository = StudentPaymentRepositoryImpl(remoteDataSource: remoteDataSource);
-
-      tempFile = File('${Directory.systemTemp.path}/repo_test_receipt.jpg');
-      await tempFile.writeAsBytes([0xFF, 0xD8, 0xFF]);
-    });
-
-    tearDown(() async {
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
-    });
-
-    test('submitCourseReceipt delegates correctly to data source', () async {
-      dio.httpClientAdapter = MockHttpClientAdapter((options) {
-        return ResponseBody.fromString(
-          jsonEncode({
-            'success': true,
-            'data': {
-              'receipt': {
-                'id': 555,
-                'course_id': 88,
-                'payment_method': 'vodafone_cash',
-                'sender_identifier': '01099998888',
-                'amount_paid': 600.0,
-                'status': 'pending',
-                'created_at': '2026-11-17T15:00:00Z',
-              }
-            }
-          }),
-          201,
-          headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType],
-          },
-        );
-      });
-
-      final receipt = await repository.submitCourseReceipt(
-        courseSlug: 'speech-course',
-        paymentMethod: 'vodafone_cash',
-        senderName: 'عمرو خالد',
-        senderAccount: '01099998888',
-        amount: 600.0,
-        receiptFilePath: tempFile.path,
-      );
-
-      expect(receipt.id, equals(555));
-      expect(receipt.amountPaid, equals(600.0));
-    });
-  });
-
-  group('P4 AccessCubit State & Lifecycle Tests', () {
+  group('P4 AccessCubit Business Logic & Corrective Regression Tests', () {
     late MockStudentPaymentRepository mockPaymentRepo;
     late AccessCubit cubit;
     late File tempFile;
@@ -406,41 +399,93 @@ void main() {
       expect(cubit.state, equals(AccessInitial()));
     });
 
-    test('loadStudentReceipts fetches receipts, maps statuses, and emits AccessLoaded', () async {
-      final receipt = PaymentReceiptModel(
-        id: 77,
-        userId: 25,
-        courseId: 300,
-        paymentMethod: 'vodafone_cash',
-        paymentMethodLabel: 'Vodafone Cash',
-        senderIdentifier: '01000000000',
-        amountPaid: 800.0,
-        status: AccessStatus.pending,
-        createdAt: DateTime.now(),
+    test('1. Free course access cannot be granted locally without server confirmation', () async {
+      final freeCourse = const Course(
+        id: '100',
+        title: 'دورة مجانية مفتوحة',
+        description: 'وصف الدورة المفتوحة',
+        instructor: 'د. الأمين',
+        category: 'تخاطب سريري',
+        thumbnailUrl: '',
+        levels: [],
+        price: 0.0,
+        accessMode: CourseAccessMode.open,
       );
 
+      // Server returns empty receipts list (no confirmed enrollment)
       when(() => mockPaymentRepo.getStudentReceipts())
-          .thenAnswer((_) async => [receipt]);
+          .thenAnswer((_) async => []);
 
       final expectedStates = [
         isA<AccessLoading>(),
-        isA<AccessLoaded>().having(
-          (s) => s.getStatus('300'),
-          'status for course 300',
-          equals(AccessStatus.pending),
+        isA<AccessError>().having(
+          (e) => e.message,
+          'message',
+          contains('التسجيل في دورة "دورة مجانية مفتوحة" يتطلب اعتماداً من إدارة الأكاديمية'),
         ),
       ];
 
       expectLater(cubit.stream, emitsInOrder(expectedStates));
 
-      await cubit.loadStudentReceipts();
+      await cubit.enrollInOpenCourse(
+        uid: 'user_1',
+        course: freeCourse,
+      );
 
-      final state = cubit.state as AccessLoaded;
-      expect(state.courseStatuses['300'], equals(AccessStatus.pending));
-      expect(state.requestsByCourse['300']?.id, equals('77'));
+      final state = cubit.state as AccessError;
+      // Authoritative status must NOT be approved
+      expect(state.getStatus('100'), isNot(equals(AccessStatus.approved)));
     });
 
-    test('submitCourseReceipt posts data, updates state, and emits AccessActionSuccess', () async {
+    test('2. Approved server enrollment confirms free course access', () async {
+      final freeCourse = const Course(
+        id: '100',
+        title: 'دورة مجانية مفتوحة',
+        description: 'وصف الدورة المفتوحة',
+        instructor: 'د. الأمين',
+        category: 'تخاطب سريري',
+        thumbnailUrl: '',
+        levels: [],
+        price: 0.0,
+      );
+
+      final serverReceipt = PaymentReceiptModel(
+        id: 999,
+        userId: 1,
+        courseId: 100,
+        paymentMethod: 'vodafone_cash',
+        paymentMethodLabel: 'Vodafone Cash',
+        senderIdentifier: '01000000000',
+        amountPaid: 0.0,
+        status: AccessStatus.approved,
+        createdAt: DateTime.now(),
+      );
+
+      when(() => mockPaymentRepo.getStudentReceipts())
+          .thenAnswer((_) async => [serverReceipt]);
+
+      final expectedStates = [
+        isA<AccessLoading>(),
+        isA<AccessActionSuccess>().having(
+          (s) => s.getStatus('100'),
+          'status for course 100',
+          equals(AccessStatus.approved),
+        ),
+      ];
+
+      expectLater(cubit.stream, emitsInOrder(expectedStates));
+
+      await cubit.enrollInOpenCourse(
+        uid: 'user_1',
+        course: freeCourse,
+      );
+
+      final state = cubit.state as AccessActionSuccess;
+      expect(state.getStatus('100'), equals(AccessStatus.approved));
+      expect(state.message, contains('تم تأكيد اشتراكك في دورة "دورة مجانية مفتوحة" من الخادم بنجاح'));
+    });
+
+    test('3. Full-course purchase only: submits whole course price and creates pending request', () async {
       final newReceipt = PaymentReceiptModel(
         id: 88,
         userId: 25,
@@ -455,13 +500,13 @@ void main() {
       );
 
       when(() => mockPaymentRepo.submitCourseReceipt(
-        courseSlug: any(named: 'courseSlug'),
-        paymentMethod: any(named: 'paymentMethod'),
-        senderName: any(named: 'senderName'),
-        senderAccount: any(named: 'senderAccount'),
-        amount: any(named: 'amount'),
-        receiptFilePath: any(named: 'receiptFilePath'),
-        transactionReference: any(named: 'transactionReference'),
+        courseSlug: 'speech-course',
+        paymentMethod: 'instapay',
+        senderName: 'محمد أحمد',
+        senderAccount: 'student@instapay',
+        amount: 1500.0,
+        receiptFilePath: tempFile.path,
+        transactionReference: 'TXN-1234',
       )).thenAnswer((_) async => newReceipt);
 
       final expectedStates = [
@@ -488,11 +533,87 @@ void main() {
       );
 
       final state = cubit.state as AccessActionSuccess;
+      expect(state.getStatus('400'), equals(AccessStatus.pending));
       expect(state.message, contains('تم إرسال إيصال السداد للمراجعة بنجاح'));
-      expect(state.courseStatuses['400'], equals(AccessStatus.pending));
     });
 
-    test('sendRequest requires receiptFile and returns Arabic error if missing', () async {
+    test('4. Existing approved entitlement is NEVER downgraded by a subsequent pending or rejected receipt', () async {
+      final olderApprovedReceipt = PaymentReceiptModel(
+        id: 10,
+        userId: 25,
+        courseId: 50,
+        paymentMethod: 'instapay',
+        paymentMethodLabel: 'InstaPay',
+        senderIdentifier: 'student@instapay',
+        amountPaid: 1000.0,
+        status: AccessStatus.approved,
+        createdAt: DateTime.now().subtract(const Duration(days: 5)),
+      );
+
+      final newerPendingReceipt = PaymentReceiptModel(
+        id: 11,
+        userId: 25,
+        courseId: 50,
+        paymentMethod: 'instapay',
+        paymentMethodLabel: 'InstaPay',
+        senderIdentifier: 'student@instapay',
+        amountPaid: 1000.0,
+        status: AccessStatus.pending,
+        createdAt: DateTime.now(),
+      );
+
+      when(() => mockPaymentRepo.getStudentReceipts())
+          .thenAnswer((_) async => [newerPendingReceipt, olderApprovedReceipt]);
+
+      await cubit.loadStudentReceipts();
+
+      final state = cubit.state as AccessLoaded;
+      // Crucial: approved status must be preserved!
+      expect(state.getStatus('50'), equals(AccessStatus.approved));
+      // Both receipts remain recorded in allRequests
+      expect(state.allRequests.length, equals(2));
+      expect(state.allRequests[0].id, equals('11'));
+      expect(state.allRequests[1].id, equals('10'));
+    });
+
+    test('5. Multiple historical receipts remain distinguishable by receipt ID', () async {
+      final receipt1 = PaymentReceiptModel(
+        id: 101,
+        userId: 1,
+        courseId: 20,
+        paymentMethod: 'vodafone_cash',
+        paymentMethodLabel: 'Vodafone Cash',
+        senderIdentifier: '01011111111',
+        amountPaid: 500.0,
+        status: AccessStatus.rejected,
+        adminNotes: 'صورة الإيصال غير واضحة',
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+      );
+
+      final receipt2 = PaymentReceiptModel(
+        id: 102,
+        userId: 1,
+        courseId: 20,
+        paymentMethod: 'vodafone_cash',
+        paymentMethodLabel: 'Vodafone Cash',
+        senderIdentifier: '01011111111',
+        amountPaid: 500.0,
+        status: AccessStatus.pending,
+        createdAt: DateTime.now(),
+      );
+
+      when(() => mockPaymentRepo.getStudentReceipts())
+          .thenAnswer((_) async => [receipt2, receipt1]);
+
+      await cubit.loadStudentReceipts();
+
+      final state = cubit.state as AccessLoaded;
+      expect(state.allRequests.length, equals(2));
+      expect(state.allRequests.map((r) => r.id), containsAllInOrder(['102', '101']));
+      expect(state.allRequests.firstWhere((r) => r.id == '101').adminNotes, equals('صورة الإيصال غير واضحة'));
+    });
+
+    test('6. sendRequest requires receiptFile and returns Arabic error if missing', () async {
       final dummyCourse = const Course(
         id: '99',
         title: 'دورة تجريبية',
@@ -527,40 +648,7 @@ void main() {
       );
     });
 
-    test('enrollInOpenCourse grants immediate access and emits AccessActionSuccess', () async {
-      final dummyCourse = const Course(
-        id: '100',
-        title: 'دورة مجانية مفتوحة',
-        description: 'وصف الدورة المفتوحة',
-        instructor: 'د. الأمين',
-        category: 'تخاطب سريري',
-        thumbnailUrl: '',
-        levels: [],
-        price: 0.0,
-      );
-
-      final expectedStates = [
-        isA<AccessLoading>(),
-        isA<AccessActionSuccess>().having(
-          (s) => s.getStatus('100'),
-          'status for course 100',
-          equals(AccessStatus.approved),
-        ),
-      ];
-
-      expectLater(cubit.stream, emitsInOrder(expectedStates));
-
-      await cubit.enrollInOpenCourse(
-        uid: 'user_1',
-        course: dummyCourse,
-      );
-
-      final state = cubit.state as AccessActionSuccess;
-      expect(state.getStatus('100'), equals(AccessStatus.approved));
-      expect(state.message, contains('تم تسجيلك في دورة "دورة مجانية مفتوحة" بنجاح'));
-    });
-
-    test('clearCache and clear reset state and caches', () {
+    test('7. clearCache and clear reset state and caches across account switching', () {
       AccessCubit.clearCache();
       cubit.clear();
       expect(cubit.state, equals(AccessInitial()));

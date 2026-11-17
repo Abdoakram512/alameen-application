@@ -26,7 +26,4 @@ abstract class StudentCoursesRepository {
     required String courseId,
     required String lessonId,
   });
-
-  /// Direct open course enrollment
-  Future<void> enrollInOpenCourse(String uid, String courseId);
 }

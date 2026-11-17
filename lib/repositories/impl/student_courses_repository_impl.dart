@@ -77,9 +77,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   CollectionReference<Map<String, dynamic>> get _coursesRef =>
       db.collection('courses');
 
-  CollectionReference<Map<String, dynamic>> get _usersRef =>
-      db.collection('users');
-
   // ══════════════════════════════════════════════════════════════════════════
   // P3: STREAM & PUBLIC CATALOG (REST API + LOCAL CACHE ONLY)
   // ══════════════════════════════════════════════════════════════════════════
@@ -273,30 +270,5 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     } catch (_) {
       return null;
     }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // UNMIGRATED P4 COMPATIBILITY: OPEN COURSE ENROLLMENT
-  // Retained strictly for Phase P4 (Enrollment & Receipts)
-  // ══════════════════════════════════════════════════════════════════════════
-
-  @override
-  Future<void> enrollInOpenCourse(String uid, String courseId) async {
-    if (!isFirestoreAvailable) return;
-    await _usersRef.doc(uid).set(
-      {
-        'enrolledCourseIds': FieldValue.arrayUnion([courseId]),
-        'lastEnrolledCourseId': courseId,
-      },
-      SetOptions(merge: true),
-    );
-    try {
-      await _coursesRef.doc(courseId).set(
-        {
-          'enrolledCount': FieldValue.increment(1),
-        },
-        SetOptions(merge: true),
-      );
-    } catch (_) {}
   }
 }

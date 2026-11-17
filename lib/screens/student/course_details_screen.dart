@@ -43,6 +43,16 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
   Stream<List<AssignmentSubmission>>? _submissionsStream;
   String? _lastUid;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AccessCubit>().loadStudentReceipts(silent: true);
+      }
+    });
+  }
+
   Stream<List<AssignmentSubmission>> _getSubmissionsStream(String? uid) {
     if (uid == null) return Stream.value(const <AssignmentSubmission>[]);
     if (_submissionsStream == null || _lastUid != uid) {
@@ -218,11 +228,10 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
             builder: (context, authState) {
               final currentUser =
                   authState is Authenticated ? authState.user : null;
-              final isOpenCourse = course.accessMode == CourseAccessMode.open;
               final isAssigned = currentUser != null && course.allowedStudentIds.contains(currentUser.uid);
               final isExpired = currentUser != null && currentUser.isCourseExpired(course.id);
               final isEnrolled = !isExpired &&
-                  ((currentUser?.isEnrolled(course.id) ?? false) || isAssigned || isOpenCourse);
+                  (course.hasEnrolled || (currentUser?.isEnrolled(course.id) ?? false) || isAssigned);
               final allIds = course.allLessonIds;
               final completedSet = {...?currentUser?.completedLessonIds};
               final completedInCourse =

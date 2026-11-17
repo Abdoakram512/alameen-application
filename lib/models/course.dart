@@ -26,6 +26,8 @@ class Course extends Equatable {
   final String? currencyName;
   final int? videosCount;
   final bool isPublished;
+  final bool hasEnrolled;
+  final List<int> accessibleVideoIds;
 
   const Course({
     required this.id,
@@ -48,6 +50,8 @@ class Course extends Equatable {
     this.currencyName,
     this.videosCount,
     this.isPublished = true,
+    this.hasEnrolled = false,
+    this.accessibleVideoIds = const [],
   });
 
   int get totalLessonsCount {
@@ -147,9 +151,20 @@ class Course extends Equatable {
         ? (json['total_videos'] as num).toInt()
         : baseCourse.videosCount;
 
+    final hasEnrolled = json['has_enrolled'] == true ||
+        (json['course'] is Map && (json['course'] as Map)['has_enrolled'] == true);
+
+    final rawAccessible = json['accessible_video_ids'] as List? ?? [];
+    final parsedAccessible = rawAccessible
+        .map((id) => (id is num) ? id.toInt() : (int.tryParse(id.toString()) ?? 0))
+        .where((id) => id > 0)
+        .toList();
+
     return baseCourse.copyWith(
       levels: parsedLevels,
       videosCount: totalVideos,
+      hasEnrolled: hasEnrolled,
+      accessibleVideoIds: parsedAccessible,
     );
   }
 
@@ -223,6 +238,8 @@ class Course extends Equatable {
     String? currencyName,
     int? videosCount,
     bool? isPublished,
+    bool? hasEnrolled,
+    List<int>? accessibleVideoIds,
   }) {
     return Course(
       id: id ?? this.id,
@@ -245,6 +262,8 @@ class Course extends Equatable {
       currencyName: currencyName ?? this.currencyName,
       videosCount: videosCount ?? this.videosCount,
       isPublished: isPublished ?? this.isPublished,
+      hasEnrolled: hasEnrolled ?? this.hasEnrolled,
+      accessibleVideoIds: accessibleVideoIds ?? this.accessibleVideoIds,
     );
   }
 
@@ -270,5 +289,7 @@ class Course extends Equatable {
         currencyName,
         videosCount,
         isPublished,
+        hasEnrolled,
+        accessibleVideoIds,
       ];
 }

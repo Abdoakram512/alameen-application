@@ -16,9 +16,10 @@ class AccessCubit extends Cubit<AccessState> {
   final Map<String, AccessStatus> _statuses = {};
   final Map<String, CourseAccessRequest> _requestsByCourse = {};
   final Map<String, PaymentReceiptModel> _receiptsByCourse = {};
+  final List<CourseAccessRequest> _allRequests = [];
   bool _initialSnapshotHandled = false;
 
-  /// In-memory cache for 0ms delay display of student requests across sessions
+  /// In-memory cache for fast display of student requests across session switches
   static final Map<String, List<CourseAccessRequest>> _cachedRequests = {};
 
   AccessCubit({
@@ -33,6 +34,7 @@ class AccessCubit extends Cubit<AccessState> {
     _statuses.clear();
     _requestsByCourse.clear();
     _receiptsByCourse.clear();
+    _allRequests.clear();
     _initialSnapshotHandled = false;
     _cachedRequests.clear();
     emit(AccessInitial());
@@ -42,28 +44,34 @@ class AccessCubit extends Cubit<AccessState> {
     _statuses.clear();
     _requestsByCourse.clear();
     _receiptsByCourse.clear();
+    _allRequests.clear();
     _initialSnapshotHandled = false;
     if (!isClosed) emit(AccessInitial());
   }
 
   /// Initialize and load student receipts for [studentId].
-  /// Matches previous API for seamless integration with main.dart and existing call sites.
   void listenToStudentRequests(String studentId) {
     _initialSnapshotHandled = false;
 
-    // Immediate emission of cached data for 0ms perception
     if (_cachedRequests.containsKey(studentId) &&
         _cachedRequests[studentId]!.isNotEmpty) {
       _statuses.clear();
       _requestsByCourse.clear();
-      for (final req in _cachedRequests[studentId]!) {
-        _statuses[req.courseId] = req.status;
-        _requestsByCourse[req.courseId] = req;
+      _allRequests.clear();
+      _allRequests.addAll(_cachedRequests[studentId]!);
+
+      for (final req in _allRequests) {
+        if (_statuses[req.courseId] != AccessStatus.approved) {
+          _statuses[req.courseId] = req.status;
+          _requestsByCourse[req.courseId] = req;
+        }
       }
+
       emit(
         AccessLoaded(
           Map.unmodifiable(_statuses),
           requestsByCourse: Map.unmodifiable(_requestsByCourse),
+          allRequests: List.unmodifiable(_allRequests),
         ),
       );
     }
@@ -75,12 +83,14 @@ class AccessCubit extends Cubit<AccessState> {
   Future<void> loadStudentReceipts({
     String? studentId,
     bool silent = false,
+    bool emitLoaded = true,
   }) async {
     if (!silent && _statuses.isEmpty) {
       emit(
         AccessLoading(
           courseStatuses: Map.unmodifiable(_statuses),
           requestsByCourse: Map.unmodifiable(_requestsByCourse),
+          allRequests: List.unmodifiable(_allRequests),
         ),
       );
     }
@@ -92,37 +102,69 @@ class AccessCubit extends Cubit<AccessState> {
       _statuses.clear();
       _requestsByCourse.clear();
       _receiptsByCourse.clear();
+      _allRequests.clear();
 
-      final listToCache = <CourseAccessRequest>[];
+      // Convert all receipts to CourseAccessRequest models
+      final allConverted = receipts.map((r) => r.toCourseAccessRequest()).toList();
+      allConverted.sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+      _allRequests.addAll(allConverted);
 
+      // Group receipts by courseId to resolve authoritative status
+      final receiptsByCourseGroup = <String, List<PaymentReceiptModel>>{};
       for (final receipt in receipts) {
         final courseKey = receipt.courseId.toString();
-        _receiptsByCourse[courseKey] = receipt;
-        _statuses[courseKey] = receipt.status;
+        receiptsByCourseGroup.putIfAbsent(courseKey, () => []).add(receipt);
+      }
 
-        final req = receipt.toCourseAccessRequest();
-        _requestsByCourse[courseKey] = req;
-        listToCache.add(req);
+      for (final entry in receiptsByCourseGroup.entries) {
+        final courseKey = entry.key;
+        final courseReceipts = entry.value;
 
+        // Sort course receipts by date (newest first)
+        courseReceipts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Authoritative status priority: approved > pending > rejected
+        final hasApproved = courseReceipts.any((r) => r.status == AccessStatus.approved);
+        final hasPending = courseReceipts.any((r) => r.status == AccessStatus.pending);
+
+        final AccessStatus effectiveStatus;
+        final PaymentReceiptModel primaryReceipt;
+
+        if (hasApproved) {
+          effectiveStatus = AccessStatus.approved;
+          primaryReceipt = courseReceipts.firstWhere((r) => r.status == AccessStatus.approved);
+        } else if (hasPending) {
+          effectiveStatus = AccessStatus.pending;
+          primaryReceipt = courseReceipts.firstWhere((r) => r.status == AccessStatus.pending);
+        } else {
+          effectiveStatus = courseReceipts.first.status;
+          primaryReceipt = courseReceipts.first;
+        }
+
+        _statuses[courseKey] = effectiveStatus;
+        _receiptsByCourse[courseKey] = primaryReceipt;
+        _requestsByCourse[courseKey] = primaryReceipt.toCourseAccessRequest();
+
+        // Check for confirmed status transitions
         if (_initialSnapshotHandled) {
           final prev = previousStatuses[courseKey];
-          if (prev == AccessStatus.pending && receipt.status == AccessStatus.approved) {
+          if (prev == AccessStatus.pending && effectiveStatus == AccessStatus.approved) {
             unawaited(
               NotificationService().showInstantNotification(
-                id: receipt.id.hashCode,
+                id: primaryReceipt.id.hashCode,
                 title: 'تم تفعيل اشتراكك بنجاح',
-                body: 'تمت الموافقة على إيصال الدورة #${receipt.courseId}. يمكنك بدء المشاهدة الآن.',
+                body: 'تمت الموافقة على إيصال الدورة #${primaryReceipt.courseId}. يمكنك بدء المشاهدة الآن.',
               ),
             );
-          } else if (prev == AccessStatus.pending && receipt.status == AccessStatus.rejected) {
-            final notes = receipt.adminNotes?.trim() ?? '';
+          } else if (prev == AccessStatus.pending && effectiveStatus == AccessStatus.rejected) {
+            final notes = primaryReceipt.adminNotes?.trim() ?? '';
             unawaited(
               NotificationService().showInstantNotification(
-                id: receipt.id.hashCode,
+                id: primaryReceipt.id.hashCode,
                 title: 'تحديث بخصوص طلب الانضمام',
                 body: notes.isNotEmpty
-                    ? 'تعذر اعتماد إيصال الدورة #${receipt.courseId}: $notes'
-                    : 'يرجى مراجعة بيانات إيصال السداد للدورة #${receipt.courseId} وإعادة المحاولة.',
+                    ? 'تعذر اعتماد إيصال الدورة #${primaryReceipt.courseId}: $notes'
+                    : 'يرجى مراجعة بيانات إيصال السداد للدورة #${primaryReceipt.courseId} وإعادة المحاولة.',
               ),
             );
           }
@@ -130,28 +172,36 @@ class AccessCubit extends Cubit<AccessState> {
       }
 
       if (studentId != null && studentId.isNotEmpty) {
-        _cachedRequests[studentId] = listToCache;
+        _cachedRequests[studentId] = List.from(_allRequests);
       }
 
       _initialSnapshotHandled = true;
-      emit(
-        AccessLoaded(
-          Map.unmodifiable(_statuses),
-          requestsByCourse: Map.unmodifiable(_requestsByCourse),
-        ),
-      );
+      if (emitLoaded) {
+        emit(
+          AccessLoaded(
+            Map.unmodifiable(_statuses),
+            requestsByCourse: Map.unmodifiable(_requestsByCourse),
+            allRequests: List.unmodifiable(_allRequests),
+          ),
+        );
+      }
     } catch (e) {
-      final msg = NetworkErrorMapper.toArabicMessage(
-        e,
-        defaultMessage: 'تعذر تحديث حالة طلبات الانضمام حالياً.',
-      );
-      emit(
-        AccessError(
-          msg,
-          courseStatuses: Map.unmodifiable(_statuses),
-          requestsByCourse: Map.unmodifiable(_requestsByCourse),
-        ),
-      );
+      if (emitLoaded) {
+        final msg = NetworkErrorMapper.toArabicMessage(
+          e,
+          defaultMessage: 'تعذر تحديث حالة طلبات الانضمام حالياً.',
+        );
+        emit(
+          AccessError(
+            msg,
+            courseStatuses: Map.unmodifiable(_statuses),
+            requestsByCourse: Map.unmodifiable(_requestsByCourse),
+            allRequests: List.unmodifiable(_allRequests),
+          ),
+        );
+      } else {
+        rethrow;
+      }
     }
   }
 
@@ -171,6 +221,7 @@ class AccessCubit extends Cubit<AccessState> {
       AccessLoading(
         courseStatuses: Map.unmodifiable(_statuses),
         requestsByCourse: Map.unmodifiable(_requestsByCourse),
+        allRequests: List.unmodifiable(_allRequests),
       ),
     );
 
@@ -186,17 +237,23 @@ class AccessCubit extends Cubit<AccessState> {
       );
 
       final key = courseId.isNotEmpty ? courseId : receipt.courseId.toString();
-      _statuses[key] = receipt.status;
-      _receiptsByCourse[key] = receipt;
 
+      // If already approved, do NOT downgrade authoritative entitlement
+      if (_statuses[key] != AccessStatus.approved) {
+        _statuses[key] = receipt.status;
+      }
+
+      _receiptsByCourse[key] = receipt;
       final req = receipt.toCourseAccessRequest(fallbackCourseTitle: courseTitle);
       _requestsByCourse[key] = req;
+      _allRequests.insert(0, req);
 
       emit(
         AccessActionSuccess(
           'تم إرسال إيصال السداد للمراجعة بنجاح وسيتم تفعيل الدورة بعد التدقيق.',
           courseStatuses: Map.unmodifiable(_statuses),
           requestsByCourse: Map.unmodifiable(_requestsByCourse),
+          allRequests: List.unmodifiable(_allRequests),
         ),
       );
     } catch (e) {
@@ -209,6 +266,7 @@ class AccessCubit extends Cubit<AccessState> {
           arabicError,
           courseStatuses: Map.unmodifiable(_statuses),
           requestsByCourse: Map.unmodifiable(_requestsByCourse),
+          allRequests: List.unmodifiable(_allRequests),
         ),
       );
     }
@@ -220,7 +278,6 @@ class AccessCubit extends Cubit<AccessState> {
     required UserModel user,
     String paymentMethod = 'فودافون كاش',
     String senderNumberOrRef = '',
-    String receiptUrl = '',
     File? receiptFile,
     String? senderName,
     String? senderAccount,
@@ -233,6 +290,7 @@ class AccessCubit extends Cubit<AccessState> {
           'يرجى إرفاق صورة واضحة لإيصال السداد لاعتماد الطلب من قبل الإدارة.',
           courseStatuses: Map.unmodifiable(_statuses),
           requestsByCourse: Map.unmodifiable(_requestsByCourse),
+          allRequests: List.unmodifiable(_allRequests),
         ),
       );
       return;
@@ -267,7 +325,8 @@ class AccessCubit extends Cubit<AccessState> {
     );
   }
 
-  /// Enrollment for free/open courses.
+  /// Enrollment check for free/open courses.
+  /// Never grants client-side approved access; relies on authoritative Laravel status.
   Future<void> enrollInOpenCourse({
     required String uid,
     required Course course,
@@ -276,19 +335,46 @@ class AccessCubit extends Cubit<AccessState> {
       AccessLoading(
         courseStatuses: Map.unmodifiable(_statuses),
         requestsByCourse: Map.unmodifiable(_requestsByCourse),
+        allRequests: List.unmodifiable(_allRequests),
       ),
     );
 
-    // Free/open course access is immediately permitted locally while backend flags it
-    _statuses[course.id] = AccessStatus.approved;
+    try {
+      // Refresh receipts from the backend without intermediate state flickering
+      await loadStudentReceipts(studentId: uid, silent: true, emitLoaded: false);
 
-    emit(
-      AccessActionSuccess(
-        'تم تسجيلك في دورة "${course.title}" بنجاح! يمكنك البدء الآن.',
-        courseStatuses: Map.unmodifiable(_statuses),
-        requestsByCourse: Map.unmodifiable(_requestsByCourse),
-      ),
-    );
+      if (_statuses[course.id] == AccessStatus.approved) {
+        emit(
+          AccessActionSuccess(
+            'تم تأكيد اشتراكك في دورة "${course.title}" من الخادم بنجاح.',
+            courseStatuses: Map.unmodifiable(_statuses),
+            requestsByCourse: Map.unmodifiable(_requestsByCourse),
+            allRequests: List.unmodifiable(_allRequests),
+          ),
+        );
+      } else {
+        emit(
+          AccessError(
+            'التسجيل في دورة "${course.title}" يتطلب اعتماداً من إدارة الأكاديمية أو إرسال إيصال السداد.',
+            courseStatuses: Map.unmodifiable(_statuses),
+            requestsByCourse: Map.unmodifiable(_requestsByCourse),
+            allRequests: List.unmodifiable(_allRequests),
+          ),
+        );
+      }
+    } catch (e) {
+      final msg = NetworkErrorMapper.toArabicMessage(
+        e,
+        defaultMessage: 'تعذر التحقق من حالة التسجيل، يرجى المحاولة لاحقاً.',
+      );
+      emit(
+        AccessError(
+          msg,
+          courseStatuses: Map.unmodifiable(_statuses),
+          requestsByCourse: Map.unmodifiable(_requestsByCourse),
+          allRequests: List.unmodifiable(_allRequests),
+        ),
+      );
+    }
   }
-
 }

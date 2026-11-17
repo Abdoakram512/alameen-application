@@ -18,17 +18,23 @@ class StudentRequestsStatusSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AccessCubit, AccessState>(
       builder: (context, state) {
-        Map<String, CourseAccessRequest> map = const {};
-        if (state is AccessLoaded) {
-          map = state.requestsByCourse;
-        } else if (state is AccessLoading) {
-          map = state.requestsByCourse;
+        final List<CourseAccessRequest> requests;
+        if (state is AccessLoaded && state.allRequests.isNotEmpty) {
+          requests = state.allRequests;
+        } else if (state is AccessLoading && state.allRequests.isNotEmpty) {
+          requests = state.allRequests;
+        } else {
+          Map<String, CourseAccessRequest> map = const {};
+          if (state is AccessLoaded) {
+            map = state.requestsByCourse;
+          } else if (state is AccessLoading) {
+            map = state.requestsByCourse;
+          }
+          if (map.isEmpty) return const SizedBox.shrink();
+          requests = map.values.toList()..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
         }
 
-        if (map.isEmpty) return const SizedBox.shrink();
-
-        final requests = map.values.toList()
-          ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+        if (requests.isEmpty) return const SizedBox.shrink();
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 24),
@@ -106,12 +112,28 @@ class _StudentRequestTile extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  request.courseTitle,
-                  style: AppTextStyles.heading3.copyWith(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      request.courseTitle,
+                      style: AppTextStyles.heading3.copyWith(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (request.id.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'إيصال سداد #${request.id}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),

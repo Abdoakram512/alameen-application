@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/access_request.dart';
 import '../models/active_watch_session.dart';
 import '../models/assignment.dart';
 import '../models/assignment_submission.dart';
@@ -9,13 +8,11 @@ import '../repositories/student_assignments_repository.dart';
 import '../repositories/student_content_repository.dart';
 import '../repositories/student_courses_repository.dart';
 import '../repositories/student_profile_repository.dart';
-import '../repositories/student_requests_repository.dart';
 import '../repositories/student_watch_repository.dart';
 import '../repositories/impl/student_assignments_repository_impl.dart';
 import '../repositories/impl/student_content_repository_impl.dart';
 import '../repositories/impl/student_courses_repository_impl.dart';
 import '../repositories/impl/student_profile_repository_impl.dart';
-import '../repositories/impl/student_requests_repository_impl.dart';
 import '../repositories/impl/student_watch_repository_impl.dart';
 
 /// واجهة خفيفة موحدة (Facade Pattern) لتطبيق الطالب تُغلّف المستودعات المتخصصة الستة
@@ -28,7 +25,6 @@ class FirestoreService {
 
   final StudentCoursesRepository _coursesRepository;
   final StudentProfileRepository _profileRepository;
-  final StudentRequestsRepository _requestsRepository;
   final StudentAssignmentsRepository _assignmentsRepository;
   final StudentWatchRepository _watchRepository;
   final StudentContentRepository _contentRepository;
@@ -37,7 +33,6 @@ class FirestoreService {
       : _explicitFirestore = firestore,
         _coursesRepository = StudentCoursesRepositoryImpl(firestore: firestore),
         _profileRepository = StudentProfileRepositoryImpl(),
-        _requestsRepository = StudentRequestsRepositoryImpl(firestore: firestore),
         _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: firestore),
         _watchRepository = StudentWatchRepositoryImpl(firestore: firestore),
         _contentRepository = StudentContentRepositoryImpl();
@@ -46,14 +41,12 @@ class FirestoreService {
     FirebaseFirestore? firestore,
     StudentCoursesRepository? coursesRepository,
     StudentProfileRepository? profileRepository,
-    StudentRequestsRepository? requestsRepository,
     StudentAssignmentsRepository? assignmentsRepository,
     StudentWatchRepository? watchRepository,
     StudentContentRepository? contentRepository,
   })  : _explicitFirestore = firestore,
         _coursesRepository = coursesRepository ?? StudentCoursesRepositoryImpl(firestore: firestore),
         _profileRepository = profileRepository ?? StudentProfileRepositoryImpl(),
-        _requestsRepository = requestsRepository ?? StudentRequestsRepositoryImpl(firestore: firestore),
         _assignmentsRepository = assignmentsRepository ?? StudentAssignmentsRepositoryImpl(firestore: firestore),
         _watchRepository = watchRepository ?? StudentWatchRepositoryImpl(firestore: firestore),
         _contentRepository = contentRepository ?? StudentContentRepositoryImpl();
@@ -62,7 +55,6 @@ class FirestoreService {
       : _explicitFirestore = database,
         _coursesRepository = StudentCoursesRepositoryImpl(firestore: database),
         _profileRepository = StudentProfileRepositoryImpl(),
-        _requestsRepository = StudentRequestsRepositoryImpl(firestore: database),
         _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: database),
         _watchRepository = StudentWatchRepositoryImpl(firestore: database),
         _contentRepository = StudentContentRepositoryImpl();
@@ -81,7 +73,6 @@ class FirestoreService {
   // --- الوصول المباشر للمستودعات المتخصصة ---
   StudentCoursesRepository get coursesRepository => _coursesRepository;
   StudentProfileRepository get profileRepository => _profileRepository;
-  StudentRequestsRepository get requestsRepository => _requestsRepository;
   StudentAssignmentsRepository get assignmentsRepository => _assignmentsRepository;
   StudentWatchRepository get watchRepository => _watchRepository;
   StudentContentRepository get contentRepository => _contentRepository;
@@ -92,9 +83,6 @@ class FirestoreService {
 
   Future<List<Course>> getCourses({Source? source}) =>
       _coursesRepository.getCourses();
-
-  Stream<List<CourseAccessRequest>> streamStudentRequests(String studentId) =>
-      _requestsRepository.streamStudentRequests(studentId);
 
   Stream<List<Assignment>> streamCourseAssignments(String courseId) =>
       _assignmentsRepository.streamCourseAssignments(courseId);
@@ -121,12 +109,6 @@ class FirestoreService {
       );
 
   // --- عمليات التعديل والكتابة ---
-
-  Future<void> sendAccessRequest(CourseAccessRequest request) =>
-      _requestsRepository.sendAccessRequest(request);
-
-  Future<void> enrollInOpenCourse(String uid, String courseId) =>
-      _coursesRepository.enrollInOpenCourse(uid, courseId);
 
   Future<void> toggleLessonCompletion(
     String uid,
