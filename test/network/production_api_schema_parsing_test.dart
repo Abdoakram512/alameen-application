@@ -8,12 +8,12 @@ import 'package:secure_screen_app/models/student_dashboard_data.dart';
 void main() {
   group('P3 OpenAPI Schema Parsing and Media URL Resolution Tests', () {
     test('AppConfig resolves default production URL and origin correctly', () {
-      expect(AppConfig.apiBaseUrl, equals('https://alameen.edu.sa/api/v1'));
-      expect(AppConfig.baseOrigin, equals('https://alameen.edu.sa'));
+      expect(AppConfig.apiBaseUrl, equals('https://alameen-center.online/api/v1'));
+      expect(AppConfig.baseOrigin, equals('https://alameen-center.online'));
 
       // Relative path resolution
       final resolved = AppConfig.resolveMediaUrl('/assets/images/course-topic-basics.png');
-      expect(resolved, equals('https://alameen.edu.sa/assets/images/course-topic-basics.png'));
+      expect(resolved, equals('https://alameen-center.online/assets/images/course-topic-basics.png'));
 
       // Absolute path unchanged
       final absolute = AppConfig.resolveMediaUrl('https://cdn.example.com/images/thumb.jpg');
@@ -52,7 +52,7 @@ void main() {
       expect(course.validityDays, equals(365));
       expect(course.videosCount, equals(24));
       // Media URL must not be relative and must not contain localhost
-      expect(course.thumbnailUrl, equals('https://alameen.edu.sa/assets/images/course-topic-basics.png'));
+      expect(course.thumbnailUrl, equals('https://alameen-center.online/assets/images/course-topic-basics.png'));
       expect(course.thumbnailUrl, isNot(contains('localhost')));
       expect(course.thumbnailUrl, isNot(contains('127.0.0.1')));
     });
@@ -119,31 +119,31 @@ void main() {
         },
         'theme': {'primary_color': '#0F172A'},
         'features': {'certificates_enabled': true},
-        'contact': {'support_email': 'support@alameen.edu.sa'},
+        'contact': {'support_email': 'support@alameen-center.online'},
       };
 
       final bootstrap = BootstrapData.fromJson(bootstrapJson);
 
       expect(bootstrap.siteName, equals('أكاديمية الأمين للتخاطب السريري'));
       expect(bootstrap.currencySymbol, equals('ج.م'));
-      expect(bootstrap.logoUrl, equals('https://alameen.edu.sa/assets/branding/logo.png'));
+      expect(bootstrap.logoUrl, equals('https://alameen-center.online/assets/branding/logo.png'));
       expect(bootstrap.logoUrl, isNot(contains('localhost')));
     });
 
-    test('ContactInfoData correctly parses OpenAPI /public/contact response', () {
+    test('ContactInfoData correctly parses live /public/contact response with camelCase and snake_case', () {
       final contactJson = {
-        'email': 'info@alameen.edu.sa',
-        'phone': '+966500000000',
-        'whatsapp': '+966500000000',
-        'address': 'الرياض، المملكة العربية السعودية',
+        'contactEmail': 'hm2991479@gmail.com',
+        'contactPhone': '01005123784',
+        'whatsappUrl': 'https://wa.me/201005123784',
+        'contactAddress': 'القاهرة، جمهورية مصر العربية',
       };
 
       final contact = ContactInfoData.fromJson(contactJson);
 
-      expect(contact.email, equals('info@alameen.edu.sa'));
-      expect(contact.phone, equals('+966500000000'));
-      expect(contact.whatsapp, equals('+966500000000'));
-      expect(contact.address, contains('الرياض'));
+      expect(contact.email, equals('hm2991479@gmail.com'));
+      expect(contact.phone, equals('01005123784'));
+      expect(contact.whatsapp, equals('https://wa.me/201005123784'));
+      expect(contact.address, contains('القاهرة'));
     });
 
     test('StudentDashboardData correctly parses OpenAPI /student/dashboard response', () {

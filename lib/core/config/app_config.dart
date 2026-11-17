@@ -15,7 +15,7 @@ class AppConfig {
   // عنوان واجهة برمجة التطبيقات الأساسي (Laravel REST API)
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://alameen.edu.sa/api/v1',
+    defaultValue: 'https://alameen-center.online/api/v1',
   );
 
   /// الحصول على أصل النطاق بدون مسار /api/v1 (لحساب الروابط النسبية للوسائط والصور)
@@ -24,7 +24,7 @@ class AppConfig {
       final uri = Uri.parse(apiBaseUrl);
       return uri.origin;
     } catch (_) {
-      return 'https://alameen.edu.sa';
+      return 'https://alameen-center.online';
     }
   }
 
