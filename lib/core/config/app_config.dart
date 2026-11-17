@@ -12,6 +12,12 @@ class AppConfig {
   static const List<Locale> supportedLocales = [arabicLocale, englishLocale];
   static const Locale fallbackLocale = arabicLocale;
 
+  // عنوان واجهة برمجة التطبيقات الأساسي (Laravel REST API)
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000/api/v1',
+  );
+
   // مفتاح التوثيق لعميل الويب (OAuth Web Client ID) - مستخرج من إعدادات البيئة
   static const String googleServerClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',
