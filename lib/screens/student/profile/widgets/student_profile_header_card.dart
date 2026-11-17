@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -52,9 +50,6 @@ class StudentProfileHeaderCard extends StatelessWidget {
       );
       if (pickedFile == null || !context.mounted) return;
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -75,27 +70,19 @@ class StudentProfileHeaderCard extends StatelessWidget {
         ),
       );
 
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_pictures')
-          .child('${user.uid}.jpg');
-
-      final uploadTask = await storageRef.putFile(
-        File(pickedFile.path),
-        SettableMetadata(contentType: 'image/jpeg'),
+      await context.read<AuthCubit>().updateProfileInfo(
+        displayName: displayName,
+        phone: phone,
+        avatarFilePath: pickedFile.path,
       );
-      final downloadUrl = await uploadTask.ref.getDownloadURL();
 
       if (context.mounted) {
-        await context.read<AuthCubit>().updateProfilePhoto(downloadUrl);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تم تحديث صورتك الشخصية بنجاح!'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تحديث صورتك الشخصية بنجاح!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
     } catch (e) {
       if (context.mounted) {

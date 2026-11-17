@@ -6,7 +6,6 @@ import '../../models/course_level.dart';
 import '../../models/lesson.dart';
 import '../../repositories/impl/student_courses_repository_impl.dart';
 import '../../repositories/student_courses_repository.dart';
-import '../../services/firestore_service.dart';
 import 'courses_state.dart';
 
 class CoursesCubit extends Cubit<CoursesState> {
@@ -18,7 +17,7 @@ class CoursesCubit extends Cubit<CoursesState> {
 
   CoursesCubit({
     StudentCoursesRepository? coursesRepository,
-    FirestoreService? firestoreService,
+    dynamic firestoreService,
   })  : _coursesRepository = coursesRepository ??
             (sl.isRegistered<StudentCoursesRepository>()
                 ? sl<StudentCoursesRepository>()

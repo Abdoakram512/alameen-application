@@ -28,12 +28,16 @@ class AccessCubit extends Cubit<AccessState> {
         _storageService = storageService ?? StorageService(),
         super(AccessInitial());
 
+  /// تفريغ كاش الطلبات المخزنة في الذاكرة بالكامل عند تسجيل الخروج
+  static void clearCache() => _cachedRequests.clear();
+
   void clear() {
     _requestsSubscription?.cancel();
     _requestsSubscription = null;
     _statuses.clear();
     _requestsByCourse.clear();
     _initialSnapshotHandled = false;
+    _cachedRequests.clear();
     emit(AccessInitial());
   }
 

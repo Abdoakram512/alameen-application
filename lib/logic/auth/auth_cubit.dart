@@ -6,21 +6,19 @@ import '../../core/network/api_exceptions.dart';
 import '../../core/storage/course_local_cache.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_profile_repository.dart';
-import '../../services/firestore_service.dart';
+import '../access/access_cubit.dart';
 import 'auth_state.dart';
 
 class AuthCubit extends Cubit<AuthState> {
   final StudentAuthRepository _authRepository;
   final StudentProfileRepository? _profileRepository;
-  final FirestoreService? _firestoreService;
 
   AuthCubit({
     StudentAuthRepository? authRepository,
     StudentProfileRepository? profileRepository,
-    FirestoreService? firestoreService,
+    dynamic firestoreService,
   })  : _authRepository = authRepository ?? sl<StudentAuthRepository>(),
         _profileRepository = profileRepository,
-        _firestoreService = firestoreService,
         super(AuthInitial()) {
     restoreSession();
   }
@@ -241,6 +239,7 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> signOut() async {
     emit(Unauthenticated());
     try {
+      AccessCubit.clearCache();
       if (sl.isRegistered<CourseLocalCache>()) {
         await sl<CourseLocalCache>().clearAllUserCaches();
       }
@@ -262,7 +261,7 @@ class AuthCubit extends Cubit<AuthState> {
     final trimmedName = displayName.trim();
     final trimmedPhone = phone.trim();
 
-    // 1. Primary: REST API update
+    // Primary & Sole Remote Source: REST API update
     final profileRepo = _profileRepository ??
         (sl.isRegistered<StudentProfileRepository>()
             ? sl<StudentProfileRepository>()
@@ -277,16 +276,6 @@ class AuthCubit extends Cubit<AuthState> {
           bio: bio,
           locale: locale,
           avatarFilePath: avatarFilePath,
-        );
-      } catch (_) {}
-    }
-
-    if (_firestoreService != null) {
-      try {
-        await _firestoreService.updateStudentProfile(
-          uid: current.user.uid,
-          displayName: trimmedName,
-          phone: trimmedPhone,
         );
       } catch (_) {}
     }
@@ -306,15 +295,6 @@ class AuthCubit extends Cubit<AuthState> {
     final current = state;
     if (current is! Authenticated) return;
     final trimmedUrl = photoUrl.trim();
-
-    if (_firestoreService != null) {
-      try {
-        await _firestoreService.updateStudentPhoto(
-          uid: current.user.uid,
-          photoUrl: trimmedUrl,
-        );
-      } catch (_) {}
-    }
 
     emit(
       Authenticated(

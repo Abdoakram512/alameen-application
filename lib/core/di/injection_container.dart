@@ -129,7 +129,6 @@ Future<void> initDependencies() async {
       () => AuthCubit(
         authRepository: sl<StudentAuthRepository>(),
         profileRepository: sl<StudentProfileRepository>(),
-        firestoreService: sl<FirestoreService>(),
       ),
     );
   }
@@ -138,7 +137,6 @@ Future<void> initDependencies() async {
     sl.registerFactory<CoursesCubit>(
       () => CoursesCubit(
         coursesRepository: sl<StudentCoursesRepository>(),
-        firestoreService: sl<FirestoreService>(),
       ),
     );
   }
