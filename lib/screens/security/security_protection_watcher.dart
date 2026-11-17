@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:screen_protector/screen_protector.dart';
+import '../../core/di/injection_container.dart';
+import '../../core/network/api_client.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/screen_capture_shield_overlay.dart';
 
@@ -30,20 +32,22 @@ class SecurityProtectionWatcher extends StatefulWidget {
   final Widget child;
   final String? studentId;
   final String? studentEmail;
+  final ApiClient? apiClient;
 
   const SecurityProtectionWatcher({
     super.key,
     required this.child,
     this.studentId,
     this.studentEmail,
+    this.apiClient,
   });
 
   @override
   State<SecurityProtectionWatcher> createState() =>
-      _SecurityProtectionWatcherState();
+      SecurityProtectionWatcherState();
 }
 
-class _SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
+class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
     with WidgetsBindingObserver {
   final ValueNotifier<bool> _captureNotifier = ValueNotifier<bool>(false);
   bool _isRecordingDetected = false;
@@ -129,6 +133,27 @@ class _SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
 
     try {
       final platformName = mounted ? Theme.of(context).platform.name : 'unknown';
+
+      // 1. Primary: Report directly to Laravel REST API security violation endpoint
+      final client = widget.apiClient ??
+          (sl.isRegistered<ApiClient>() ? sl<ApiClient>() : null);
+      if (client != null) {
+        try {
+          await client.post(
+            '/student/security/violation',
+            data: {
+              'type': alertType,
+              'details': 'platform: $platformName, email: ${widget.studentEmail ?? ""}',
+            },
+          );
+          // Successfully reported to Laravel backend; return to prevent duplicate events.
+          return;
+        } catch (e) {
+          debugPrint('Security violation report to Laravel API non-fatal: $e');
+        }
+      }
+
+      // 2. Legacy fallback for unmigrated Firebase sessions
       await FirebaseFirestore.instance.collection('security_alerts').add({
         'userId': uid,
         'studentId': uid,
@@ -140,6 +165,10 @@ class _SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
       });
     } catch (_) {}
   }
+
+  @visibleForTesting
+  Future<void> reportSecurityViolationForTesting(String alertType) =>
+      _reportSecurityViolation(alertType);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

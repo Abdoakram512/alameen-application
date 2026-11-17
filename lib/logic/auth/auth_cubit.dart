@@ -85,6 +85,7 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
+        AccessCubit.clearCache();
         emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
@@ -169,6 +170,7 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
+        AccessCubit.clearCache();
         emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
@@ -321,6 +323,7 @@ class AuthCubit extends Cubit<AuthState> {
         } catch (_) {}
       }
 
+      AccessCubit.clearCache();
       if (sl.isRegistered<CourseLocalCache>()) {
         await sl<CourseLocalCache>().clearAllUserCaches();
       }

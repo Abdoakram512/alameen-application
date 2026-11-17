@@ -17,6 +17,7 @@ import 'package:secure_screen_app/models/course.dart';
 import 'package:secure_screen_app/models/user_profile.dart';
 import 'package:secure_screen_app/repositories/impl/student_content_repository_impl.dart';
 import 'package:secure_screen_app/repositories/impl/student_courses_repository_impl.dart';
+import 'package:secure_screen_app/core/network/api_client.dart';
 import 'package:secure_screen_app/repositories/student_auth_repository.dart';
 import 'package:secure_screen_app/repositories/student_content_repository.dart';
 import 'package:secure_screen_app/repositories/student_courses_repository.dart';
@@ -24,6 +25,9 @@ import 'package:secure_screen_app/repositories/student_profile_repository.dart';
 import 'package:secure_screen_app/screens/info/about_us_screen.dart';
 import 'package:secure_screen_app/screens/info/faqs_screen.dart';
 import 'package:secure_screen_app/screens/info/privacy_policy_screen.dart';
+import 'package:secure_screen_app/screens/security/security_protection_watcher.dart';
+
+class MockApiClient extends Mock implements ApiClient {}
 
 class MockStudentAuthRepository extends Mock implements StudentAuthRepository {}
 
@@ -313,6 +317,34 @@ void main() {
       expect(courses.first.slug, equals('speech-pathology'));
       verify(() => mockCache.getPublicCourses()).called(1);
     });
+
+    test('9. AuthCubit deleteAccount() clears AccessCubit static requests cache and local caches', () async {
+      final mockAuthRepo = MockStudentAuthRepository();
+      final mockProfileRepo = MockStudentProfileRepository();
+
+      when(() => mockAuthRepo.restoreSession()).thenAnswer((_) async => UserModel(
+        uid: 'user_404',
+        displayName: 'طالب مغادر',
+        email: 'leave@alameen.com',
+        photoUrl: '',
+        createdAt: DateTime.now(),
+      ));
+      when(() => mockProfileRepo.deleteStudentAccount('user_404', currentPassword: any(named: 'currentPassword'))).thenAnswer((_) async {});
+      when(() => mockAuthRepo.logout()).thenAnswer((_) async {});
+
+      final cubit = AuthCubit(
+        authRepository: mockAuthRepo,
+        profileRepository: mockProfileRepo,
+      );
+
+      await Future.delayed(Duration.zero);
+      expect(cubit.state, isA<Authenticated>());
+
+      await cubit.deleteAccount(password: 'secret');
+      expect(cubit.state, isA<Unauthenticated>());
+      verify(() => mockProfileRepo.deleteStudentAccount('user_404', currentPassword: 'secret')).called(1);
+      verify(() => mockAuthRepo.logout()).called(1);
+    });
   });
 
   group('P3 CMS Screen Widget Rendering without Firestore Tests', () {
@@ -393,6 +425,44 @@ void main() {
       expect(find.text('سياسة الخصوصية'), findsOneWidget);
       expect(find.text('سياسة الخصوصية وحماية البيانات'), findsOneWidget);
       expect(find.text('حماية تامة للبيانات وحقوق الملكية الفكرية.'), findsOneWidget);
+    });
+
+    testWidgets('SecurityProtectionWatcher routes violation to Laravel /student/security/violation for Laravel students', (tester) async {
+      final key = GlobalKey<SecurityProtectionWatcherState>();
+      final mockApiClient = MockApiClient();
+
+      when(() => mockApiClient.post(
+        '/student/security/violation',
+        data: any(named: 'data'),
+      )).thenAnswer((_) async => Response(
+        requestOptions: RequestOptions(path: '/student/security/violation'),
+        statusCode: 200,
+        data: {'success': true, 'logged': true},
+      ));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SecurityProtectionWatcher(
+            key: key,
+            studentId: '101',
+            studentEmail: 'laravel_student@alameen.com',
+            apiClient: mockApiClient,
+            child: const Scaffold(body: Text('محتوى محمي')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('محتوى محمي'), findsOneWidget);
+
+      await key.currentState?.reportSecurityViolationForTesting('screenshot_attempt');
+
+      verify(() => mockApiClient.post(
+        '/student/security/violation',
+        data: any(named: 'data', that: isA<Map<String, dynamic>>()
+            .having((m) => m['type'], 'type', 'screenshot_attempt')
+            .having((m) => m['details'], 'details', contains('laravel_student@alameen.com'))),
+      )).called(1);
     });
   });
 }
