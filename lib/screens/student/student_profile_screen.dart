@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -437,6 +438,45 @@ class StudentProfileScreen extends StatelessWidget {
                                   );
                                 },
                               ),
+                              if (kDebugMode) ...[
+                                const Divider(
+                                  height: 1,
+                                  color: AppColors.divider,
+                                  indent: 56,
+                                ),
+                                ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryLight,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      PhosphorIconsRegular.terminalWindow,
+                                      size: 18,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  title: const Text(
+                                    'أداة فحص تكامل الـ API (Debug)',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'فحص مسارات Laravel API الموثقة بالجلسة الحية',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                  trailing: Icon(
+                                    AppDirectionalIcons.chevronDetail(context),
+                                    size: 16,
+                                    color: AppColors.primary,
+                                  ),
+                                  onTap: () => context.push('/debug-api-test'),
+                                ),
+                              ],
                             ],
                           ),
                         ),

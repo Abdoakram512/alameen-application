@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -10,6 +11,7 @@ import '../logic/auth/auth_cubit.dart';
 import '../logic/auth/auth_state.dart';
 import '../screens/auth/student_login_screen.dart';
 import '../screens/auth/student_register_screen.dart';
+import '../screens/debug/debug_api_test_screen.dart';
 import '../screens/info/about_us_screen.dart';
 import '../screens/info/faqs_screen.dart';
 import '../screens/info/privacy_policy_screen.dart';
@@ -82,6 +84,11 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
         path: '/faqs',
         builder: (context, state) => const FaqsScreen(),
       ),
+      if (kDebugMode)
+        GoRoute(
+          path: '/debug-api-test',
+          builder: (context, state) => const DebugApiTestScreen(),
+        ),
       GoRoute(
         path: '/',
         builder: (context, state) => const StudentMainNavigationScaffold(),
