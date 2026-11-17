@@ -15,8 +15,33 @@ class AppConfig {
   // عنوان واجهة برمجة التطبيقات الأساسي (Laravel REST API)
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000/api/v1',
+    defaultValue: 'https://alameen.edu.sa/api/v1',
   );
+
+  /// الحصول على أصل النطاق بدون مسار /api/v1 (لحساب الروابط النسبية للوسائط والصور)
+  static String get baseOrigin {
+    try {
+      final uri = Uri.parse(apiBaseUrl);
+      return uri.origin;
+    } catch (_) {
+      return 'https://alameen.edu.sa';
+    }
+  }
+
+  /// معالجة وتدقيق مسار الوسائط والصور لمنع الروابط النسبية أو المكسورة
+  static String resolveMediaUrl(String? path) {
+    if (path == null) return '';
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return '';
+    if (trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://') ||
+        trimmed.startsWith('data:') ||
+        trimmed.startsWith('blob:')) {
+      return trimmed;
+    }
+    final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return '$baseOrigin$cleanPath';
+  }
 
   // مفتاح التوثيق لعميل الويب (OAuth Web Client ID) - مستخرج من إعدادات البيئة
   static const String googleServerClientId = String.fromEnvironment(

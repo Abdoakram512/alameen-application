@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import '../config/app_config.dart';
 import '../../services/storage_service.dart';
 
 class AppCachedImage extends StatelessWidget {
@@ -61,8 +62,9 @@ class AppCachedImage extends StatelessWidget {
         );
       }
     } else {
+      final resolvedUrl = AppConfig.resolveMediaUrl(trimmed);
       image = CachedNetworkImage(
-        imageUrl: trimmed,
+        imageUrl: resolvedUrl,
         width: width,
         height: height,
         fit: fit,

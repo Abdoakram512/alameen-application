@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../core/config/app_config.dart';
 
 class BootstrapData extends Equatable {
   final String siteName;
@@ -31,7 +32,7 @@ class BootstrapData extends Equatable {
     return BootstrapData(
       siteName: branding['site_name']?.toString() ?? 'أكاديمية الأمين للتخاطب السريري',
       siteTagline: branding['site_tagline']?.toString() ?? '',
-      logoUrl: branding['logo_url']?.toString(),
+      logoUrl: AppConfig.resolveMediaUrl(branding['logo_url']?.toString()),
       currencySymbol: currency['symbol']?.toString() ?? 'ج.م',
       currencyName: currency['name']?.toString() ?? 'جنيه مصري',
       theme: Map<String, dynamic>.from(themeMap),

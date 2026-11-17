@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../core/config/app_config.dart';
 import '../core/converters/firestore_date_time_converter.dart';
 import 'course_access_mode.dart';
 import 'course_level.dart';
@@ -103,7 +104,7 @@ class Course extends Equatable {
     final accessDurationDays = (json['access_duration_days'] is num)
         ? (json['access_duration_days'] as num).toInt()
         : 365;
-    final thumbnail = json['thumbnail']?.toString() ?? '';
+    final thumbnail = AppConfig.resolveMediaUrl(json['thumbnail']?.toString());
     final videosCount = (json['videos_count'] is num)
         ? (json['videos_count'] as num).toInt()
         : null;
