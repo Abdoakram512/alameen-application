@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/painters/dashed_border_painter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -33,33 +34,42 @@ class RequestAccessSheet extends StatefulWidget {
 
 class _RequestAccessSheetState extends State<RequestAccessSheet> {
   final _formKey = GlobalKey<FormState>();
-  String _selectedMethod = 'فودافون كاش (Vodafone Cash)';
-  final _refController = TextEditingController();
+  late String _selectedMethod;
+  late final TextEditingController _nameController;
+  late final TextEditingController _accountController;
+  late final TextEditingController _amountController;
+  late final TextEditingController _refController;
   File? _pickedReceiptFile;
   bool _isSubmitting = false;
 
   static const _paymentMethods = [
-    'طلب انضمام مباشر (بدون إيصال / موافقة الإدارة)',
-    'فودافون كاش (Vodafone Cash)',
-    'أورنج كاش (Orange Cash)',
-    'اتصالات كاش (Etisalat Cash)',
-    'وي باي (WE Pay)',
+    'فودافون كاش ومحافظ المحمول (Vodafone Cash)',
     'إنستاباي (InstaPay)',
-    'تحويل بنكي مباشر',
-    'سداد نقدي بمقر المركز',
+    'سداد نقدي بمقر سنتر الأمين',
   ];
 
-  bool get _isDirectRequest => _selectedMethod.startsWith('طلب انضمام مباشر');
-  bool get _isCashAtCenter => _selectedMethod == 'سداد نقدي بمقر المركز';
+  bool get _isCashAtCenter => _selectedMethod.startsWith('سداد نقدي');
+  bool get _isInstaPay => _selectedMethod.contains('InstaPay');
 
   @override
   void initState() {
     super.initState();
     _selectedMethod = _paymentMethods.first;
+    _nameController = TextEditingController(text: widget.user.displayName);
+    _accountController = TextEditingController(text: widget.user.phone);
+    _amountController = TextEditingController(
+      text: widget.course.price > 0
+          ? widget.course.price.toStringAsFixed(widget.course.price.truncateToDouble() == widget.course.price ? 0 : 2)
+          : '100',
+    );
+    _refController = TextEditingController();
   }
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _accountController.dispose();
+    _amountController.dispose();
     _refController.dispose();
     super.dispose();
   }
@@ -69,62 +79,63 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 55,
-      maxWidth: 720,
-      maxHeight: 960,
+      imageQuality: 65,
+      maxWidth: 1200,
+      maxHeight: 1600,
     );
     if (image != null && mounted) {
       setState(() => _pickedReceiptFile = File(image.path));
     }
   }
 
-  void _submitDirectRequest() {
-    HapticFeedback.mediumImpact();
-    if (_isSubmitting) return;
-
-    final rawRef = _refController.text.trim();
-    setState(() => _isSubmitting = true);
-
-    context.read<AccessCubit>().sendRequest(
-          course: widget.course,
-          user: widget.user,
-          paymentMethod: 'طلب انضمام مباشر (موافقة الإدارة)',
-          senderNumberOrRef: rawRef.isNotEmpty
-              ? rawRef
-              : (widget.user.phone.isNotEmpty
-                  ? widget.user.phone
-                  : 'طلب مباشر عبر التطبيق'),
-          receiptFile: null,
-        );
-  }
-
   void _submit() {
-    if (_isDirectRequest) {
-      _submitDirectRequest();
+    if (_isCashAtCenter) {
+      AppConstants.launchWhatsApp(
+        customMessage:
+            'السلام عليكم، أود سداد رسوم دورة "${widget.course.title}" بمقر السنتر لحساب الطالب ${widget.user.displayName}.',
+      );
+      Navigator.pop(context);
+      return;
+    }
+
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) return;
+
+    if (_pickedReceiptFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى إرفاق صورة إيصال السداد أو لقطة شاشة للتحويل.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
     HapticFeedback.mediumImpact();
-    if (_isSubmitting) return;
-
-    if (!_isCashAtCenter) {
-      final isValid = _formKey.currentState?.validate() ?? false;
-      if (!isValid) return;
-    }
-
-    final rawRef = _refController.text.trim();
-    final normalizedRef = AppValidators.normalizeDigits(rawRef);
-
     setState(() => _isSubmitting = true);
 
-    context.read<AccessCubit>().sendRequest(
-          course: widget.course,
-          user: widget.user,
-          paymentMethod: _selectedMethod,
-          senderNumberOrRef: normalizedRef.isNotEmpty
-              ? normalizedRef
-              : (_isCashAtCenter ? 'مراجعة خزينة المركز' : 'طلب بدون إيصال'),
-          receiptFile: _pickedReceiptFile,
+    final normalizedAmount = double.tryParse(
+          AppValidators.normalizeDigits(_amountController.text.trim()),
+        ) ??
+        widget.course.price;
+
+    final courseSlug = (widget.course.slug != null && widget.course.slug!.trim().isNotEmpty)
+        ? widget.course.slug!
+        : widget.course.id;
+
+    context.read<AccessCubit>().submitCourseReceipt(
+          courseSlug: courseSlug,
+          courseId: widget.course.id,
+          courseTitle: widget.course.title,
+          paymentMethod: _isInstaPay ? 'instapay' : 'vodafone_cash',
+          senderName: _nameController.text.trim(),
+          senderAccount: AppValidators.normalizeDigits(_accountController.text.trim()),
+          amount: normalizedAmount,
+          receiptFilePath: _pickedReceiptFile!.path,
+          transactionReference: _refController.text.trim().isNotEmpty
+              ? _refController.text.trim()
+              : null,
         );
   }
 
@@ -193,8 +204,8 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                             child: Text(
                               widget.isResubmission
                                   ? (context.locale.languageCode == 'ar'
-                                      ? 'إعادة إرسال طلب التفعيل'
-                                      : 'Resubmit Enrollment Request')
+                                      ? 'إعادة إرسال إيصال السداد'
+                                      : 'Resubmit Payment Receipt')
                                   : 'requests.sheet_title'.tr(),
                               style: AppTextStyles.heading3.copyWith(
                                 fontWeight: FontWeight.w800,
@@ -209,6 +220,7 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      // Course details card
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
@@ -261,9 +273,39 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 12),
+                      // Level purchase notice banner
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.royalNavy.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.royalNavy.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              PhosphorIconsRegular.info,
+                              color: AppColors.royalNavy,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'الاشتراك يشمل كامل مستويات الدورة التدريبية. شراء المستويات الفردية قيد التجهيز مع إدارة المركز.',
+                                style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.royalNavy,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       Text(
-                        'وسيلة السداد',
+                        'وسيلة السداد المعتمدة',
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w700,
@@ -295,81 +337,192 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                 }
                               },
                       ),
-                      if (_isDirectRequest) ...[
+                      const SizedBox(height: 16),
+
+                      if (_isCashAtCenter) ...[
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: AppColors.successLight.withValues(alpha: 0.5),
+                            color: AppColors.warningLight.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.successBorder),
+                            border: Border.all(color: AppColors.warningBorder),
                           ),
-                          child: Row(
-                            children: const [
-                              Icon(
-                                PhosphorIconsRegular.checkCircle,
-                                color: AppColors.success,
-                                size: 22,
-                              ),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'طلب مباشر بدون إيصال: سيصل طلبك فورياً لإدارة سنتر الأمين لتفعيله لك مباشرة دون الحاجة لرفع أي إيصالات.',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 12.5,
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w600,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(
+                                    PhosphorIconsRegular.mapPin,
+                                    color: AppColors.warningDark,
+                                    size: 20,
                                   ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'السداد النقدي بمقر المركز',
+                                    style: TextStyle(
+                                      color: AppColors.warningDark,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'يمكنك زيارة مقر سنتر الأمين للتخاطب والسداد نقداً في الخزينة، وسيتم تفعيل الدورة التدريبية لحسابك فوراً من قبل الإدارة.',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF25D366),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  icon: const Icon(PhosphorIconsRegular.whatsappLogo, size: 18),
+                                  label: const Text('تواصل معنا عبر واتساب للتنسيق'),
+                                  onPressed: () {
+                                    AppConstants.launchWhatsApp(
+                                      customMessage:
+                                          'السلام عليكم، أرغب في الحضور لمقر المركز لسداد رسوم دورة "${widget.course.title}".',
+                                    );
+                                  },
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                      ],
-                      Text(
-                        _isDirectRequest
-                            ? 'رقم الهاتف للتواصل أو ملاحظة للمركز (اختياري)'
-                            : (_isCashAtCenter
-                                ? 'اسم السداد أو ملاحظة المقر (اختياري)'
-                                : 'رقم المحفظة المحوّل منها أو الرقم المرجعي'),
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _refController,
-                        enabled: !_isSubmitting,
-                        keyboardType: _isCashAtCenter || _isDirectRequest ? TextInputType.text : TextInputType.phone,
-                        validator: (value) {
-                          if (_isDirectRequest || _isCashAtCenter) return null;
-                          if (_pickedReceiptFile != null && (value == null || value.trim().isEmpty)) {
-                            // If receipt is attached, ref is optional
-                            return null;
-                          }
-                          return AppValidators.validatePaymentIdentifier(value, _selectedMethod);
-                        },
-                        decoration: InputDecoration(
-                          hintText: _isDirectRequest
-                              ? (widget.user.phone.isNotEmpty ? widget.user.phone : 'مثال: 010XXXXXXXX أو اكتب ملاحظة للإدارة')
-                              : (_isCashAtCenter
-                                  ? 'مثال: تم السداد بفرع المركز أو رقم الإيصال الورقي'
-                                  : 'مثال: 010XXXXXXXX أو اسم المستخدم بإنستاباي'),
-                          prefixIcon: const Icon(
-                            PhosphorIconsRegular.hash,
-                            size: 19,
+                      ] else ...[
+                        // Sender Name Field
+                        Text(
+                          'اسم المحوّل / صاحب الحساب',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                      if (!_isDirectRequest) ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _nameController,
+                          enabled: !_isSubmitting,
+                          keyboardType: TextInputType.name,
+                          validator: (value) => AppValidators.validateRequired(value, 'اسم صاحب الحساب المحول منه'),
+                          decoration: const InputDecoration(
+                            hintText: 'مثال: أحمد محمد علي',
+                            prefixIcon: Icon(
+                              PhosphorIconsRegular.user,
+                              size: 19,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Sender Account / Identifier Field
+                        Text(
+                          _isInstaPay
+                              ? 'عنوان الدفع اللحظي (IPA) أو رقم الهاتف بإنستاباي'
+                              : 'رقم محفظة فودافون كاش المحول منها',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _accountController,
+                          enabled: !_isSubmitting,
+                          keyboardType: _isInstaPay ? TextInputType.text : TextInputType.phone,
+                          validator: (value) {
+                            return AppValidators.validatePaymentIdentifier(value, _selectedMethod);
+                          },
+                          decoration: InputDecoration(
+                            hintText: _isInstaPay ? 'مثال: username@instapay أو 010XXXXXXXX' : 'مثال: 010XXXXXXXX',
+                            prefixIcon: const Icon(
+                              PhosphorIconsRegular.deviceMobile,
+                              size: 19,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Amount & Transaction Reference Row
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'المبلغ المدفوع (ج.م)',
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _amountController,
+                                    enabled: !_isSubmitting,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    validator: (value) => AppValidators.validateNumber(value, 'المبلغ المدفوع', 1),
+                                    decoration: const InputDecoration(
+                                      prefixIcon: Icon(
+                                        PhosphorIconsRegular.currencyDollar,
+                                        size: 19,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 6,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'رقم العملية (اختياري)',
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _refController,
+                                    enabled: !_isSubmitting,
+                                    keyboardType: TextInputType.text,
+                                    decoration: const InputDecoration(
+                                      hintText: 'المرجع أو Ref',
+                                      prefixIcon: Icon(
+                                        PhosphorIconsRegular.hash,
+                                        size: 19,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 18),
+
+                        // Receipt Image Upload
                         Row(
                           children: [
                             Text(
-                              'صورة إيصال السداد',
+                              'صورة إيصال السداد أو لقطة الشاشة',
                               style: AppTextStyles.bodyMedium.copyWith(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w700,
@@ -382,16 +535,15 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.scaffoldBackground,
+                                color: AppColors.primaryLight,
                                 borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: AppColors.borderHairline),
                               ),
-                              child: Text(
-                                'اختياري مع الرقم',
-                                style: AppTextStyles.caption.copyWith(
+                              child: const Text(
+                                'مطلوب',
+                                style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
                                 ),
                               ),
                             ),
@@ -405,7 +557,7 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                 borderRadius: BorderRadius.circular(14),
                                 child: Image.file(
                                   _pickedReceiptFile!,
-                                  height: 148,
+                                  height: 160,
                                   width: double.infinity,
                                   fit: BoxFit.cover,
                                 ),
@@ -446,39 +598,39 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                               child: Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 18,
+                                  vertical: 20,
                                   horizontal: 16,
                                 ),
                                 child: Row(
                                   children: [
                                     Container(
-                                      width: 42,
-                                      height: 42,
+                                      width: 44,
+                                      height: 44,
                                       decoration: BoxDecoration(
                                         color: AppColors.primaryLight,
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Icon(
                                         PhosphorIconsRegular.cloudArrowUp,
-                                        size: 22,
+                                        size: 24,
                                         color: AppColors.primary,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 14),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'إرفاق صورة الإيصال (اختياري)',
+                                            'اضغط لإرفاق صورة إيصال التحويل',
                                             style: AppTextStyles.bodyMedium.copyWith(
                                               color: AppColors.primary,
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
+                                          const SizedBox(height: 3),
                                           Text(
-                                            'يمكنك إرفاق لقطة شاشة للتحويل البنكي أو رسالة المحفظة لتسريع اعتماد الطلب',
+                                            'لقطة شاشة للتحويل من تطبيق إنستاباي أو رسالة المحفظة (JPG, PNG, WEBP حتى 5 ميجابايت)',
                                             style: AppTextStyles.caption.copyWith(
                                               fontSize: 11.5,
                                             ),
@@ -492,7 +644,9 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                             ),
                           ),
                       ],
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 24),
+
+                      // Submit Button
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -510,18 +664,20 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                               : Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(
-                                      PhosphorIconsRegular.paperPlaneTilt,
+                                    Icon(
+                                      _isCashAtCenter
+                                          ? PhosphorIconsRegular.whatsappLogo
+                                          : PhosphorIconsRegular.paperPlaneTilt,
                                       size: 18,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
                                       widget.isResubmission
                                           ? (context.locale.languageCode == 'ar'
-                                              ? 'إعادة إرسال الطلب للمراجعة'
-                                              : 'Resubmit for Review')
-                                          : (_isDirectRequest
-                                              ? 'إرسال طلب الانضمام المباشر للأدمن'
+                                              ? 'إعادة إرسال الإيصال للمراجعة'
+                                              : 'Resubmit Receipt for Review')
+                                          : (_isCashAtCenter
+                                              ? 'تواصل لتأكيد السداد بالمقر'
                                               : 'requests.submit_btn'.tr()),
                                     ),
                                   ],

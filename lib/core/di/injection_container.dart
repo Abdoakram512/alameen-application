@@ -6,16 +6,19 @@ import '../storage/course_local_cache.dart';
 import '../storage/secure_token_storage.dart';
 import '../../datasources/auth_remote_data_source.dart';
 import '../../datasources/courses_remote_data_source.dart';
+import '../../datasources/payment_remote_data_source.dart';
 import '../../logic/access/access_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/courses/courses_cubit.dart';
 import '../../repositories/impl/student_content_repository_impl.dart';
 import '../../repositories/impl/student_courses_repository_impl.dart';
+import '../../repositories/impl/student_payment_repository_impl.dart';
 import '../../repositories/impl/student_profile_repository_impl.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_content_repository.dart';
 import '../../repositories/student_courses_repository.dart';
 import '../../repositories/student_learning_repository.dart';
+import '../../repositories/student_payment_repository.dart';
 import '../../repositories/student_profile_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
@@ -62,6 +65,13 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<CoursesRemoteDataSource>()) {
     sl.registerLazySingleton<CoursesRemoteDataSource>(
       () => CoursesRemoteDataSourceImpl(
+        apiClient: sl<ApiClient>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<PaymentRemoteDataSource>()) {
+    sl.registerLazySingleton<PaymentRemoteDataSource>(
+      () => PaymentRemoteDataSourceImpl(
         apiClient: sl<ApiClient>(),
       ),
     );
@@ -122,6 +132,13 @@ Future<void> initDependencies() async {
       ),
     );
   }
+  if (!sl.isRegistered<StudentPaymentRepository>()) {
+    sl.registerLazySingleton<StudentPaymentRepository>(
+      () => StudentPaymentRepositoryImpl(
+        remoteDataSource: sl<PaymentRemoteDataSource>(),
+      ),
+    );
+  }
 
   // 4. Cubits
   if (!sl.isRegistered<AuthCubit>()) {
@@ -144,8 +161,7 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<AccessCubit>()) {
     sl.registerFactory<AccessCubit>(
       () => AccessCubit(
-        firestoreService: sl<FirestoreService>(),
-        storageService: sl<StorageService>(),
+        paymentRepository: sl<StudentPaymentRepository>(),
       ),
     );
   }
