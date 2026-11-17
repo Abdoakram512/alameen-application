@@ -3,11 +3,18 @@ import 'package:equatable/equatable.dart';
 
 class UserModel extends Equatable {
   final String uid;
+  final int? id;
   final String displayName;
   final String email;
   final String photoUrl;
   final String phone;
   final String role;
+  final String status;
+  final String? country;
+  final String? city;
+  final String? address;
+  final String? locale;
+  final bool emailVerified;
   final List<String> enrolledCourseIds;
   final List<String> fullCourseEntitlements;
   final List<String> levelEntitlements;
@@ -22,11 +29,18 @@ class UserModel extends Equatable {
 
   const UserModel({
     required this.uid,
+    this.id,
     required this.displayName,
     required this.email,
     required this.photoUrl,
     this.phone = '',
     this.role = 'student',
+    this.status = 'active',
+    this.country,
+    this.city,
+    this.address,
+    this.locale,
+    this.emailVerified = true,
     this.enrolledCourseIds = const [],
     this.fullCourseEntitlements = const [],
     this.levelEntitlements = const [],
@@ -39,6 +53,9 @@ class UserModel extends Equatable {
     this.suspensionReason,
     this.courseExpiryDates = const {},
   });
+
+  bool get isPending => status.toLowerCase() == 'pending';
+  bool get isSuspendedAccount => isSuspended || status.toLowerCase() == 'suspended';
 
   bool isLevelUnlocked(String courseId, String levelId) {
     if (fullCourseEntitlements.contains(courseId)) return true;
@@ -81,11 +98,18 @@ class UserModel extends Equatable {
 
   Map<String, dynamic> toMap() => {
         'uid': uid,
+        'id': id,
         'displayName': displayName,
         'email': email,
         'photoUrl': photoUrl,
         'phone': phone,
         'role': role,
+        'status': status,
+        'country': country,
+        'city': city,
+        'address': address,
+        'locale': locale,
+        'emailVerified': emailVerified,
         'enrolledCourseIds': enrolledCourseIds,
         'fullCourseEntitlements': fullCourseEntitlements,
         'levelEntitlements': levelEntitlements,
@@ -98,6 +122,40 @@ class UserModel extends Equatable {
         'suspensionReason': suspensionReason,
         'courseExpiryDates': courseExpiryDates.map((k, v) => MapEntry(k, v.toIso8601String())),
       };
+
+  factory UserModel.fromLaravelJson(Map<String, dynamic> json) {
+    final dynamic idVal = json['id'];
+    final int? numericId = idVal is int ? idVal : int.tryParse(idVal?.toString() ?? '');
+    final String resolvedUid = (numericId != null) ? numericId.toString() : (json['uid']?.toString() ?? '');
+
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime.now();
+      if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+      return DateTime.now();
+    }
+
+    final String statusStr = (json['status']?.toString() ?? 'active').toLowerCase();
+    final bool suspended = statusStr == 'suspended' || json['is_suspended'] == true;
+
+    return UserModel(
+      uid: resolvedUid,
+      id: numericId,
+      displayName: json['name']?.toString() ?? json['displayName']?.toString() ?? 'طالب الأمين سنتر',
+      email: json['email']?.toString() ?? '',
+      photoUrl: json['avatar_url']?.toString() ?? json['avatarUrl']?.toString() ?? json['photoUrl']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'student',
+      status: statusStr,
+      country: json['country']?.toString(),
+      city: json['city']?.toString(),
+      address: json['address']?.toString(),
+      locale: json['locale']?.toString() ?? 'ar',
+      emailVerified: json['email_verified'] == true || json['email_verified_at'] != null,
+      createdAt: parseDate(json['created_at']),
+      isSuspended: suspended,
+      suspensionReason: json['suspension_reason']?.toString(),
+    );
+  }
 
   factory UserModel.fromMap(Map<String, dynamic> map, {String? uid}) {
     DateTime? parseNullableDate(dynamic val) {
@@ -114,13 +172,23 @@ class UserModel extends Equatable {
       if (parsed != null) expiryDates[k] = parsed;
     });
 
+    final dynamic idVal = map['id'];
+    final int? numericId = idVal is int ? idVal : int.tryParse(idVal?.toString() ?? '');
+
     return UserModel(
-      uid: uid ?? map['uid'] ?? '',
+      uid: uid ?? map['uid'] ?? numericId?.toString() ?? '',
+      id: numericId,
       displayName: map['displayName'] ?? map['name'] ?? 'طالب الأمين سنتر',
       email: map['email'] ?? '',
-      photoUrl: map['photoUrl'] ?? map['avatarUrl'] ?? '',
+      photoUrl: map['photoUrl'] ?? map['avatarUrl'] ?? map['avatar_url'] ?? '',
       phone: map['phone'] ?? '',
       role: map['role'] ?? 'student',
+      status: (map['status']?.toString() ?? 'active').toLowerCase(),
+      country: map['country']?.toString(),
+      city: map['city']?.toString(),
+      address: map['address']?.toString(),
+      locale: map['locale']?.toString() ?? 'ar',
+      emailVerified: map['emailVerified'] == true || map['email_verified'] == true,
       enrolledCourseIds: List<String>.from(map['enrolledCourseIds'] ?? []),
       fullCourseEntitlements: List<String>.from(map['fullCourseEntitlements'] ?? []),
       levelEntitlements: List<String>.from(map['levelEntitlements'] ?? []),
@@ -133,7 +201,7 @@ class UserModel extends Equatable {
           ? (map['createdAt'] is Timestamp ? (map['createdAt'] as Timestamp).toDate() : DateTime.tryParse(map['createdAt'].toString())) ?? DateTime.now()
           : DateTime.now(),
       lastActiveAt: parseNullableDate(map['lastActiveAt']),
-      isSuspended: map['isSuspended'] as bool? ?? false,
+      isSuspended: (map['isSuspended'] as bool? ?? false) || (map['status'] == 'suspended'),
       suspensionReason: map['suspensionReason'] as String?,
       courseExpiryDates: expiryDates,
     );
@@ -141,11 +209,18 @@ class UserModel extends Equatable {
 
   UserModel copyWith({
     String? uid,
+    int? id,
     String? displayName,
     String? email,
     String? photoUrl,
     String? phone,
     String? role,
+    String? status,
+    String? country,
+    String? city,
+    String? address,
+    String? locale,
+    bool? emailVerified,
     List<String>? enrolledCourseIds,
     List<String>? fullCourseEntitlements,
     List<String>? levelEntitlements,
@@ -160,11 +235,18 @@ class UserModel extends Equatable {
   }) {
     return UserModel(
       uid: uid ?? this.uid,
+      id: id ?? this.id,
       displayName: displayName ?? this.displayName,
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
       phone: phone ?? this.phone,
       role: role ?? this.role,
+      status: status ?? this.status,
+      country: country ?? this.country,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      locale: locale ?? this.locale,
+      emailVerified: emailVerified ?? this.emailVerified,
       enrolledCourseIds: enrolledCourseIds ?? List.from(this.enrolledCourseIds),
       fullCourseEntitlements: fullCourseEntitlements ?? List.from(this.fullCourseEntitlements),
       levelEntitlements: levelEntitlements ?? List.from(this.levelEntitlements),
@@ -182,11 +264,18 @@ class UserModel extends Equatable {
   @override
   List<Object?> get props => [
         uid,
+        id,
         displayName,
         email,
         photoUrl,
         phone,
         role,
+        status,
+        country,
+        city,
+        address,
+        locale,
+        emailVerified,
         enrolledCourseIds,
         fullCourseEntitlements,
         levelEntitlements,

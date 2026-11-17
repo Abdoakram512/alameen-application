@@ -60,6 +60,19 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
             title: 'dialogs.error_title'.tr(),
             message: state.message,
           );
+        } else if (state is AuthPendingApproval) {
+          AppDialogs.showSuccess(
+            context,
+            title: 'الحساب قيد المراجعة',
+            message: state.message,
+            buttonText: 'حسناً',
+          );
+        } else if (state is AuthSuspended) {
+          AppDialogs.showError(
+            context,
+            title: 'الحساب معطل',
+            message: state.message,
+          );
         }
       },
       builder: (context, state) {
@@ -155,13 +168,14 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                                     await context
                                         .read<AuthCubit>()
                                         .sendPasswordReset(email);
-                                    if (context.mounted) {
-                                      AppDialogs.showSuccess(
-                                        context,
-                                        title: 'dialogs.reset_link_sent_title'.tr(),
-                                        message: 'dialogs.reset_link_sent_desc'.tr(),
-                                      );
-                                    }
+                                  },
+                                  onReset: (email, otp, password, confirmPassword) async {
+                                    await context.read<AuthCubit>().resetPasswordWithOtp(
+                                          email: email,
+                                          otp: otp,
+                                          password: password,
+                                          passwordConfirmation: confirmPassword,
+                                        );
                                   },
                                 );
                               },

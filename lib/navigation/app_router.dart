@@ -29,8 +29,8 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
     refreshListenable: GoRouterRefreshStream(authCubit.stream),
     redirect: (context, state) {
       final authState = authCubit.state;
-      final isSuspended =
-          authState is Authenticated && authState.user.isSuspended;
+      final isSuspended = (authState is Authenticated && authState.user.isSuspendedAccount) ||
+          (authState is AuthSuspended);
 
       if (isSuspended) {
         if (state.uri.path == '/suspended') return null;
@@ -38,6 +38,12 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
       }
       if (state.uri.path == '/suspended' && !isSuspended) {
         return '/';
+      }
+
+      final isPending = authState is AuthPendingApproval;
+      if (isPending) {
+        if (state.uri.path == '/login' || state.uri.path == '/register') return null;
+        return '/login';
       }
 
       return policy.redirect(

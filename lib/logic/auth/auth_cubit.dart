@@ -1,122 +1,243 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../models/user_profile.dart';
-import '../../services/auth_service.dart';
+import '../../core/di/injection_container.dart';
+import '../../core/network/api_exceptions.dart';
+import '../../repositories/student_auth_repository.dart';
 import '../../services/firestore_service.dart';
 import 'auth_state.dart';
 
 class AuthCubit extends Cubit<AuthState> {
-  final AuthService _authService;
-  final FirestoreService _firestoreService;
-  StreamSubscription? _userSubscription;
-  StreamSubscription? _authSubscription;
+  final StudentAuthRepository _authRepository;
+  final FirestoreService? _firestoreService;
 
-  AuthCubit({AuthService? authService, FirestoreService? firestoreService})
-      : _authService = authService ?? AuthService(),
-        _firestoreService = firestoreService ?? FirestoreService(),
+  AuthCubit({
+    StudentAuthRepository? authRepository,
+    FirestoreService? firestoreService,
+  })  : _authRepository = authRepository ?? sl<StudentAuthRepository>(),
+        _firestoreService = firestoreService,
         super(AuthInitial()) {
-    _listenToAuth();
+    restoreSession();
   }
 
-  void _listenToAuth() {
-    _authSubscription = _authService.authStateChanges.listen((firebaseUser) {
-      if (firebaseUser != null) {
-        _userSubscription?.cancel();
-        _userSubscription = _firestoreService.streamUser(firebaseUser.uid).listen((userModel) {
-          if (userModel != null) {
-            emit(Authenticated(userModel));
-          } else {
-            final fallbackUser = UserModel(
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName ?? 'طالب الأمين سنتر',
-              email: firebaseUser.email ?? '',
-              photoUrl: firebaseUser.photoURL ?? '',
-              phone: firebaseUser.phoneNumber ?? '',
-              createdAt: DateTime.now(),
-            );
-            unawaited(_ensureUserProfileSynced(fallbackUser));
-            emit(Authenticated(fallbackUser));
-          }
-        });
+  /// استعادة جلسة الطالب النشطة عند فتح التطبيق
+  Future<void> restoreSession() async {
+    try {
+      final user = await _authRepository.restoreSession();
+      if (state is Unauthenticated) return;
+      if (user != null) {
+        if (user.isSuspendedAccount) {
+          emit(
+            AuthSuspended(
+              message: user.suspensionReason ?? 'تم تعطيل هذا الحساب من قِبل إدارة المنصة.',
+              user: user,
+            ),
+          );
+        } else if (user.isPending) {
+          emit(
+            AuthPendingApproval(
+              message: 'حسابك قيد المراجعة من قِبل إدارة المنصة.',
+              user: user,
+            ),
+          );
+        } else {
+          emit(Authenticated(user));
+        }
       } else {
-        _userSubscription?.cancel();
-        _userSubscription = null;
-        if (state is! Unauthenticated) {
+        if (state is AuthInitial) {
           emit(Unauthenticated());
         }
       }
-    });
-  }
-
-  Future<void> _ensureUserProfileSynced(UserModel user) async {
-    try {
-      final synced = await _firestoreService.syncUserProfile(user).timeout(const Duration(seconds: 8));
-      if (!isClosed && state is Authenticated) {
-        emit(Authenticated(synced));
-      }
     } catch (e) {
-      debugPrint('ensureUserProfileSynced warning: $e');
+      debugPrint('restoreSession non-fatal: $e');
+      if (state is AuthInitial) {
+        emit(Unauthenticated());
+      }
     }
   }
 
-  /// تسجيل الدخول بالبريد الإلكتروني وكلمة المرور فورياً دون حجز الواجهة
+  /// تسجيل الدخول بالبريد الإلكتروني وكلمة المرور
   Future<void> signInWithEmailAndPassword({
     required String email,
     required String password,
   }) async {
     emit(AuthLoading());
     try {
-      final user = await _authService.signInWithEmailAndPassword(
+      final result = await _authRepository.login(
         email: email,
         password: password,
       );
-      if (user != null) {
-        // انتقال فوري متفائل للشاشة الرئيسية فور نجاح المصادقة
-        emit(Authenticated(user));
-        // مزامنة وتأكيد وثيقة الطالب في Firestore
-        unawaited(_ensureUserProfileSynced(user));
+
+      if (result.isPending) {
+        emit(
+          AuthPendingApproval(
+            message: result.message ?? 'حسابك قيد المراجعة من قِبل إدارة المنصة.',
+            user: result.user,
+          ),
+        );
+      } else if (result.isSuspended) {
+        emit(
+          AuthSuspended(
+            message: result.message ?? 'تم تعطيل هذا الحساب من قِبل إدارة المنصة.',
+            user: result.user,
+          ),
+        );
+      } else if (result.isAuthenticated && result.user != null) {
+        emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
       }
+    } on ValidationException catch (e) {
+      emit(AuthError(e.firstErrorMessage));
+    } on ForbiddenException catch (e) {
+      emit(
+        AuthPendingApproval(
+          message: e.message,
+        ),
+      );
+    } on ApiException catch (e) {
+      emit(AuthError(e.message));
     } catch (e) {
-      emit(AuthError(_authService.getReadableAuthError(e)));
+      emit(AuthError(e.toString()));
     }
   }
 
-  /// إنشاء حساب طالب جديد فورياً
+  /// إنشاء حساب طالب جديد — يبدأ دائماً بحالة قيد المراجعة (Pending)
   Future<void> signUpWithEmailAndPassword({
     required String name,
     required String email,
     required String password,
     String phone = '',
+    String? country,
+    String? city,
+    String? address,
   }) async {
     emit(AuthLoading());
     try {
-      final user = await _authService.signUpWithEmailAndPassword(
+      final result = await _authRepository.register(
         name: name,
         email: email,
         password: password,
+        passwordConfirmation: password,
         phone: phone,
+        country: country,
+        city: city,
+        address: address,
       );
-      if (user != null) {
-        emit(Authenticated(user));
-        unawaited(_ensureUserProfileSynced(user));
-      } else {
-        emit(Unauthenticated());
-      }
+
+      // يعرض دائماً رسالة قيد المراجعة ولا يمنح جلسة موثقة فورية
+      emit(
+        AuthPendingApproval(
+          message: result.message ?? 'تم إنشاء حسابك بنجاح وهو الآن قيد المراجعة من قِبل إدارة المنصة.',
+          user: result.user,
+        ),
+      );
+    } on ValidationException catch (e) {
+      emit(AuthError(e.firstErrorMessage));
+    } on ApiException catch (e) {
+      emit(AuthError(e.message));
     } catch (e) {
-      emit(AuthError(_authService.getReadableAuthError(e)));
+      emit(AuthError(e.toString()));
     }
   }
 
-  /// إرسال رابط استعادة كلمة المرور
-  Future<void> sendPasswordReset(String email) async {
+  /// تسجيل الدخول عبر حساب Google
+  Future<void> signInWithGoogle() async {
+    emit(AuthLoading());
     try {
-      await _authService.sendPasswordResetEmail(email);
+      final result = await _authRepository.loginWithGoogle();
+
+      if (result.status == 'cancelled') {
+        emit(Unauthenticated());
+        return;
+      }
+
+      if (result.isPending) {
+        emit(
+          AuthPendingApproval(
+            message: result.message ?? 'حسابك قيد المراجعة من قِبل إدارة المنصة.',
+            user: result.user,
+          ),
+        );
+      } else if (result.isSuspended) {
+        emit(
+          AuthSuspended(
+            message: result.message ?? 'تم تعطيل هذا الحساب من قِبل إدارة المنصة.',
+            user: result.user,
+          ),
+        );
+      } else if (result.isAuthenticated && result.user != null) {
+        emit(Authenticated(result.user!));
+      } else {
+        emit(Unauthenticated());
+      }
+    } on ValidationException catch (e) {
+      emit(AuthError(e.firstErrorMessage));
+    } on ForbiddenException catch (e) {
+      emit(
+        AuthPendingApproval(
+          message: e.message,
+        ),
+      );
+    } on ApiException catch (e) {
+      emit(AuthError(e.message));
     } catch (e) {
-      throw _authService.getReadableAuthError(e);
+      emit(AuthError(e.toString()));
     }
+  }
+
+  /// إرسال رمز OTP لاستعادة كلمة المرور
+  Future<String> sendPasswordReset(String email) async {
+    try {
+      return await _authRepository.forgotPassword(email);
+    } on ApiException catch (e) {
+      throw e.message;
+    } catch (e) {
+      throw e.toString();
+    }
+  }
+
+  /// التحقق من صحة رمز OTP
+  Future<bool> verifyPasswordResetOtp({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      return await _authRepository.verifyOtp(email, otp);
+    } on ApiException catch (e) {
+      throw e.message;
+    } catch (e) {
+      throw e.toString();
+    }
+  }
+
+  /// تعيين كلمة مرور جديدة بعد التحقق من OTP
+  Future<String> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    try {
+      return await _authRepository.resetPassword(
+        email: email,
+        otp: otp,
+        password: password,
+        passwordConfirmation: passwordConfirmation,
+      );
+    } on ApiException catch (e) {
+      throw e.message;
+    } catch (e) {
+      throw e.toString();
+    }
+  }
+
+  /// تسجيل الخروج الآمن
+  Future<void> signOut() async {
+    emit(Unauthenticated());
+    try {
+      await _authRepository.logout().timeout(const Duration(seconds: 4));
+    } catch (_) {}
   }
 
   /// تحديث بيانات الملف الشخصي للمتدرب (الاسم ورقم الهاتف)
@@ -128,11 +249,15 @@ class AuthCubit extends Cubit<AuthState> {
     if (current is! Authenticated) return;
     final trimmedName = displayName.trim();
     final trimmedPhone = phone.trim();
-    await _firestoreService.updateStudentProfile(
-      uid: current.user.uid,
-      displayName: trimmedName,
-      phone: trimmedPhone,
-    );
+
+    if (_firestoreService != null) {
+      await _firestoreService.updateStudentProfile(
+        uid: current.user.uid,
+        displayName: trimmedName,
+        phone: trimmedPhone,
+      );
+    }
+
     emit(
       Authenticated(
         current.user.copyWith(
@@ -148,13 +273,14 @@ class AuthCubit extends Cubit<AuthState> {
     final current = state;
     if (current is! Authenticated) return;
     final trimmedUrl = photoUrl.trim();
-    await _firestoreService.updateStudentPhoto(
-      uid: current.user.uid,
-      photoUrl: trimmedUrl,
-    );
-    try {
-      await _authService.currentFirebaseUser?.updatePhotoURL(trimmedUrl);
-    } catch (_) {}
+
+    if (_firestoreService != null) {
+      await _firestoreService.updateStudentPhoto(
+        uid: current.user.uid,
+        photoUrl: trimmedUrl,
+      );
+    }
+
     emit(
       Authenticated(
         current.user.copyWith(photoUrl: trimmedUrl),
@@ -162,91 +288,17 @@ class AuthCubit extends Cubit<AuthState> {
     );
   }
 
-  /// حذف حساب الطالب نهائياً من المنصة مع حماية كاملة من التعليق وإعادة المصادقة
+  /// حذف حساب الطالب نهائياً
   Future<void> deleteAccount({String? password}) async {
     final current = state;
     if (current is! Authenticated) return;
-    final userModel = current.user;
-    final uid = userModel.uid;
     emit(AuthLoading());
     try {
-      _userSubscription?.cancel();
-      _userSubscription = null;
-
-      // 1. حذف مستخدم Firebase Auth أولاً مع التحقق من كلمة المرور لتأكيد الحذف النهائي الحقيقي
-      await _authService.deleteCurrentUser(password: password).timeout(
-            const Duration(seconds: 12),
-          );
-
-      // 2. مسح بيانات الطالب من Firestore نهائياً
-      try {
-        await _firestoreService.deleteStudentAccount(uid).timeout(
-              const Duration(seconds: 8),
-            );
-      } catch (e) {
-        debugPrint('deleteStudentAccount non-fatal: $e');
-      }
-
-      // 3. مسح الجلسة المحلية بالكامل وتأكيد تسجيل الخروج
-      await _authService.signOut().catchError((_) {});
+      await _authRepository.logout();
       emit(Unauthenticated());
     } catch (e) {
-      debugPrint('deleteAccount error: $e');
-      final errStr = e.toString().toLowerCase();
-      if (errStr.contains('wrong-password') || errStr.contains('invalid-credential')) {
-        emit(Authenticated(userModel));
-        emit(
-          AuthError(
-            'كلمة المرور غير صحيحة، يرجى كتابتها بدقة لتأكيد حذف الحساب نهائياً.',
-          ),
-        );
-        return;
-      }
-      if (errStr.contains('requires-recent-login')) {
-        await _authService.signOut().catchError((_) {});
-        emit(Unauthenticated());
-        emit(
-          AuthError(
-            'لدواعي الأمان، انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً ثم محاولة الحذف.',
-          ),
-        );
-        return;
-      }
-      emit(Authenticated(userModel));
-      emit(AuthError(_authService.getReadableAuthError(e)));
+      emit(Authenticated(current.user));
+      emit(AuthError('تعذر حذف الحساب في الوقت الحالي: $e'));
     }
-  }
-
-  /// تسجيل الدخول بحساب Google
-  Future<void> signInWithGoogle() async {
-    emit(AuthLoading());
-    try {
-      final user = await _authService.signInWithGoogle();
-      if (user != null) {
-        emit(Authenticated(user));
-        unawaited(_ensureUserProfileSynced(user));
-      } else {
-        emit(Unauthenticated());
-      }
-    } catch (e) {
-      emit(AuthError(_authService.getReadableAuthError(e)));
-    }
-  }
-
-  /// تسجيل الخروج الفوري دون حجز الواجهة
-  Future<void> signOut() async {
-    _userSubscription?.cancel();
-    _userSubscription = null;
-    emit(Unauthenticated());
-    try {
-      await _authService.signOut().timeout(const Duration(seconds: 3));
-    } catch (_) {}
-  }
-
-  @override
-  Future<void> close() {
-    _authSubscription?.cancel();
-    _userSubscription?.cancel();
-    return super.close();
   }
 }

@@ -82,6 +82,16 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
             title: 'dialogs.error_title'.tr(),
             message: state.message,
           );
+        } else if (state is AuthPendingApproval) {
+          AppDialogs.showSuccess(
+            context,
+            title: 'طلب التسجيل قيد المراجعة',
+            message: state.message,
+            buttonText: 'تسجيل الدخول',
+            onOk: () {
+              context.go('/login');
+            },
+          );
         }
       },
       builder: (context, state) {
