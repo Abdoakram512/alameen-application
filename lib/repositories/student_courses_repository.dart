@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/course.dart';
 import '../models/student_courses_data.dart';
 import '../models/student_dashboard_data.dart';
@@ -8,7 +7,7 @@ abstract class StudentCoursesRepository {
   Stream<List<Course>> streamCourses();
 
   /// Retrieve all available courses
-  Future<List<Course>> getCourses({Source source = Source.serverAndCache});
+  Future<List<Course>> getCourses();
 
   /// Retrieve public catalog courses from REST API
   Future<List<Course>> getPublicCourses({String? search, bool forceRefresh = false});

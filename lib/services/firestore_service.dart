@@ -91,8 +91,8 @@ class FirestoreService {
 
   Stream<List<Course>> streamCourses() => _coursesRepository.streamCourses();
 
-  Future<List<Course>> getCourses({Source source = Source.serverAndCache}) =>
-      _coursesRepository.getCourses(source: source);
+  Future<List<Course>> getCourses({Source? source}) =>
+      _coursesRepository.getCourses();
 
   Stream<UserModel?> streamUser(String uid) => _profileRepository.streamUser(uid);
 

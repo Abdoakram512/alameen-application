@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/network/api_exceptions.dart';
+import '../../core/storage/course_local_cache.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_profile_repository.dart';
 import '../../services/firestore_service.dart';
@@ -240,6 +241,9 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> signOut() async {
     emit(Unauthenticated());
     try {
+      if (sl.isRegistered<CourseLocalCache>()) {
+        await sl<CourseLocalCache>().clearAllUserCaches();
+      }
       await _authRepository.logout().timeout(const Duration(seconds: 4));
     } catch (_) {}
   }
@@ -336,6 +340,10 @@ class AuthCubit extends Cubit<AuthState> {
             currentPassword: password,
           );
         } catch (_) {}
+      }
+
+      if (sl.isRegistered<CourseLocalCache>()) {
+        await sl<CourseLocalCache>().clearAllUserCaches();
       }
 
       await _authRepository.logout();

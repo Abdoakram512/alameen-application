@@ -50,6 +50,7 @@ app.*.map.json
 firebase-debug*.log
 .env
 .env.*
+.kotlin/
 *.jks
 *.keystore
 *.p12

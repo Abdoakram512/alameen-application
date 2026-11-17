@@ -37,12 +37,6 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
   CollectionReference<Map<String, dynamic>> get _usersRef =>
       db.collection('users');
 
-  CollectionReference<Map<String, dynamic>> get _requestsRef =>
-      db.collection('access_requests');
-
-  CollectionReference<Map<String, dynamic>> get _activeSessionsRef =>
-      db.collection('active_watch_sessions');
-
   @override
   Stream<UserModel?> streamUser(String uid) {
     if (!isAvailable) return Stream.value(null);
@@ -166,36 +160,17 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
     String? locale,
     String? avatarFilePath,
   }) async {
-    // 1. Primary: update via Laravel REST API
     final remote = _remote;
     if (remote != null) {
-      try {
-        await remote.updateProfile(
-          name: displayName,
-          phone: phone,
-          email: email,
-          bio: bio,
-          locale: locale,
-          avatarFilePath: avatarFilePath,
-        );
-      } catch (e) {
-        debugPrint('REST updateProfile error: $e');
-        if (!isAvailable) rethrow;
-      }
-    }
-
-    // 2. Secondary sync to Firestore if available
-    if (isAvailable) {
-      try {
-        await _usersRef.doc(uid).set(
-          {
-            'displayName': displayName.trim(),
-            'phone': phone.trim(),
-            'lastActiveAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      } catch (_) {}
+      await remote.updateProfile(
+        name: displayName,
+        phone: phone,
+        email: email,
+        bio: bio,
+        locale: locale,
+        avatarFilePath: avatarFilePath,
+      );
+      return;
     }
   }
 
@@ -204,16 +179,15 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
     required String uid,
     required String photoUrl,
   }) async {
-    if (!isAvailable) return;
-    try {
-      await _usersRef.doc(uid).set(
-        {
-          'photoUrl': photoUrl.trim(),
-          'lastActiveAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
+    final remote = _remote;
+    if (remote != null) {
+      // Photo update is part of multipart updateProfile in Laravel REST API
+      await remote.updateProfile(
+        name: '',
+        phone: '',
       );
-    } catch (_) {}
+      return;
+    }
   }
 
   @override
@@ -221,47 +195,10 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
     String uid, {
     String? currentPassword,
   }) async {
-    // 1. Primary: delete via Laravel REST API
     final remote = _remote;
     if (remote != null && currentPassword != null && currentPassword.isNotEmpty) {
-      try {
-        await remote.deleteAccount(currentPassword: currentPassword);
-      } catch (e) {
-        debugPrint('REST deleteAccount error: $e');
-        if (!isAvailable) rethrow;
-      }
-    }
-
-    // 2. Secondary cleanup in Firestore if available
-    if (!isAvailable) return;
-    try {
-      final sessions = await _activeSessionsRef
-          .where('studentId', isEqualTo: uid)
-          .get()
-          .timeout(const Duration(seconds: 4));
-      for (final doc in sessions.docs) {
-        try {
-          await doc.reference.delete().timeout(const Duration(seconds: 2));
-        } catch (_) {}
-      }
-    } catch (_) {}
-
-    try {
-      final requests = await _requestsRef
-          .where('studentId', isEqualTo: uid)
-          .get()
-          .timeout(const Duration(seconds: 4));
-      for (final doc in requests.docs) {
-        try {
-          await doc.reference.delete().timeout(const Duration(seconds: 2));
-        } catch (_) {}
-      }
-    } catch (_) {}
-
-    try {
-      await _usersRef.doc(uid).delete().timeout(const Duration(seconds: 8));
-    } catch (e) {
-      debugPrint('deleteStudentAccount usersRef error: $e');
+      await remote.deleteAccount(currentPassword: currentPassword);
+      return;
     }
   }
 }

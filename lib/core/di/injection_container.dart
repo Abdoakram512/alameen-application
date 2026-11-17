@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 
 import '../network/api_client.dart';
 import '../network/auth_interceptor.dart';
+import '../storage/course_local_cache.dart';
 import '../storage/secure_token_storage.dart';
 import '../../datasources/auth_remote_data_source.dart';
 import '../../datasources/courses_remote_data_source.dart';
@@ -28,6 +29,11 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<SecureTokenStorage>()) {
     sl.registerLazySingleton<SecureTokenStorage>(
       () => SecureTokenStorageImpl(),
+    );
+  }
+  if (!sl.isRegistered<CourseLocalCache>()) {
+    sl.registerLazySingleton<CourseLocalCache>(
+      () => CourseLocalCacheImpl(),
     );
   }
   if (!sl.isRegistered<AuthInterceptor>()) {
@@ -88,6 +94,8 @@ Future<void> initDependencies() async {
     sl.registerLazySingleton<StudentCoursesRepository>(
       () => StudentCoursesRepositoryImpl(
         remoteDataSource: sl<CoursesRemoteDataSource>(),
+        localCache: sl<CourseLocalCache>(),
+        tokenStorage: sl<SecureTokenStorage>(),
       ),
     );
   }
@@ -102,6 +110,7 @@ Future<void> initDependencies() async {
     sl.registerLazySingleton<StudentContentRepository>(
       () => StudentContentRepositoryImpl(
         coursesRemoteDataSource: sl<CoursesRemoteDataSource>(),
+        localCache: sl<CourseLocalCache>(),
       ),
     );
   }
