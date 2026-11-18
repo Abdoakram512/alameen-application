@@ -1,228 +1,198 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/active_watch_session.dart';
-import '../../models/watch_log_entry.dart';
+import '../../core/config/app_config.dart';
+import '../../core/network/api_exceptions.dart';
+import '../../datasources/watch_remote_data_source.dart';
+import '../../models/lesson.dart';
+import '../../models/lesson_playback_data.dart';
 import '../student_watch_repository.dart';
 
 class StudentWatchRepositoryImpl implements StudentWatchRepository {
-  final FirebaseFirestore? _explicitFirestore;
+  final WatchRemoteDataSource _remoteDataSource;
 
-  StudentWatchRepositoryImpl({FirebaseFirestore? firestore})
-      : _explicitFirestore = firestore;
-
-  bool get isAvailable {
-    try {
-      final _ = db;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  FirebaseFirestore get db => _explicitFirestore ?? FirebaseFirestore.instance;
-
-  CollectionReference<Map<String, dynamic>> get _watchLogsRef =>
-      db.collection('watch_logs');
-
-  CollectionReference<Map<String, dynamic>> get _activeSessionsRef =>
-      db.collection('active_watch_sessions');
-
-  CollectionReference<Map<String, dynamic>> get _usersRef =>
-      db.collection('users');
+  StudentWatchRepositoryImpl({
+    required WatchRemoteDataSource remoteDataSource,
+  }) : _remoteDataSource = remoteDataSource;
 
   @override
-  Stream<List<WatchLogEntry>> streamStudentWatchLogs(String studentId) {
-    if (!isAvailable) return Stream.value(const <WatchLogEntry>[]);
-    return _watchLogsRef
-        .where('studentId', isEqualTo: studentId)
-        .snapshots()
-        .map((snapshot) {
-      final items = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return WatchLogEntry.fromMap(data, id: doc.id);
-      }).toList();
-      items.sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
-      return items;
-    });
-  }
-
-  @override
-  Future<void> updateActiveWatchSession(ActiveWatchSession session) async {
-    if (!isAvailable) return;
-    try {
-      final data = session.toMap()
-        ..['lastHeartbeatAt'] = FieldValue.serverTimestamp()
-        ..['startedAt'] = Timestamp.fromDate(session.startedAt);
-      await _activeSessionsRef
-          .doc(session.id)
-          .set(data, SetOptions(merge: true))
-          .timeout(const Duration(seconds: 10));
-    } catch (_) {}
-  }
-
-  @override
-  Future<void> removeActiveWatchSession(String sessionId) async {
-    if (!isAvailable) return;
-    try {
-      await _activeSessionsRef
-          .doc(sessionId)
-          .delete()
-          .timeout(const Duration(seconds: 8));
-    } catch (_) {}
-  }
-
-  @override
-  Future<String?> getLatestLessonCoverage({
-    required String uid,
-    required String courseId,
-    required String lessonId,
+  Future<LessonPlaybackBundle> getLessonPlaybackBundle({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
   }) async {
-    if (!isAvailable) return null;
-    try {
-      final snapshot = await _watchLogsRef
-          .where('studentId', isEqualTo: uid)
-          .where('courseId', isEqualTo: courseId)
-          .where('lessonId', isEqualTo: lessonId)
-          .limit(1)
-          .get(const GetOptions(source: Source.serverAndCache));
-      if (snapshot.docs.isNotEmpty) {
-        return snapshot.docs.first.data()['coverageRanges'] as String?;
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  @override
-  Future<void> toggleLessonCompletion(
-    String uid,
-    String lessonId,
-    bool isCompleted,
-  ) async {
-    if (!isAvailable) return;
-    await _usersRef.doc(uid).set(
-      {
-        'completedLessonIds': isCompleted
-            ? FieldValue.arrayUnion([lessonId])
-            : FieldValue.arrayRemove([lessonId]),
-      },
-      SetOptions(merge: true),
+    return await _remoteDataSource.getLessonDetails(
+      courseSlugOrId: courseSlugOrId,
+      lessonSlugOrId: lessonSlugOrId,
     );
   }
 
   @override
-  Future<void> recordWatchEvent(Map<String, dynamic> event) async {
-    if (!isAvailable) return;
-    final uid = event['uid'] as String;
-    final seconds = (event['seconds'] as num?)?.toInt() ?? 0;
-    final sessionSeconds = (event['sessionSeconds'] as num?)?.toInt() ?? seconds;
-    final isSessionEnd = event['isSessionEnd'] == true;
-    final isCompleted = event['isCompleted'] == true;
-    final courseId = event['courseId'] as String? ?? '';
-    final lessonId = event['lessonId'] as String? ?? '';
-    final sessionId = event['sessionId'] as String?;
-    final eventId = event['id'] as String? ?? '';
-    final coverageRanges = event['coverageRanges'] as String?;
+  Future<PlaybackTokenResponse> refreshPlaybackToken({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+  }) async {
+    return await _remoteDataSource.refreshPlaybackToken(
+      courseSlugOrId: courseSlugOrId,
+      lessonSlugOrId: lessonSlugOrId,
+    );
+  }
 
-    final logDocId = (sessionId != null && sessionId.isNotEmpty)
-        ? 'watch_${uid}_${courseId}_${lessonId}_$sessionId'
-        : '${uid}_$eventId';
-    final logRef = _watchLogsRef.doc(logDocId);
+  @override
+  Future<ResolvedLessonPlayback> resolveLessonPlayback({
+    required String courseSlugOrId,
+    required Lesson lesson,
+  }) async {
+    final lessonKey = (lesson.slug != null && lesson.slug!.trim().isNotEmpty)
+        ? lesson.slug!.trim()
+        : lesson.id.trim();
 
-    if (isCompleted || isSessionEnd) {
-      // Transaction ensures:
-      // 1. Retry of the same session-end event NEVER double-increments users.totalWatchSeconds.
-      // 2. Older checkpoints cannot overwrite newer progress (durationSeconds monotonically increases).
-      // 3. User document completedLessonIds and watch seconds are committed atomically.
-      await db.runTransaction((tx) async {
-        final logSnap = await tx.get(logRef);
-        final existingDuration = (logSnap.data()?['durationSeconds'] as num?)?.toInt() ?? 0;
-        final safeSessionSeconds = sessionSeconds >= existingDuration ? sessionSeconds : existingDuration;
-        final alreadyCommittedInLog = logSnap.data()?['sessionEndCommitted'] == true;
+    if (courseSlugOrId.trim().isEmpty || lessonKey.isEmpty) {
+      throw PlaybackAuthorizationException(
+        'تعذر تحديد الدورة أو المحاضرة للتحقق من الصلاحية.',
+        statusCode: 400,
+      );
+    }
 
-        final logData = <String, dynamic>{
-          'id': logDocId,
-          'studentId': uid,
-          'studentUid': uid,
-          'studentName': event['studentName'] ?? '',
-          'studentEmail': event['studentEmail'] ?? '',
-          'courseId': courseId,
-          'lessonId': lessonId,
-          'lessonTitle': event['lessonTitle'] ?? '',
-          'durationSeconds': safeSessionSeconds,
-          'secondsWatched': safeSessionSeconds,
-          'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? safeSessionSeconds,
-          'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
-          'completionPercentage': event['completionPercentage'] ?? 0.0,
-          'isCompleted': isCompleted || (logSnap.data()?['isCompleted'] == true),
-          'sessionEndCommitted': alreadyCommittedInLog || isSessionEnd,
-          'lastCheckpointId': eventId,
-          if (coverageRanges != null && coverageRanges.isNotEmpty)
-            'coverageRanges': coverageRanges,
-          'ipAddress': event['ipAddress'] ?? 'غير محدد',
-          'networkType': event['networkType'] ?? 'غير محدد',
-          'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
-          'recordedAt': FieldValue.serverTimestamp(),
-        };
-        tx.set(logRef, logData, SetOptions(merge: true));
+    try {
+      final bundle = await _remoteDataSource.getLessonDetails(
+        courseSlugOrId: courseSlugOrId.trim(),
+        lessonSlugOrId: lessonKey,
+      );
 
-        final userRef = _usersRef.doc(uid);
-        final userSnap = await tx.get(userRef);
-        final userData = userSnap.data() ?? {};
-        final processedEvents = List<String>.from(userData['processedSessionEnds'] ?? []);
+      if (bundle.currentVideo.isVideoProcessing || lesson.isVideoProcessing) {
+        throw StateError(
+          'المحاضرة قيد التجهيز والمعالجة السحابية وستكون متاحة للمشاهدة فور اكتمالها.',
+        );
+      }
 
-        final userUpdates = <String, dynamic>{
-          'lastActiveAt': FieldValue.serverTimestamp(),
-          if (event['ipAddress'] != null) 'lastKnownIp': event['ipAddress'],
-          if (isCompleted && lessonId.isNotEmpty)
-            'completedLessonIds': FieldValue.arrayUnion([lessonId]),
-        };
+      String? hlsUrl = bundle.hlsUrl;
+      String? embedUrl = bundle.embedUrl;
+      String? watermark = bundle.watermarkText;
+      int? expiresIn = bundle.expiresInSeconds;
 
-        if (isSessionEnd && seconds > 0 && !alreadyCommittedInLog) {
-          if (!processedEvents.contains(eventId)) {
-            // First time processing this session-end event: increment totalWatchSeconds safely
-            processedEvents.add(eventId);
-            if (processedEvents.length > 50) {
-              processedEvents.removeAt(0); // Maintain sliding window of 50
-            }
-            final currentTotal = (userData['totalWatchSeconds'] as num?)?.toInt() ?? 0;
-            userUpdates['totalWatchSeconds'] = currentTotal + seconds;
-            userUpdates['processedSessionEnds'] = processedEvents;
+      final needsTokenRefresh = hlsUrl == null ||
+          hlsUrl.trim().isEmpty ||
+          ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(hlsUrl);
+
+      if (needsTokenRefresh) {
+        try {
+          final refreshed = await _remoteDataSource.refreshPlaybackToken(
+            courseSlugOrId: courseSlugOrId.trim(),
+            lessonSlugOrId: lessonKey,
+          );
+          if (refreshed.hlsUrl != null && refreshed.hlsUrl!.trim().isNotEmpty) {
+            hlsUrl = refreshed.hlsUrl!.trim();
+          } else if (hlsUrl != null &&
+              ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(hlsUrl)) {
+            // URL expired and renewal did not return a fresh HLS stream
+            hlsUrl = null;
+          }
+          if (refreshed.embedUrl != null && refreshed.embedUrl!.trim().isNotEmpty) {
+            embedUrl = refreshed.embedUrl!.trim();
+          }
+          if (refreshed.watermark != null && refreshed.watermark!.trim().isNotEmpty) {
+            watermark = refreshed.watermark!.trim();
+          }
+          expiresIn = refreshed.expiresIn;
+        } on UnauthorizedException {
+          rethrow;
+        } on ForbiddenException {
+          rethrow;
+        } on ApiException {
+          if (hlsUrl == null || hlsUrl.trim().isEmpty) {
+            rethrow;
+          }
+          if (ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(hlsUrl)) {
+            throw PlaybackAuthorizationException(
+              'انتهت صلاحية رابط البث الآمن وتعذر تجديده. يرجى المحاولة مرة أخرى.',
+              statusCode: 403,
+            );
           }
         }
+      }
 
-        tx.set(userRef, userUpdates, SetOptions(merge: true));
-      }).timeout(const Duration(seconds: 15));
-    } else {
-      // Continuous intermediate playback checkpoint: writes only to watch_logs (0 writes to users/{uid})
-      await db.runTransaction((tx) async {
-        final logSnap = await tx.get(logRef);
-        final existingDuration = (logSnap.data()?['durationSeconds'] as num?)?.toInt() ?? 0;
-        final safeSessionSeconds = sessionSeconds >= existingDuration ? sessionSeconds : existingDuration;
+      if (hlsUrl == null || hlsUrl.trim().isEmpty) {
+        final effectiveSource =
+            bundle.currentVideo.videoSource ?? lesson.videoSource ?? 'unknown';
+        if (!bundle.currentVideo.isAccessible && !bundle.currentVideo.isFreePreview) {
+          throw PlaybackAuthorizationException(
+            'تم رفض الوصول: لا تملك صلاحية مشاهدة هذه المحاضرة أو لم تستكمل المستوى السابق.',
+            statusCode: 403,
+          );
+        }
+        if (embedUrl != null && embedUrl.isNotEmpty) {
+          throw PlaybackProviderIncompatibleException(
+            'الخادم أعاد رابط تضمين فقط دون رابط بث مباشر HLS المطلوب للمشغل الآمن (المزود: $effectiveSource).',
+            videoSource: effectiveSource,
+            embedUrl: embedUrl,
+          );
+        }
+        throw PlaybackProviderIncompatibleException(
+          'لم يُرجع الخادم رابط بث صالحاً (hls_url) لهذه المحاضرة (المزود: $effectiveSource).',
+          videoSource: effectiveSource,
+        );
+      }
 
-        final logData = <String, dynamic>{
-          'id': logDocId,
-          'studentId': uid,
-          'studentUid': uid,
-          'studentName': event['studentName'] ?? '',
-          'studentEmail': event['studentEmail'] ?? '',
-          'courseId': courseId,
-          'lessonId': lessonId,
-          'lessonTitle': event['lessonTitle'] ?? '',
-          'durationSeconds': safeSessionSeconds,
-          'secondsWatched': safeSessionSeconds,
-          'maxPlayheadSeconds': event['maxPlayheadSeconds'] ?? safeSessionSeconds,
-          'totalDurationSeconds': event['totalDurationSeconds'] ?? 0,
-          'completionPercentage': event['completionPercentage'] ?? 0.0,
-          'isCompleted': isCompleted || (logSnap.data()?['isCompleted'] == true),
-          'lastCheckpointId': eventId,
-          if (coverageRanges != null && coverageRanges.isNotEmpty)
-            'coverageRanges': coverageRanges,
-          'ipAddress': event['ipAddress'] ?? 'غير محدد',
-          'networkType': event['networkType'] ?? 'غير محدد',
-          'devicePlatform': event['devicePlatform'] ?? 'جهاز ذكي',
-          'recordedAt': FieldValue.serverTimestamp(),
-        };
-        tx.set(logRef, logData, SetOptions(merge: true));
-      }).timeout(const Duration(seconds: 15));
+      final resolvedThumbnail = AppConfig.resolveMediaUrl(
+        bundle.currentVideo.thumbnailUrl.isNotEmpty
+            ? bundle.currentVideo.thumbnailUrl
+            : (lesson.thumbnailUrl.isNotEmpty
+                ? lesson.thumbnailUrl
+                : bundle.course?.thumbnailUrl),
+      );
+
+      return ResolvedLessonPlayback(
+        streamUrl: hlsUrl.trim(),
+        thumbnailUrl: resolvedThumbnail,
+        embedUrl: embedUrl,
+        watermarkText: watermark,
+        expiresInSeconds: expiresIn,
+        lastPositionSeconds: bundle.lastPositionSeconds,
+        watchedSeconds: bundle.watchedSeconds,
+        isCompleted: bundle.isCompleted,
+        bundle: bundle,
+      );
+    } on UnauthorizedException catch (e) {
+      throw PlaybackAuthorizationException(
+        e.message.isNotEmpty
+            ? e.message
+            : 'انتهت صلاحية جلسة الطالب (401). يرجى إعادة تسجيل الدخول.',
+        statusCode: 401,
+      );
+    } on ForbiddenException catch (e) {
+      throw PlaybackAuthorizationException(
+        e.message.isNotEmpty
+            ? e.message
+            : 'تم رفض الوصول للمحاضرة (403). تأكد من صلاحية اشتراكك وإتمام المتطلبات.',
+        statusCode: 403,
+      );
     }
+  }
+
+  @override
+  Future<WatchProgressResult> recordLessonProgress({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+    required int watchedSeconds,
+    required int positionSeconds,
+    bool? isCompleted,
+  }) async {
+    return await _remoteDataSource.recordLessonProgress(
+      courseSlugOrId: courseSlugOrId,
+      lessonSlugOrId: lessonSlugOrId,
+      watchedSeconds: watchedSeconds,
+      positionSeconds: positionSeconds,
+      isCompleted: isCompleted,
+    );
+  }
+
+  @override
+  Future<void> reportSecurityViolation({
+    required String type,
+    int? videoId,
+    String? details,
+  }) async {
+    await _remoteDataSource.reportSecurityViolation(
+      type: type,
+      videoId: videoId,
+      details: details,
+    );
   }
 }

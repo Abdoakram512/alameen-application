@@ -199,6 +199,9 @@ class CourseLocalCacheImpl implements CourseLocalCache {
       'enrolled_course_ids': data.enrolledCourseIds,
       'enrolled_courses': data.enrolledCourses.map((e) => {
         'course': e.course.toMap(),
+        'status': e.status,
+        'expires_at': e.expiresAt?.toIso8601String(),
+        'is_eligible_for_cert': e.isEligibleForCert,
         'progress': {
           'completed_count': e.completedCount,
           'total_count': e.totalCount,

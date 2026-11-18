@@ -120,9 +120,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
                   ? coursesState.allCourses
                   : const <Course>[];
               final enrolledCourses = allCourses
-                  .where((c) =>
-                      currentUser.isEnrolled(c.id) ||
-                      c.allowedStudentIds.contains(currentUser.uid))
+                  .where((c) => currentUser.isEnrolled(c.id) || c.hasEnrolled)
                   .toList();
 
               return StreamBuilder<List<AssignmentSubmission>>(

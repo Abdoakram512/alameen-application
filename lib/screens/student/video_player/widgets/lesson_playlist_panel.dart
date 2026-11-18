@@ -4,12 +4,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../logic/auth/auth_cubit.dart';
 import '../../../../logic/auth/auth_state.dart';
 import '../../../../models/course_access_mode.dart';
+import '../../../../models/course_level.dart';
 import '../../../../models/lesson.dart';
 import '../../lesson_playlist.dart';
 
-/// لوحة قائمة دروس الدورة التدريبية مع إدارة قيود الفتح المتسلسل واشتراطات تسليم الواجبات.
+/// لوحة قائمة دروس الدورة التدريبية مع إدارة قيود الفتح المتسلسل (95%) واشتراطات تسليم الواجبات.
 class LessonPlaylistPanel extends StatelessWidget {
   final List<Lesson> playlist;
+  final List<CourseLevel> levels;
   final String currentLessonId;
   final String courseId;
   final CourseAccessMode courseAccessMode;
@@ -19,6 +21,7 @@ class LessonPlaylistPanel extends StatelessWidget {
   const LessonPlaylistPanel({
     super.key,
     required this.playlist,
+    this.levels = const [],
     required this.currentLessonId,
     required this.courseId,
     required this.courseAccessMode,
@@ -62,16 +65,21 @@ class LessonPlaylistPanel extends StatelessWidget {
     return BlocBuilder<AuthCubit, AuthState>(
       builder: (context, state) {
         final user = state is Authenticated ? state.user : null;
-        final isEnrolled = (user?.isEnrolled(courseId) ?? false) ||
-            courseAccessMode == CourseAccessMode.open;
+        // لا يُمنح الوصول أبداً لمجرد كون الدورة open؛ المصدر المعتمد هو اشتراك الطالب الموثق
+        final isEnrolled = user?.isEnrolled(courseId) ?? false;
+
+        final completedIds = <String>{
+          ...?user?.completedLessonIds,
+          for (final l in playlist)
+            if (l.isCompleted) l.id,
+        };
 
         return LessonPlaylist(
           lessons: playlist,
+          levels: levels,
           selectedId: currentLessonId,
           enrolled: isEnrolled,
-          completedIds: {
-            ...?user?.completedLessonIds,
-          },
+          completedIds: completedIds,
           lockedReasons: lockedReasons,
           onSelected: onSelectLesson,
         );

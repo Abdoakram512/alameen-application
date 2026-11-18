@@ -7,12 +7,14 @@ import '../../models/access_request.dart';
 import '../../models/course.dart';
 import '../../models/payment_receipt_model.dart';
 import '../../models/user_profile.dart';
+import '../../repositories/student_courses_repository.dart';
 import '../../repositories/student_payment_repository.dart';
 import '../../services/notification_service.dart';
 import 'access_state.dart';
 
 class AccessCubit extends Cubit<AccessState> {
   final StudentPaymentRepository _paymentRepository;
+  final StudentCoursesRepository? _coursesRepository;
   final Map<String, AccessStatus> _statuses = {};
   final Map<String, CourseAccessRequest> _requestsByCourse = {};
   final Map<String, PaymentReceiptModel> _receiptsByCourse = {};
@@ -24,7 +26,12 @@ class AccessCubit extends Cubit<AccessState> {
 
   AccessCubit({
     StudentPaymentRepository? paymentRepository,
+    StudentCoursesRepository? coursesRepository,
   })  : _paymentRepository = paymentRepository ?? sl<StudentPaymentRepository>(),
+        _coursesRepository = coursesRepository ??
+            (sl.isRegistered<StudentCoursesRepository>()
+                ? sl<StudentCoursesRepository>()
+                : null),
         super(AccessInitial());
 
   /// Clear all cached requests on sign-out or account deletion
@@ -325,8 +332,9 @@ class AccessCubit extends Cubit<AccessState> {
     );
   }
 
-  /// Enrollment check for free/open courses.
-  /// Never grants client-side approved access; relies on authoritative Laravel status.
+  /// Enrollment check for free/open & auto-enrolled courses.
+  /// Relies authoritatively on Laravel course entitlement first, then payment receipts.
+  /// Never grants client-side approved access.
   Future<void> enrollInOpenCourse({
     required String uid,
     required Course course,
@@ -340,10 +348,36 @@ class AccessCubit extends Cubit<AccessState> {
     );
 
     try {
+      bool? serverHasEnrolled;
+      final coursesRepo = _coursesRepository;
+      if (coursesRepo != null) {
+        try {
+          final courseSlug = (course.slug != null && course.slug!.trim().isNotEmpty)
+              ? course.slug!.trim()
+              : course.id;
+          final detailed = await coursesRepo.getCourseDetails(courseSlug);
+          if (detailed.isDetailedFromAuthServer) {
+            serverHasEnrolled = detailed.hasEnrolled;
+          }
+        } catch (_) {}
+      }
+
+      if (serverHasEnrolled == true) {
+        emit(
+          AccessActionSuccess(
+            'تم تأكيد اشتراكك في دورة "${course.title}" من الخادم بنجاح.',
+            courseStatuses: Map.unmodifiable(_statuses),
+            requestsByCourse: Map.unmodifiable(_requestsByCourse),
+            allRequests: List.unmodifiable(_allRequests),
+          ),
+        );
+        return;
+      }
+
       // Refresh receipts from the backend without intermediate state flickering
       await loadStudentReceipts(studentId: uid, silent: true, emitLoaded: false);
 
-      if (_statuses[course.id] == AccessStatus.approved) {
+      if (serverHasEnrolled != false && _statuses[course.id] == AccessStatus.approved) {
         emit(
           AccessActionSuccess(
             'تم تأكيد اشتراكك في دورة "${course.title}" من الخادم بنجاح.',

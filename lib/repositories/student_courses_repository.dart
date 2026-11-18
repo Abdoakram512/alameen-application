@@ -20,10 +20,4 @@ abstract class StudentCoursesRepository {
 
   /// Retrieve student enrolled courses and progress
   Future<StudentCoursesData> getStudentCourses();
-
-  /// Fetch protected lesson playback ID (legacy Firestore vault or future REST endpoint)
-  Future<String?> fetchProtectedLessonPlaybackId({
-    required String courseId,
-    required String lessonId,
-  });
 }

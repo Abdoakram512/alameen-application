@@ -11,12 +11,10 @@ import '../../../../models/watch_log_entry.dart';
 import '../../../../repositories/student_learning_repository.dart';
 import 'course_time_breakdown_card.dart';
 import 'learning_mastery_gauge_card.dart';
-import 'student_analytics_painters.dart';
 import 'student_weekly_activity_card.dart';
 
 /// لوحة التحليل التدريبي الشخصي للمتدرب (Bento Analytics Studio):
-/// تجمع بين مؤشر الإتقان الدائري المرسوم بـ [LearningRadialGaugePainter]
-/// ومخطط نشاط آخر 7 أيام المرسوم بـ [WeeklyActivityChartPainter] مع حركات انسيابية.
+/// تقرأ إحصائيات المشاهدة من نماذج Laravel المعتمدة (`Course`/`Lesson.progress`) دون الاعتماد على Firestore `watch_logs`.
 class StudentAnalyticsOverviewCard extends StatefulWidget {
   final UserModel? currentUser;
   final List<Course> enrolledCourses;
@@ -34,7 +32,6 @@ class StudentAnalyticsOverviewCard extends StatefulWidget {
 
 class _StudentAnalyticsOverviewCardState
     extends State<StudentAnalyticsOverviewCard> {
-  Stream<List<WatchLogEntry>>? _watchLogsStream;
   Stream<List<AssignmentSubmission>>? _submissionsStream;
 
   StudentLearningRepository get _repository =>
@@ -59,12 +56,37 @@ class _StudentAnalyticsOverviewCardState
   void _bindStreams() {
     final uid = widget.currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
-      _watchLogsStream = _repository.streamStudentWatchLogs(uid);
       _submissionsStream = _repository.streamStudentSubmissions(uid);
     } else {
-      _watchLogsStream = null;
       _submissionsStream = null;
     }
+  }
+
+  /// اشتقاق سجلات المشاهدة التحليلية مباشرة من بيانات التقدم القادمة من خادم Laravel.
+  List<WatchLogEntry> _deriveLaravelWatchEntries(UserModel user) {
+    final entries = <WatchLogEntry>[];
+    for (final course in widget.enrolledCourses) {
+      for (final level in course.levels) {
+        for (final lesson in level.lessons) {
+          if (lesson.watchedSeconds <= 0 && !lesson.isCompleted) continue;
+          entries.add(
+            WatchLogEntry(
+              id: 'laravel_${user.uid}_${course.id}_${lesson.id}',
+              studentId: user.uid,
+              courseId: course.id,
+              lessonId: lesson.id,
+              lessonTitle: lesson.title,
+              durationSeconds: lesson.watchedSeconds,
+              totalDurationSeconds: lesson.durationInSeconds,
+              completionPercentage: lesson.serverCompletionPercentage,
+              isCompleted: lesson.isCompleted,
+              recordedAt: lesson.lastWatchedAt ?? DateTime.now(),
+            ),
+          );
+        }
+      }
+    }
+    return entries;
   }
 
   @override
@@ -72,22 +94,18 @@ class _StudentAnalyticsOverviewCardState
     final user = widget.currentUser;
     if (user == null) return const SizedBox.shrink();
 
-    return StreamBuilder<List<WatchLogEntry>>(
-      stream: _watchLogsStream,
-      builder: (context, watchSnap) {
-        return StreamBuilder<List<AssignmentSubmission>>(
-          stream: _submissionsStream,
-          builder: (context, subSnap) {
-            final logs = watchSnap.data ?? const <WatchLogEntry>[];
-            final submissions = subSnap.data ?? const <AssignmentSubmission>[];
+    final logs = _deriveLaravelWatchEntries(user);
 
-            return _buildAnalyticsBento(
-              context: context,
-              user: user,
-              logs: logs,
-              submissions: submissions,
-            );
-          },
+    return StreamBuilder<List<AssignmentSubmission>>(
+      stream: _submissionsStream,
+      builder: (context, subSnap) {
+        final submissions = subSnap.data ?? const <AssignmentSubmission>[];
+
+        return _buildAnalyticsBento(
+          context: context,
+          user: user,
+          logs: logs,
+          submissions: submissions,
         );
       },
     );
@@ -99,7 +117,6 @@ class _StudentAnalyticsOverviewCardState
     required List<WatchLogEntry> logs,
     required List<AssignmentSubmission> submissions,
   }) {
-    // 1. حساب نسبة إنجاز المحاضرات الفعلية في الدورات المشترك بها
     final allEnrolledLessonIds = <String>{
       for (final c in widget.enrolledCourses) ...c.allLessonIds,
     };
@@ -110,7 +127,6 @@ class _StudentAnalyticsOverviewCardState
         ? 0.0
         : (completedInEnrolled / allEnrolledLessonIds.length).clamp(0.0, 1.0);
 
-    // 2. حساب متوسط درجات التكليفات المقيمة
     final gradedSubmissions = submissions
         .where((s) => s.isGraded && s.score != null && s.maxScore > 0)
         .toList();
@@ -123,7 +139,6 @@ class _StudentAnalyticsOverviewCardState
       avgGradeRatio = sumRatio / gradedSubmissions.length;
     }
 
-    // 3. حساب نشاط آخر 7 أيام وتوزيع وقت المشاهدة على الدورات
     final weeklyBuckets = StudentAnalyticsCalculator.buildLast7DaysBuckets(logs);
     final activeDaysCount = weeklyBuckets.where((b) => b.minutes > 0).length;
     final weeklyTotalMinutes = weeklyBuckets
@@ -159,7 +174,7 @@ class _StudentAnalyticsOverviewCardState
                   Text('تحليل الأداء والتقدم الشخصي',
                       style: AppTextStyles.heading2),
                   Text(
-                    'قراءة حية لمعدل إنجازك ونشاطك الأسبوعي وتقييماتك العملية',
+                    'قراءة لمعدل إنجازك ونشاطك وتقييماتك العملية المعتمدة من المنصة',
                     style: AppTextStyles.caption,
                   ),
                 ],

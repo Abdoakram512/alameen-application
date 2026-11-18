@@ -3,18 +3,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:secure_screen_app/models/lesson.dart';
+import 'package:secure_screen_app/models/lesson_playback_data.dart';
 import 'package:secure_screen_app/models/user_profile.dart';
+import 'package:secure_screen_app/repositories/student_watch_repository.dart';
 import 'package:secure_screen_app/screens/student/video_player/controllers/watch_progress_coordinator.dart';
-import 'package:secure_screen_app/services/firestore_service.dart';
 import 'package:secure_screen_app/services/watch_queue.dart';
 
-class MockFirestoreService extends Fake implements FirestoreService {
+class MockStudentWatchRepository extends Fake implements StudentWatchRepository {
   final List<Map<String, dynamic>> recordedEvents = [];
   bool simulateNetworkFailure = false;
   int networkFailureCount = 0;
 
-  @override
-  Future<void> recordWatchEvent(Map<String, dynamic> event) async {
+  Future<void> recordQueueEvent(Map<String, dynamic> event) async {
     if (simulateNetworkFailure) {
       networkFailureCount++;
       throw Exception('Network unavailable (offline)');
@@ -23,36 +23,35 @@ class MockFirestoreService extends Fake implements FirestoreService {
   }
 
   @override
-  Future<String?> getLatestLessonCoverage({
-    required String uid,
-    required String courseId,
-    required String lessonId,
+  Future<WatchProgressResult> recordLessonProgress({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+    required int watchedSeconds,
+    required int positionSeconds,
+    bool? isCompleted,
   }) async {
-    return null;
+    await recordQueueEvent({
+      'courseSlugOrId': courseSlugOrId,
+      'lessonSlugOrId': lessonSlugOrId,
+      'watchedSeconds': watchedSeconds,
+      'positionSeconds': positionSeconds,
+      'isCompleted': isCompleted,
+    });
+    return WatchProgressResult(
+      success: true,
+      isCompleted: isCompleted ?? false,
+      watchedSeconds: watchedSeconds,
+    );
   }
-
-  @override
-  Future<String?> fetchProtectedLessonPlaybackId({
-    required String courseId,
-    required String lessonId,
-  }) async {
-    return null;
-  }
-
-  @override
-  Future<void> updateActiveWatchSession(dynamic session) async {}
-
-  @override
-  Future<void> removeActiveWatchSession(String sessionId) async {}
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Durable Offline Synchronization — 7 Scenario Verification Tests', () {
+  group('Durable Offline Synchronization — 7 Scenario Verification Tests (Laravel P5)', () {
     late UserModel testUser;
     late Lesson testLesson;
-    late MockFirestoreService mockFirestore;
+    late MockStudentWatchRepository mockWatchRepo;
     late Map<String, String> inMemoryStore;
     late WatchQueue testQueue;
 
@@ -76,17 +75,18 @@ void main() {
         title: 'درس البرمجة المتقدمة والمزامنة',
         description: 'شرح تفصيلي للمزامنة',
         duration: '20:00', // 1200 seconds
-        muxPlaybackId: 'fake_mux_id',
+        durationSeconds: 1200,
+        videoSource: 'bunny',
         isFreePreview: false,
       );
 
-      mockFirestore = MockFirestoreService();
+      mockWatchRepo = MockStudentWatchRepository();
       inMemoryStore = <String, String>{};
 
       testQueue = WatchQueue(
         read: (k) async => inMemoryStore[k],
         write: (k, v) async => inMemoryStore[k] = v,
-        send: (event) => mockFirestore.recordWatchEvent(event),
+        send: (event) => mockWatchRepo.recordQueueEvent(event),
       );
     });
 
@@ -95,9 +95,10 @@ void main() {
       final coordinator = WatchProgressCoordinator(
         currentUser: testUser,
         courseId: 'c_offline_1',
+        courseSlug: 'course-offline-1',
         courseTitle: 'كورس الأساسيات',
         lesson: testLesson,
-        firestoreService: mockFirestore,
+        watchRepository: mockWatchRepo,
         watchQueue: testQueue,
       );
       await coordinator.initialize();
@@ -117,9 +118,11 @@ void main() {
       await coordinator.prepareToLeave(45000);
 
       // Check events sent
-      expect(mockFirestore.recordedEvents.length, 1);
-      final event = mockFirestore.recordedEvents.first;
+      expect(mockWatchRepo.recordedEvents.length, 1);
+      final event = mockWatchRepo.recordedEvents.first;
       expect(event['seconds'], 45);
+      expect(event['watchedSeconds'], 45);
+      expect(event['positionSeconds'], 45);
       expect(event['isSessionEnd'], true);
       expect(coordinator.pendingWatchedSeconds, 0);
 
@@ -135,7 +138,7 @@ void main() {
         courseId: 'c_offline_1',
         courseTitle: 'كورس الأساسيات',
         lesson: testLesson,
-        firestoreService: mockFirestore,
+        watchRepository: mockWatchRepo,
         watchQueue: testQueue,
       );
       await coordinator.initialize();
@@ -150,28 +153,28 @@ void main() {
         );
       }
       await coordinator.flushWatchTime(isSessionEnd: false);
-      expect(mockFirestore.recordedEvents.length, 1);
-      expect(mockFirestore.recordedEvents[0]['seconds'], 300);
-      expect(mockFirestore.recordedEvents[0]['isSessionEnd'], isFalse);
+      expect(mockWatchRepo.recordedEvents.length, 1);
+      expect(mockWatchRepo.recordedEvents[0]['seconds'], 300);
+      expect(mockWatchRepo.recordedEvents[0]['isSessionEnd'], isFalse);
 
       // Student immediately hits pause 1 second later (0 pending seconds)
       expect(coordinator.pendingWatchedSeconds, 0);
       await coordinator.flushWatchTime(isSessionEnd: true);
 
       // Session-end event is NEVER dropped even with 0 pending seconds
-      expect(mockFirestore.recordedEvents.length, 2);
-      expect(mockFirestore.recordedEvents[1]['seconds'], 0);
-      expect(mockFirestore.recordedEvents[1]['isSessionEnd'], true);
+      expect(mockWatchRepo.recordedEvents.length, 2);
+      expect(mockWatchRepo.recordedEvents[1]['seconds'], 0);
+      expect(mockWatchRepo.recordedEvents[1]['isSessionEnd'], true);
     });
 
     // Scenario 3: Backgrounding / Inactive App Lifecycle
-    test('Scenario 3: Backgrounding triggers prepareToLeave and persists progress and presence removal', () async {
+    test('Scenario 3: Backgrounding triggers prepareToLeave and persists progress safely', () async {
       final coordinator = WatchProgressCoordinator(
         currentUser: testUser,
         courseId: 'c_offline_1',
         courseTitle: 'كورس الأساسيات',
         lesson: testLesson,
-        firestoreService: mockFirestore,
+        watchRepository: mockWatchRepo,
         watchQueue: testQueue,
       );
       await coordinator.initialize();
@@ -189,9 +192,9 @@ void main() {
       // App goes background (lifecycle pause / prepareToLeave)
       await coordinator.prepareToLeave(80000);
 
-      expect(mockFirestore.recordedEvents.length, 1);
-      expect(mockFirestore.recordedEvents.first['seconds'], 80);
-      expect(mockFirestore.recordedEvents.first['isSessionEnd'], true);
+      expect(mockWatchRepo.recordedEvents.length, 1);
+      expect(mockWatchRepo.recordedEvents.first['seconds'], 80);
+      expect(mockWatchRepo.recordedEvents.first['isSessionEnd'], true);
 
       final pos = await SharedPreferencesAsync().getInt(coordinator.positionKey);
       expect(pos, 80000);
@@ -204,7 +207,7 @@ void main() {
         courseId: 'c_offline_1',
         courseTitle: 'كورس الأساسيات',
         lesson: testLesson,
-        firestoreService: mockFirestore,
+        watchRepository: mockWatchRepo,
         watchQueue: testQueue,
       );
       await coordinator.initialize();
@@ -233,14 +236,14 @@ void main() {
 
     // Scenario 5: Offline Exit (network failure leaves events queued locally)
     test('Scenario 5: Offline Exit retains pending events in local storage when server is unreachable', () async {
-      mockFirestore.simulateNetworkFailure = true;
+      mockWatchRepo.simulateNetworkFailure = true;
 
       final coordinator = WatchProgressCoordinator(
         currentUser: testUser,
         courseId: 'c_offline_1',
         courseTitle: 'كورس الأساسيات',
         lesson: testLesson,
-        firestoreService: mockFirestore,
+        watchRepository: mockWatchRepo,
         watchQueue: testQueue,
       );
       await coordinator.initialize();
@@ -257,9 +260,9 @@ void main() {
       // Flush while offline
       await coordinator.flushWatchTime(isSessionEnd: true);
 
-      // Zero events reached mockFirestore due to offline failure
-      expect(mockFirestore.recordedEvents.isEmpty, isTrue);
-      expect(mockFirestore.networkFailureCount, greaterThan(0));
+      // Zero events reached mockWatchRepo due to offline failure
+      expect(mockWatchRepo.recordedEvents.isEmpty, isTrue);
+      expect(mockWatchRepo.networkFailureCount, greaterThan(0));
 
       // But local storage has the queued events safe!
       final queueKey = 'watch.queue.v1.${testUser.uid}';
@@ -268,14 +271,15 @@ void main() {
     });
 
     // Scenario 6: Restart & Restoration (flushes offline events when back online)
-    test('Scenario 6: App Restart restores queued offline events and successfully syncs to Firestore', () async {
-      // Simulate state where 2 events were queued while offline
-      mockFirestore.simulateNetworkFailure = true;
+    test('Scenario 6: App Restart restores queued offline events and successfully syncs to Laravel', () async {
+      mockWatchRepo.simulateNetworkFailure = true;
       await testQueue.enqueue(
         uid: testUser.uid,
         courseId: 'c_offline_1',
         lessonId: testLesson.id,
         seconds: 180,
+        watchedSeconds: 180,
+        positionSeconds: 180,
         sessionId: 'sess_offline_prev',
         isSessionEnd: false,
       );
@@ -284,36 +288,34 @@ void main() {
         courseId: 'c_offline_1',
         lessonId: testLesson.id,
         seconds: 60,
+        watchedSeconds: 240,
+        positionSeconds: 240,
         sessionId: 'sess_offline_prev',
         isSessionEnd: true,
       );
 
-      // Confirm events are in storage
       final queueKey = 'watch.queue.v1.${testUser.uid}';
       expect(inMemoryStore[queueKey], isNotNull);
 
-      // Now device comes online (restart / reconnection)
-      mockFirestore.simulateNetworkFailure = false;
+      mockWatchRepo.simulateNetworkFailure = false;
       await testQueue.flush(testUser.uid);
 
-      // Both events are now recorded in Firestore
-      expect(mockFirestore.recordedEvents.length, 2);
-      expect(mockFirestore.recordedEvents[0]['seconds'], 180);
-      expect(mockFirestore.recordedEvents[1]['seconds'], 60);
-      expect(mockFirestore.recordedEvents[1]['isSessionEnd'], true);
+      expect(mockWatchRepo.recordedEvents.length, 2);
+      expect(mockWatchRepo.recordedEvents[0]['seconds'], 180);
+      expect(mockWatchRepo.recordedEvents[1]['seconds'], 60);
+      expect(mockWatchRepo.recordedEvents[1]['isSessionEnd'], true);
 
-      // Queue is now empty
       expect(inMemoryStore[queueKey], '[]');
     });
 
-    // Scenario 7: Repeated Sync with Same Session ID (Idempotency)
-    test('Scenario 7: Repeated Sync with identical session ID remains idempotent and safe', () async {
+    // Scenario 7: Repeated Sync with Same Session ID
+    test('Scenario 7: Repeated Sync with identical session ID remains safe without redundant network calls', () async {
       final coordinator = WatchProgressCoordinator(
         currentUser: testUser,
         courseId: 'c_offline_1',
         courseTitle: 'كورس الأساسيات',
         lesson: testLesson,
-        firestoreService: mockFirestore,
+        watchRepository: mockWatchRepo,
         watchQueue: testQueue,
         customSessionId: 'sess_idempotent_fixed_999',
       );
@@ -329,12 +331,11 @@ void main() {
       }
       await coordinator.flushWatchTime(isSessionEnd: false);
 
-      expect(mockFirestore.recordedEvents.length, 1);
-      expect(mockFirestore.recordedEvents.first['sessionId'], 'sess_idempotent_fixed_999');
+      expect(mockWatchRepo.recordedEvents.length, 1);
+      expect(mockWatchRepo.recordedEvents.first['sessionId'], 'sess_idempotent_fixed_999');
 
-      // Attempting repeated flush without new seconds does not emit redundant write
       await coordinator.flushWatchTime(isSessionEnd: false);
-      expect(mockFirestore.recordedEvents.length, 1);
+      expect(mockWatchRepo.recordedEvents.length, 1);
     });
   });
 }

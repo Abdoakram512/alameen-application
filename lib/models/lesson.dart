@@ -25,10 +25,10 @@ class Lesson extends Equatable {
   /// حالة معالجة الفيديو السحابية: 'ready' | 'processing' | 'error'
   final String videoStatus;
 
-  /// نسبة تقدم معالجة الفيديو في Mux (0 إلى 100)
+  /// نسبة تقدم معالجة الفيديو في المزود السحابي (0 إلى 100)
   final double videoProgress;
 
-  /// رسالة الخطأ في حال فشل السحب في Mux
+  /// رسالة الخطأ في حال فشل السحب
   final String? videoErrorMessage;
 
   /// الرابط السحابي الأصلي الذي تم سحب الفيديو منه
@@ -55,12 +55,27 @@ class Lesson extends Equatable {
   /// هل الدرس متاح لفتح وتشغيل الفيديو لهذا الطالب
   final bool isAccessible;
 
+  /// المدة الدقيقة بالثواني القادمة من Laravel REST API
+  final int? durationSeconds;
+
+  /// إجمالي الثواني المشاهدة المسجلة على الخادم
+  final int watchedSeconds;
+
+  /// موضع الاستئناف الأخير بالثواني على الخادم
+  final int lastPositionSeconds;
+
+  /// نسبة الإكمال المسجلة على الخادم
+  final double serverCompletionPercentage;
+
+  /// آخر وقت مشاهدة مسجل على الخادم
+  final DateTime? lastWatchedAt;
+
   const Lesson({
     required this.id,
     required this.title,
     required this.description,
     required this.duration,
-    required this.muxPlaybackId,
+    this.muxPlaybackId = '',
     this.muxAssetId,
     this.order = 1,
     this.isFreePreview = false,
@@ -79,11 +94,20 @@ class Lesson extends Equatable {
     this.slug,
     this.videoSource,
     this.isAccessible = true,
+    this.durationSeconds,
+    this.watchedSeconds = 0,
+    this.lastPositionSeconds = 0,
+    this.serverCompletionPercentage = 0.0,
+    this.lastWatchedAt,
   });
 
+  bool get hasVideo =>
+      muxPlaybackId.trim().isNotEmpty ||
+      (videoSource != null && videoSource!.trim().isNotEmpty);
+
   bool get isAssignmentLesson =>
-      type == 'assignment' || (muxPlaybackId.isEmpty && hasAssignment);
-  bool get hasVideo => muxPlaybackId.trim().isNotEmpty;
+      type == 'assignment' || (!hasVideo && hasAssignment);
+
   bool get hasAssignment =>
       assignmentId != null && assignmentId!.trim().isNotEmpty;
   bool get isVideoProcessing => videoStatus == 'processing';
@@ -101,30 +125,55 @@ class Lesson extends Equatable {
   /// هل المحاضرة مسودة غير منشورة؟
   bool get isDraft => !isPublished;
 
-  String get videoStreamUrl => 'https://stream.mux.com/$muxPlaybackId.m3u8';
+  String get videoStreamUrl => muxPlaybackId.trim().isNotEmpty
+      ? 'https://stream.mux.com/${muxPlaybackId.trim()}.m3u8'
+      : '';
+
   String get thumbnailUrl {
     if (customThumbnailUrl != null && customThumbnailUrl!.trim().isNotEmpty) {
       return customThumbnailUrl!;
     }
-    if (muxPlaybackId.isNotEmpty) {
-      return 'https://image.mux.com/$muxPlaybackId/thumbnail.jpg?width=600&height=340&fit_mode=smart';
+    if (muxPlaybackId.trim().isNotEmpty) {
+      return 'https://image.mux.com/${muxPlaybackId.trim()}/thumbnail.jpg?width=600&height=340&fit_mode=smart';
     }
     return '';
   }
 
+  /// الحد الأدنى الفعلي لنسبة الإكمال (لا يقل عن قاعدة الأكاديمية الصارمة 95%).
+  int get effectiveCompletionThresholdPercentage =>
+      completionThresholdPercentage >= 95 ? completionThresholdPercentage : 95;
+
   int get durationInSeconds {
+    if (durationSeconds != null && durationSeconds! > 0) {
+      return durationSeconds!;
+    }
     final parts = duration.split(':');
     if (parts.length == 2) {
-      final m = int.tryParse(parts[0]) ?? 0;
-      final s = int.tryParse(parts[1]) ?? 0;
+      final m = int.tryParse(parts[0].trim()) ?? 0;
+      final s = int.tryParse(parts[1].trim()) ?? 0;
       return (m * 60) + s;
     } else if (parts.length == 3) {
-      final h = int.tryParse(parts[0]) ?? 0;
-      final m = int.tryParse(parts[1]) ?? 0;
-      final s = int.tryParse(parts[2]) ?? 0;
+      final h = int.tryParse(parts[0].trim()) ?? 0;
+      final m = int.tryParse(parts[1].trim()) ?? 0;
+      final s = int.tryParse(parts[2].trim()) ?? 0;
       return (h * 3600) + (m * 60) + s;
     }
+    final match = RegExp(r'(\d+)').firstMatch(duration);
+    if (match != null && duration.contains('دقيق')) {
+      return (int.tryParse(match.group(1)!) ?? 0) * 60;
+    }
     return 0;
+  }
+
+  static String _formatSeconds(int totalSeconds) {
+    if (totalSeconds <= 0) return '15:00';
+    final hours = totalSeconds ~/ 3600;
+    final mins = (totalSeconds % 3600) ~/ 60;
+    final secs = totalSeconds % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   Map<String, dynamic> toMap() => {
@@ -132,10 +181,12 @@ class Lesson extends Equatable {
         'title': title,
         'description': description,
         'duration': duration,
+        'durationSeconds': durationSeconds,
         'muxPlaybackId': muxPlaybackId,
         'muxAssetId': muxAssetId,
         'order': order,
         'isFreePreview': isFreePreview,
+        'isCompleted': isCompleted,
         'type': type,
         'assignmentId': assignmentId,
         'lockNextUntilSubmitted': lockNextUntilSubmitted,
@@ -147,41 +198,83 @@ class Lesson extends Equatable {
         'isPublished': isPublished,
         'scheduledPublishAt': scheduledPublishAt?.toIso8601String(),
         'customThumbnailUrl': customThumbnailUrl,
+        'slug': slug,
+        'videoSource': videoSource,
+        'isAccessible': isAccessible,
+        'watchedSeconds': watchedSeconds,
+        'lastPositionSeconds': lastPositionSeconds,
+        'serverCompletionPercentage': serverCompletionPercentage,
+        'lastWatchedAt': lastWatchedAt?.toIso8601String(),
       };
 
   factory Lesson.fromLaravelVideoJson(Map<String, dynamic> json) {
     final durSec = (json['duration_seconds'] is num)
         ? (json['duration_seconds'] as num).toInt()
-        : 0;
-    final durMin = (json['duration_minutes'] is num)
+        : ((json['duration_minutes'] is num)
+            ? ((json['duration_minutes'] as num).toDouble() * 60).round()
+            : 0);
+    final durationMinutes = (json['duration_minutes'] is num)
         ? (json['duration_minutes'] as num).toInt()
-        : (durSec / 60).round();
-    final durationStr = durSec > 0 ? '$durMin دقيقة' : '15:00';
+        : 0;
+    final durationStr = durationMinutes > 0
+        ? '$durationMinutes دقيقة'
+        : _formatSeconds(durSec);
 
-    final progressMap = json['progress'] is Map ? json['progress'] as Map : null;
+    final progressMap = json['progress'] is Map
+        ? Map<String, dynamic>.from(json['progress'] as Map)
+        : null;
     final isCompleted = json['is_completed'] == true ||
         (progressMap != null && progressMap['is_completed'] == true);
+
+    final watchedSec = (progressMap?['watched_seconds'] is num)
+        ? (progressMap!['watched_seconds'] as num).toInt()
+        : 0;
+    final lastPosSec = (progressMap?['last_position_seconds'] is num)
+        ? (progressMap!['last_position_seconds'] as num).toInt()
+        : ((progressMap?['position_seconds'] is num)
+            ? (progressMap!['position_seconds'] as num).toInt()
+            : watchedSec);
+    final completionPct = (progressMap?['completion_percentage'] is num)
+        ? (progressMap!['completion_percentage'] as num).toDouble()
+        : 0.0;
+    DateTime? watchedAt;
+    if (progressMap?['last_watched_at'] != null) {
+      watchedAt = DateTime.tryParse(progressMap!['last_watched_at'].toString());
+    }
+
+    final rawThreshold = (json['min_completion_percentage'] is num)
+        ? (json['min_completion_percentage'] as num).toInt()
+        : 95;
+
+    final clinicalTask = json['clinical_task'] is Map
+        ? Map<String, dynamic>.from(json['clinical_task'] as Map)
+        : null;
 
     return Lesson(
       id: json['id']?.toString() ?? '',
       slug: json['slug']?.toString(),
       title: json['title']?.toString() ?? json['title_ar']?.toString() ?? '',
-      description: json['description']?.toString() ?? json['description_ar']?.toString() ?? '',
+      description:
+          json['description']?.toString() ?? json['description_ar']?.toString() ?? '',
       duration: durationStr,
-      muxPlaybackId: json['video_source'] == 'mux'
-          ? (json['slug']?.toString() ?? json['id']?.toString() ?? '')
-          : (json['slug']?.toString() ?? json['id']?.toString() ?? ''),
-      videoSource: json['video_source']?.toString() ?? 'bunny',
+      durationSeconds: durSec > 0 ? durSec : null,
+      muxPlaybackId: json['mux_playback_id']?.toString() ?? '',
+      videoSource: json['video_source']?.toString(),
       order: (json['sort_order'] is num)
           ? (json['sort_order'] as num).toInt()
           : ((json['order'] is num) ? (json['order'] as num).toInt() : 1),
       isFreePreview: json['is_free_preview'] == true,
-      isAccessible: json['is_accessible'] != false,
+      isAccessible: json.containsKey('is_accessible')
+          ? json['is_accessible'] == true
+          : true,
       isCompleted: isCompleted,
-      completionThresholdPercentage: (json['min_completion_percentage'] is num)
-          ? (json['min_completion_percentage'] as num).toInt()
-          : 95,
+      completionThresholdPercentage: rawThreshold,
       isPublished: json['is_published'] != false,
+      watchedSeconds: watchedSec,
+      lastPositionSeconds: lastPosSec,
+      serverCompletionPercentage: completionPct,
+      lastWatchedAt: watchedAt,
+      assignmentId: clinicalTask?['id']?.toString() ?? json['assignment_id']?.toString(),
     );
   }
 
@@ -190,36 +283,50 @@ class Lesson extends Equatable {
       return Lesson.fromLaravelVideoJson(map);
     }
     return Lesson(
-        id: map['id']?.toString() ?? '',
-        title: map['title']?.toString() ?? '',
-        description: map['description']?.toString() ?? '',
-        duration: map['duration']?.toString() ?? '',
-        muxPlaybackId: map['muxPlaybackId']?.toString() ?? '',
-        muxAssetId: map['muxAssetId'] as String?,
-        order: (map['order'] is num) ? (map['order'] as num).toInt() : 1,
-        isFreePreview: map['isFreePreview'] == true,
-        isCompleted: map['isCompleted'] == true || map['is_completed'] == true,
-        type: map['type']?.toString() ?? 'video',
-        assignmentId: map['assignmentId'] as String?,
-        lockNextUntilSubmitted: map['lockNextUntilSubmitted'] == true,
-        videoStatus: map['videoStatus']?.toString() ?? 'ready',
-        videoProgress: (map['videoProgress'] is num)
-            ? (map['videoProgress'] as num).toDouble()
-            : 100.0,
-        videoErrorMessage: map['videoErrorMessage'] as String?,
-        videoSourceUrl: map['videoSourceUrl'] as String?,
-        completionThresholdPercentage:
-            (map['completionThresholdPercentage'] is num)
-                ? (map['completionThresholdPercentage'] as num).toInt()
-                : 95,
-        isPublished: map['isPublished'] != false,
-        scheduledPublishAt:
-            FirestoreDateTimeConverter.fromValue(map['scheduledPublishAt']),
-        customThumbnailUrl: map['customThumbnailUrl'] as String?,
-        slug: map['slug']?.toString(),
-        videoSource: map['videoSource']?.toString() ?? map['video_source']?.toString(),
-        isAccessible: map['isAccessible'] != false && map['is_accessible'] != false,
-      );
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
+      duration: map['duration']?.toString() ?? '',
+      durationSeconds: (map['durationSeconds'] is num)
+          ? (map['durationSeconds'] as num).toInt()
+          : null,
+      muxPlaybackId: map['muxPlaybackId']?.toString() ?? '',
+      muxAssetId: map['muxAssetId'] as String?,
+      order: (map['order'] is num) ? (map['order'] as num).toInt() : 1,
+      isFreePreview: map['isFreePreview'] == true,
+      isCompleted: map['isCompleted'] == true || map['is_completed'] == true,
+      type: map['type']?.toString() ?? 'video',
+      assignmentId: map['assignmentId'] as String?,
+      lockNextUntilSubmitted: map['lockNextUntilSubmitted'] == true,
+      videoStatus: map['videoStatus']?.toString() ?? 'ready',
+      videoProgress: (map['videoProgress'] is num)
+          ? (map['videoProgress'] as num).toDouble()
+          : 100.0,
+      videoErrorMessage: map['videoErrorMessage'] as String?,
+      videoSourceUrl: map['videoSourceUrl'] as String?,
+      completionThresholdPercentage:
+          (map['completionThresholdPercentage'] is num)
+              ? (map['completionThresholdPercentage'] as num).toInt()
+              : 95,
+      isPublished: map['isPublished'] != false,
+      scheduledPublishAt:
+          FirestoreDateTimeConverter.fromValue(map['scheduledPublishAt']),
+      customThumbnailUrl: map['customThumbnailUrl'] as String?,
+      slug: map['slug']?.toString(),
+      videoSource:
+          map['videoSource']?.toString() ?? map['video_source']?.toString(),
+      isAccessible: map['isAccessible'] != false && map['is_accessible'] != false,
+      watchedSeconds: (map['watchedSeconds'] is num)
+          ? (map['watchedSeconds'] as num).toInt()
+          : 0,
+      lastPositionSeconds: (map['lastPositionSeconds'] is num)
+          ? (map['lastPositionSeconds'] as num).toInt()
+          : 0,
+      serverCompletionPercentage: (map['serverCompletionPercentage'] is num)
+          ? (map['serverCompletionPercentage'] as num).toDouble()
+          : 0.0,
+      lastWatchedAt: FirestoreDateTimeConverter.fromValue(map['lastWatchedAt']),
+    );
   }
 
   Lesson copyWith({
@@ -227,6 +334,7 @@ class Lesson extends Equatable {
     String? title,
     String? description,
     String? duration,
+    int? durationSeconds,
     String? muxPlaybackId,
     String? muxAssetId,
     int? order,
@@ -246,12 +354,17 @@ class Lesson extends Equatable {
     String? slug,
     String? videoSource,
     bool? isAccessible,
+    int? watchedSeconds,
+    int? lastPositionSeconds,
+    double? serverCompletionPercentage,
+    DateTime? lastWatchedAt,
   }) {
     return Lesson(
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
       duration: duration ?? this.duration,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
       muxPlaybackId: muxPlaybackId ?? this.muxPlaybackId,
       muxAssetId: muxAssetId ?? this.muxAssetId,
       order: order ?? this.order,
@@ -273,6 +386,11 @@ class Lesson extends Equatable {
       slug: slug ?? this.slug,
       videoSource: videoSource ?? this.videoSource,
       isAccessible: isAccessible ?? this.isAccessible,
+      watchedSeconds: watchedSeconds ?? this.watchedSeconds,
+      lastPositionSeconds: lastPositionSeconds ?? this.lastPositionSeconds,
+      serverCompletionPercentage:
+          serverCompletionPercentage ?? this.serverCompletionPercentage,
+      lastWatchedAt: lastWatchedAt ?? this.lastWatchedAt,
     );
   }
 
@@ -282,6 +400,7 @@ class Lesson extends Equatable {
         title,
         description,
         duration,
+        durationSeconds,
         muxPlaybackId,
         muxAssetId,
         order,
@@ -301,5 +420,9 @@ class Lesson extends Equatable {
         slug,
         videoSource,
         isAccessible,
+        watchedSeconds,
+        lastPositionSeconds,
+        serverCompletionPercentage,
+        lastWatchedAt,
       ];
 }

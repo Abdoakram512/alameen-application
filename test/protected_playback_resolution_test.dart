@@ -1,130 +1,262 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:secure_screen_app/core/network/api_client.dart';
+import 'package:secure_screen_app/datasources/watch_remote_data_source.dart';
 import 'package:secure_screen_app/models/lesson.dart';
+import 'package:secure_screen_app/repositories/impl/student_watch_repository_impl.dart';
 import 'package:secure_screen_app/repositories/student_learning_repository.dart';
-import 'package:secure_screen_app/services/firestore_service.dart';
-import 'package:secure_screen_app/services/storage_service.dart';
 
-class _FakeFirestoreService implements FirestoreService {
-  final Map<String, String> vaultedPlaybackIds;
-  int protectedFetchCount = 0;
-
-  _FakeFirestoreService({this.vaultedPlaybackIds = const {}});
-
-  @override
-  Future<String?> fetchProtectedLessonPlaybackId({
-    required String courseId,
-    required String lessonId,
-  }) async {
-    protectedFetchCount++;
-    return vaultedPlaybackIds['$courseId/$lessonId'];
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeStorageService implements StorageService {
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
+class MockApiClient extends Mock implements ApiClient {}
 
 void main() {
-  group('Protected Lesson Playback Resolution', () {
-    test('Free preview lesson uses public muxPlaybackId without vault lookup',
-        () async {
-      final fakeFirestore = _FakeFirestoreService();
-      final repo = StudentLearningRepositoryImpl(
-        firestoreService: fakeFirestore,
-        storageService: _FakeStorageService(),
+  late MockApiClient mockApiClient;
+  late WatchRemoteDataSourceImpl remoteDataSource;
+  late StudentWatchRepositoryImpl watchRepository;
+  late StudentLearningRepositoryImpl learningRepository;
+
+  const baseLesson = Lesson(
+    id: '43',
+    slug: 'lesson-intro',
+    title: 'الدرس الأول',
+    description: 'مقدمة',
+    duration: '10:00',
+    durationSeconds: 600,
+    isFreePreview: false,
+    videoSource: 'bunny',
+    isAccessible: true,
+  );
+
+  setUp(() {
+    mockApiClient = MockApiClient();
+    remoteDataSource = WatchRemoteDataSourceImpl(apiClient: mockApiClient);
+    watchRepository = StudentWatchRepositoryImpl(
+      remoteDataSource: remoteDataSource,
+    );
+    learningRepository = StudentLearningRepositoryImpl(
+      watchRepository: watchRepository,
+    );
+  });
+
+  group('P5 Protected Playback Resolution (Laravel REST API)', () {
+    test('resolves valid HLS stream URL directly from GET lesson details', () async {
+      final futureExpiry =
+          DateTime.now().toUtc().add(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000;
+      final validHlsUrl =
+          'https://cdn.alameen-center.online/bunny/43/playlist.m3u8?expires=$futureExpiry';
+
+      when(() => mockApiClient.get('/student/courses/course-1/lessons/lesson-intro'))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'course': {'id': 10, 'slug': 'course-1', 'title': 'دورة 1'},
+              'current_video': {
+                'id': 43,
+                'slug': 'lesson-intro',
+                'title': 'الدرس الأول',
+                'duration_seconds': 600,
+                'video_source': 'bunny',
+                'is_free_preview': true,
+                'is_accessible': true,
+              },
+              'playback': {
+                'hls_url': validHlsUrl,
+                'embed_url': 'https://iframe.mediadelivery.net/embed/1/43',
+                'watermark': 'ALAMEEN-101',
+                'expires_in': 7200,
+              },
+              'progress': {
+                'watched_seconds': 120,
+                'last_position_seconds': 95,
+                'is_completed': false,
+              },
+            },
+          },
+        ),
       );
 
-      final previewLesson = Lesson(
-        id: 'les_preview_1',
-        title: 'محاضرة تعريفية مجانية',
-        description: 'مقدمة الكورس',
-        duration: '08:00',
-        muxPlaybackId: 'pub_preview_abc123',
-        isFreePreview: true,
+      final resolved = await learningRepository.resolveLessonPlayback(
+        courseId: 'course-1',
+        lesson: baseLesson.copyWith(isFreePreview: true),
       );
 
-      final resolved = await repo.resolveLessonPlayback(
-        courseId: 'course_speech_1',
-        lesson: previewLesson,
-      );
-
-      expect(fakeFirestore.protectedFetchCount, 0);
-      expect(
-        resolved.streamUrl,
-        'https://stream.mux.com/pub_preview_abc123.m3u8',
-      );
-      expect(
-        resolved.thumbnailUrl,
-        contains('https://image.mux.com/pub_preview_abc123/thumbnail.jpg'),
-      );
+      expect(resolved.streamUrl, equals(validHlsUrl));
+      expect(resolved.watermarkText, equals('ALAMEEN-101'));
+      expect(resolved.lastPositionSeconds, equals(95));
+      expect(resolved.watchedSeconds, equals(120));
+      verifyNever(() => mockApiClient.post(any()));
     });
 
-    test(
-        'Paid lesson with stripped muxPlaybackId resolves from protected_lessons vault',
-        () async {
-      final fakeFirestore = _FakeFirestoreService(
-        vaultedPlaybackIds: {
-          'course_speech_1/les_paid_2': 'vault_secret_xyz789',
-        },
-      );
-      final repo = StudentLearningRepositoryImpl(
-        firestoreService: fakeFirestore,
-        storageService: _FakeStorageService(),
+    test('automatically refreshes playback token when initial HLS URL is expired', () async {
+      const expiredHls =
+          'https://cdn.alameen-center.online/bunny/43/playlist.m3u8?expires=1000';
+      final futureExpiry =
+          DateTime.now().toUtc().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000;
+      final refreshedHls =
+          'https://cdn.alameen-center.online/bunny/43/playlist.m3u8?expires=$futureExpiry';
+
+      when(() => mockApiClient.get('/student/courses/course-1/lessons/lesson-intro'))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'current_video': {
+                'id': 43,
+                'slug': 'lesson-intro',
+                'duration_seconds': 600,
+                'is_accessible': true,
+              },
+              'playback': {
+                'hls_url': expiredHls,
+                'expires_in': 0,
+              },
+            },
+          },
+        ),
       );
 
-      final paidLesson = Lesson(
-        id: 'les_paid_2',
-        title: 'جلسة تأهيل متقدمة',
-        description: 'محتوى خاص بالمشتركين',
-        duration: '24:15',
-        muxPlaybackId: '',
-        isFreePreview: false,
+      when(
+        () => mockApiClient.post(
+          '/student/courses/course-1/lessons/lesson-intro/playback-token',
+        ),
+      ).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro/playback-token',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'hls_url': refreshedHls,
+              'watermark': 'ALAMEEN-RENEWED',
+              'expires_in': 3600,
+            },
+          },
+        ),
       );
 
-      final resolved = await repo.resolveLessonPlayback(
-        courseId: 'course_speech_1',
-        lesson: paidLesson,
+      final resolved = await learningRepository.resolveLessonPlayback(
+        courseId: 'course-1',
+        lesson: baseLesson,
       );
 
-      expect(fakeFirestore.protectedFetchCount, 1);
-      expect(
-        resolved.streamUrl,
-        'https://stream.mux.com/vault_secret_xyz789.m3u8',
-      );
-      expect(
-        resolved.thumbnailUrl,
-        contains('https://image.mux.com/vault_secret_xyz789/thumbnail.jpg'),
-      );
+      expect(resolved.streamUrl, equals(refreshedHls));
+      expect(resolved.watermarkText, equals('ALAMEEN-RENEWED'));
+      verify(
+        () => mockApiClient.post(
+          '/student/courses/course-1/lessons/lesson-intro/playback-token',
+        ),
+      ).called(1);
     });
 
-    test('Paid lesson without vault entry throws StateError cleanly', () async {
-      final fakeFirestore = _FakeFirestoreService();
-      final repo = StudentLearningRepositoryImpl(
-        firestoreService: fakeFirestore,
-        storageService: _FakeStorageService(),
+    test('throws PlaybackAuthorizationException on 403 without fallback URL fabrication', () async {
+      final req = RequestOptions(
+        path: '/student/courses/course-1/lessons/lesson-intro',
       );
-
-      final unauthorizedLesson = Lesson(
-        id: 'les_missing',
-        title: 'جلسة غير مصرح بها',
-        description: '',
-        duration: '12:00',
-        muxPlaybackId: '',
-        isFreePreview: false,
+      when(() => mockApiClient.get('/student/courses/course-1/lessons/lesson-intro'))
+          .thenThrow(
+        DioException(
+          requestOptions: req,
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: req,
+            statusCode: 403,
+            data: {'message': 'لم يتم فتح هذا المستوى بعد.'},
+          ),
+        ),
       );
 
       await expectLater(
-        repo.resolveLessonPlayback(
-          courseId: 'course_speech_1',
-          lesson: unauthorizedLesson,
+        () => learningRepository.resolveLessonPlayback(
+          courseId: 'course-1',
+          lesson: const Lesson(
+            id: '43',
+            slug: 'lesson-intro',
+            title: 'درس مغلق',
+            description: '',
+            duration: '10:00',
+            muxPlaybackId: 'legacy_mux_should_never_be_used',
+          ),
         ),
-        throwsStateError,
+        throwsA(
+          isA<PlaybackAuthorizationException>().having(
+            (e) => e.statusCode,
+            'statusCode',
+            403,
+          ),
+        ),
+      );
+    });
+
+    test('throws PlaybackProviderIncompatibleException when backend returns embed_url only without hls_url', () async {
+      when(() => mockApiClient.get('/student/courses/course-1/lessons/lesson-intro'))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'current_video': {
+                'id': 43,
+                'slug': 'lesson-intro',
+                'duration_seconds': 600,
+                'video_source': 'mux',
+                'is_accessible': true,
+              },
+              'playback': {
+                'embed_url': 'https://player.example.com/embed/43',
+                'hls_url': null,
+              },
+            },
+          },
+        ),
+      );
+
+      when(
+        () => mockApiClient.post(
+          '/student/courses/course-1/lessons/lesson-intro/playback-token',
+        ),
+      ).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro/playback-token',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'embed_url': 'https://player.example.com/embed/43',
+              'hls_url': '',
+            },
+          },
+        ),
+      );
+
+      await expectLater(
+        () => learningRepository.resolveLessonPlayback(
+          courseId: 'course-1',
+          lesson: baseLesson.copyWith(videoSource: 'mux'),
+        ),
+        throwsA(
+          isA<PlaybackProviderIncompatibleException>()
+              .having((e) => e.videoSource, 'videoSource', 'mux')
+              .having(
+                (e) => e.embedUrl,
+                'embedUrl',
+                'https://player.example.com/embed/43',
+              ),
+        ),
       );
     });
   });
 }
-

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'core/config/app_config.dart';
+import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/splash/splash_screen.dart';
@@ -19,14 +20,13 @@ import 'navigation/app_router.dart';
 import 'screens/security/security_protection_watcher.dart';
 import 'core/di/injection_container.dart';
 import 'services/notification_service.dart';
+import 'services/watch_queue.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تهيئة الترجمة فورياً من الملفات المحلية قبل أول إطار
   await EasyLocalization.ensureInitialized();
 
-  // 1. إظهار شاشة splash_screen.dart مع الترجمة المحلية فورياً في أول إطار
   runApp(
     EasyLocalization(
       supportedLocales: AppConfig.supportedLocales,
@@ -44,18 +44,14 @@ void main() async {
     ),
   );
 
-  // 2. تهيئة فيربيس وحقن التبعيات في الخلفية أثناء استمتاع المتدرب بشاشة السبلاش
   await Future.wait<void>([
     _initFirebase(),
     initDependencies(),
   ]);
 
-  // تشغيل الحماية الإضافية والإشعارات في الخلفية دون تعطيل أول إطار (First Frame)
-  // ملاحظة: حماية الشاشة الأصلية مفعلة بالفعل على مستوى Android OS في MainActivity.kt
   unawaited(_enableScreenProtection());
   unawaited(sl<NotificationService>().initialize());
 
-  // 3. تسليم التحكم الكامل لتطبيق SecureStudentApp
   runApp(
     EasyLocalization(
       supportedLocales: AppConfig.supportedLocales,
@@ -102,6 +98,7 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
   late final AccessCubit _accessCubit;
   late final GoRouter _router;
   StreamSubscription<AuthState>? _authSubscription;
+  String? _lastSyncedUid;
 
   @override
   void initState() {
@@ -111,14 +108,26 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
     _accessCubit = sl<AccessCubit>();
     _router = createStudentRouter(_authCubit);
 
-    _authSubscription = _authCubit.stream.listen((state) {
+    void handleAuthState(AuthState state) {
       if (state is Authenticated) {
-        _accessCubit.listenToStudentRequests(state.user.uid);
-        sl<NotificationService>().syncFCMToken(state.user.uid);
-      } else {
+        if (_lastSyncedUid != state.user.uid) {
+          _lastSyncedUid = state.user.uid;
+          _accessCubit.listenToStudentRequests(state.user.uid);
+          unawaited(_coursesCubit.syncStudentState(authCubit: _authCubit));
+          if (sl.isRegistered<WatchQueue>()) {
+            unawaited(sl<WatchQueue>().flush(state.user.uid).catchError((_) {}));
+          }
+          sl<NotificationService>().syncFCMToken(state.user.uid);
+        }
+      } else if (state is Unauthenticated || state is AuthSuspended || state is AuthPendingApproval) {
+        _lastSyncedUid = null;
         _accessCubit.reset();
+        _coursesCubit.clearStudentSession();
       }
-    });
+    }
+
+    handleAuthState(_authCubit.state);
+    _authSubscription = _authCubit.stream.listen(handleAuthState);
   }
 
   @override
@@ -154,12 +163,10 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
               final studentId = authState is Authenticated
                   ? authState.user.uid
                   : null;
-              final studentEmail = authState is Authenticated
-                  ? authState.user.email
-                  : null;
+              final apiClient = sl.isRegistered<ApiClient>() ? sl<ApiClient>() : null;
               return SecurityProtectionWatcher(
                 studentId: studentId,
-                studentEmail: studentEmail,
+                apiClient: apiClient,
                 child: OnboardingGate(
                   onSelectRegister: () {
                     if (_authCubit.state is! Authenticated) {

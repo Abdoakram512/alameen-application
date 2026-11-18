@@ -4,8 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/network/api_exceptions.dart';
 import '../../core/storage/course_local_cache.dart';
+import '../../models/course.dart';
+import '../../models/student_courses_data.dart';
+import '../../models/student_dashboard_data.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_profile_repository.dart';
+import '../../services/watch_queue.dart';
 import '../access/access_cubit.dart';
 import 'auth_state.dart';
 
@@ -236,11 +240,95 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  /// تسجيل الخروج الآمن
+  /// مزامنة اشتراكات وإحصائيات الطالب المعتمدة من Laravel (/student/courses و /student/dashboard).
+  void syncStudentEntitlements(
+    StudentCoursesData coursesData, {
+    StudentDashboardData? dashboard,
+  }) {
+    final current = state;
+    if (current is! Authenticated) return;
+
+    final updatedEnrolledIds = coursesData.activeEnrolledCourseIdStrings;
+    final updatedExpiries = coursesData.expiryDatesByCourseId;
+    final updatedWatchSeconds = (dashboard != null && dashboard.totalWatchSeconds > 0)
+        ? dashboard.totalWatchSeconds
+        : current.user.totalWatchSeconds;
+
+    final updatedUser = current.user.copyWith(
+      enrolledCourseIds: updatedEnrolledIds,
+      courseExpiryDates: updatedExpiries,
+      totalWatchSeconds: updatedWatchSeconds,
+    );
+
+    if (updatedUser != current.user) {
+      emit(Authenticated(updatedUser));
+    }
+  }
+
+  /// تحديث حالة اشتراك دورة محددة وحصيلة الدروس المكتملة انطلاقاً من GET /student/courses/{slug}.
+  void markCourseDetailEntitlement(Course detailedCourse) {
+    final current = state;
+    if (current is! Authenticated) return;
+
+    final enrolledIds = List<String>.from(current.user.enrolledCourseIds);
+    if (detailedCourse.hasEnrolled) {
+      if (!enrolledIds.contains(detailedCourse.id)) {
+        enrolledIds.add(detailedCourse.id);
+      }
+    } else if (detailedCourse.isDetailedFromAuthServer) {
+      // سحب الصلاحية فوراً إذا أكد الخادم أن الطالب لم يعد مشتركاً
+      enrolledIds.remove(detailedCourse.id);
+    }
+
+    final completedIds = Set<String>.from(current.user.completedLessonIds);
+    for (final id in detailedCourse.completedVideoIds) {
+      completedIds.add(id.toString());
+    }
+    for (final lvl in detailedCourse.levels) {
+      for (final lesson in lvl.lessons) {
+        if (lesson.isCompleted) {
+          completedIds.add(lesson.id);
+        }
+      }
+    }
+
+    final updatedUser = current.user.copyWith(
+      enrolledCourseIds: enrolledIds,
+      completedLessonIds: completedIds.toList(),
+    );
+    if (updatedUser != current.user) {
+      emit(Authenticated(updatedUser));
+    }
+  }
+
+  /// تسجيل إكمال درس فوري في حالة المستخدم الحالية بعد تأكيد الخادم أو بلوغ 95%.
+  void markLessonCompleted(String lessonId) {
+    final current = state;
+    if (current is! Authenticated) return;
+    if (current.user.completedLessonIds.contains(lessonId)) return;
+
+    final updatedCompleted = List<String>.from(current.user.completedLessonIds)
+      ..add(lessonId);
+    emit(
+      Authenticated(
+        current.user.copyWith(completedLessonIds: updatedCompleted),
+      ),
+    );
+  }
+
+  /// تسجيل الخروج الآمن مع مسح طابور المشاهدة والذاكرة المؤقتة للحساب المنتهي.
   Future<void> signOut() async {
+    final outgoingUid = state is Authenticated ? (state as Authenticated).user.uid : null;
     emit(Unauthenticated());
     try {
       AccessCubit.clearCache();
+      if (outgoingUid != null && outgoingUid.isNotEmpty) {
+        if (sl.isRegistered<WatchQueue>()) {
+          await sl<WatchQueue>().clearUser(outgoingUid);
+        } else {
+          await WatchQueue.clearStorageForUser(outgoingUid);
+        }
+      }
       if (sl.isRegistered<CourseLocalCache>()) {
         await sl<CourseLocalCache>().clearAllUserCaches();
       }
@@ -324,6 +412,11 @@ class AuthCubit extends Cubit<AuthState> {
       }
 
       AccessCubit.clearCache();
+      if (sl.isRegistered<WatchQueue>()) {
+        await sl<WatchQueue>().clearUser(current.user.uid);
+      } else {
+        await WatchQueue.clearStorageForUser(current.user.uid);
+      }
       if (sl.isRegistered<CourseLocalCache>()) {
         await sl<CourseLocalCache>().clearAllUserCaches();
       }

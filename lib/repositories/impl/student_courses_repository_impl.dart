@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/storage/course_local_cache.dart';
 import '../../core/storage/secure_token_storage.dart';
@@ -13,7 +12,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   final CoursesRemoteDataSource? _remoteDataSource;
   final CourseLocalCache? _localCache;
   final SecureTokenStorage? _tokenStorage;
-  final FirebaseFirestore? _explicitFirestore;
   final StreamController<List<Course>> _coursesStreamController =
       StreamController<List<Course>>.broadcast();
 
@@ -23,11 +21,9 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     CoursesRemoteDataSource? remoteDataSource,
     CourseLocalCache? localCache,
     SecureTokenStorage? tokenStorage,
-    FirebaseFirestore? firestore,
   })  : _remoteDataSource = remoteDataSource,
         _localCache = localCache,
-        _tokenStorage = tokenStorage,
-        _explicitFirestore = firestore;
+        _tokenStorage = tokenStorage;
 
   CoursesRemoteDataSource? get _remote {
     if (_remoteDataSource != null) return _remoteDataSource;
@@ -63,22 +59,8 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     return null;
   }
 
-  bool get isFirestoreAvailable {
-    try {
-      final _ = db;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  FirebaseFirestore get db => _explicitFirestore ?? FirebaseFirestore.instance;
-
-  CollectionReference<Map<String, dynamic>> get _coursesRef =>
-      db.collection('courses');
-
   // ══════════════════════════════════════════════════════════════════════════
-  // P3: STREAM & PUBLIC CATALOG (REST API + LOCAL CACHE ONLY)
+  // STREAM & CATALOG (LARAVEL REST API + USER-ISOLATED LOCAL CACHE ONLY)
   // ══════════════════════════════════════════════════════════════════════════
 
   @override
@@ -118,7 +100,10 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   }
 
   @override
-  Future<List<Course>> getPublicCourses({String? search, bool forceRefresh = false}) async {
+  Future<List<Course>> getPublicCourses({
+    String? search,
+    bool forceRefresh = false,
+  }) async {
     final remote = _remote;
     if (remote != null) {
       try {
@@ -133,7 +118,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
         return courses;
       } catch (e) {
         // Network/offline error: Fall back strictly to isolated local cache.
-        // NEVER make direct Firestore requests when Laravel API fails!
         if (search == null || search.trim().isEmpty) {
           final cached = await _cache.getPublicCourses();
           if (cached != null && cached.isNotEmpty) {
@@ -151,7 +135,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
       }
     }
 
-    // If remote data source is not registered, read local cache
     final cached = await _cache.getPublicCourses();
     if (cached != null && cached.isNotEmpty) {
       _cachedCourses = cached;
@@ -167,18 +150,18 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
 
     if (remote != null) {
       try {
-        // Attempt student-specific course details first (includes user progress & permissions)
+        // Primary: student-specific course details (includes has_enrolled, accessible_video_ids, progress)
         final course = await remote.getStudentCourseBySlug(slugOrId);
         await _cache.saveCourseDetails(slugOrId, course, userId: userId);
         return course;
       } catch (_) {
         try {
-          // Fall back to public course details
+          // Secondary: public course details
           final course = await remote.getPublicCourseBySlug(slugOrId);
           await _cache.saveCourseDetails(slugOrId, course, userId: userId);
           return course;
         } catch (e) {
-          // Offline / network failure: Attempt local cache retrieval
+          // Offline fallback: user-isolated local cache only
           final cached = await _cache.getCourseDetails(slugOrId, userId: userId);
           if (cached != null) return cached;
           rethrow;
@@ -186,11 +169,9 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
       }
     }
 
-    // Local cache lookup when remote is unavailable
     final cached = await _cache.getCourseDetails(slugOrId, userId: userId);
     if (cached != null) return cached;
 
-    // In-memory fallback
     final found = _cachedCourses.firstWhere(
       (c) => c.id == slugOrId || c.slug == slugOrId,
       orElse: () => throw StateError('Course not found in local cache'),
@@ -209,7 +190,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
         await _cache.saveStudentDashboard(userId, dashboard);
         return dashboard;
       } catch (e) {
-        // Fall back strictly to user-isolated offline cache
         final cached = await _cache.getStudentDashboard(userId);
         if (cached != null) return cached;
         if (_cachedCourses.isNotEmpty) {
@@ -235,7 +215,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
         await _cache.saveStudentCourses(userId, studentCourses);
         return studentCourses;
       } catch (e) {
-        // Fall back strictly to user-isolated offline cache
         final cached = await _cache.getStudentCourses(userId);
         if (cached != null) return cached;
         rethrow;
@@ -245,30 +224,5 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     final cached = await _cache.getStudentCourses(userId);
     if (cached != null) return cached;
     return const StudentCoursesData();
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // UNMIGRATED P5 COMPATIBILITY: PROTECTED LESSON PLAYBACK ID
-  // Retained strictly for Phase P5 (Video Player & Protected Vault)
-  // ══════════════════════════════════════════════════════════════════════════
-
-  @override
-  Future<String?> fetchProtectedLessonPlaybackId({
-    required String courseId,
-    required String lessonId,
-  }) async {
-    if (!isFirestoreAvailable) return null;
-    try {
-      final doc = await _coursesRef
-          .doc(courseId)
-          .collection('protected_lessons')
-          .doc(lessonId)
-          .get();
-      final playbackId = (doc.data()?['muxPlaybackId'] as String?)?.trim();
-      if (playbackId == null || playbackId.isEmpty) return null;
-      return playbackId;
-    } catch (_) {
-      return null;
-    }
   }
 }

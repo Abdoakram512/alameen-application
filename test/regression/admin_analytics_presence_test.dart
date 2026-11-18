@@ -1,70 +1,66 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:secure_screen_app/models/active_watch_session.dart';
+import 'package:secure_screen_app/models/lesson.dart';
+import 'package:secure_screen_app/models/watch_log_entry.dart';
 
 void main() {
-  group('Regression Suite 6: Admin Analytics & Presence Monitoring', () {
-    test('Active watch session is marked stale after 300 seconds without heartbeat', () {
+  group('Regression Suite 6: Laravel Watch Analytics & Duration Consistency', () {
+    test('StudentAnalyticsCalculator aggregates watch minutes by course accurately', () {
       final now = DateTime.now();
-
-      final activeSession = ActiveWatchSession(
-        id: 'sess_live_01',
-        studentId: 'std_01',
-        studentName: 'Ahmed Ali',
-        studentEmail: 'ahmed@example.com',
-        studentPhone: '01012345678',
-        courseId: 'c1',
-        courseTitle: 'Chemistry',
-        lessonId: 'l1',
-        lessonTitle: 'Organic Chemistry',
-        currentPositionSeconds: 450,
-        totalDurationSeconds: 1200,
-        progressPercentage: 37.5,
-        isPlaying: true,
-        ipAddress: '197.35.12.44',
-        networkType: 'wifi',
-        devicePlatform: 'android',
-        startedAt: now.subtract(const Duration(minutes: 10)),
-        lastHeartbeatAt: now.subtract(const Duration(seconds: 120)), // 2 minutes ago (< 300s)
-      );
-
-      expect(activeSession.isStale, isFalse, reason: 'Heartbeat 120s ago is active (< 300s)');
-
-      final staleSession = ActiveWatchSession(
-        id: 'sess_stale_02',
-        studentId: 'std_02',
-        studentName: 'Sara Omar',
-        studentEmail: 'sara@example.com',
-        studentPhone: '01198765432',
-        courseId: 'c1',
-        courseTitle: 'Chemistry',
-        lessonId: 'l1',
-        lessonTitle: 'Organic Chemistry',
-        currentPositionSeconds: 600,
-        totalDurationSeconds: 1200,
-        progressPercentage: 50.0,
-        isPlaying: true,
-        ipAddress: '156.204.11.88',
-        networkType: '4g',
-        devicePlatform: 'android',
-        startedAt: now.subtract(const Duration(minutes: 30)),
-        lastHeartbeatAt: now.subtract(const Duration(seconds: 305)), // 305s ago (> 300s)
-      );
-
-      expect(staleSession.isStale, isTrue, reason: 'Heartbeat 305s ago is stale (> 300s)');
-    });
-
-    test('Admin analytics aggregates watch minutes accurately across sessions', () {
-      final sessionDurations = [
-        {'studentId': 'std_01', 'seconds': 1800}, // 30 mins
-        {'studentId': 'std_01', 'seconds': 1200}, // 20 mins
-        {'studentId': 'std_02', 'seconds': 2400}, // 40 mins
+      final logs = [
+        WatchLogEntry(
+          id: 'l1',
+          studentId: '15',
+          courseId: '2',
+          lessonId: '43',
+          durationSeconds: 1800,
+          recordedAt: now,
+        ),
+        WatchLogEntry(
+          id: 'l2',
+          studentId: '15',
+          courseId: '2',
+          lessonId: '45',
+          durationSeconds: 1200,
+          recordedAt: now,
+        ),
+        WatchLogEntry(
+          id: 'l3',
+          studentId: '15',
+          courseId: '3',
+          lessonId: '44',
+          durationSeconds: 600,
+          recordedAt: now.subtract(const Duration(days: 1)),
+        ),
       ];
 
-      final totalSeconds = sessionDurations.fold<int>(0, (sum, item) => sum + (item['seconds'] as int));
-      final totalMinutes = totalSeconds / 60;
+      final byCourse = StudentAnalyticsCalculator.watchMinutesByCourse(logs);
+      expect(byCourse['2'], 50); // (1800 + 1200) / 60
+      expect(byCourse['3'], 10); // 600 / 60
 
-      expect(totalSeconds, 5400);
-      expect(totalMinutes, 90.0);
+      final buckets = StudentAnalyticsCalculator.buildLast7DaysBuckets(logs);
+      expect(buckets.length, 7);
+      expect(StudentAnalyticsCalculator.countActiveDaysInLastWeek(logs), 2);
+    });
+
+    test('Lesson.fromLaravelVideoJson preserves exact durationSeconds for 95% calculations', () {
+      final lesson = Lesson.fromLaravelVideoJson({
+        'id': 43,
+        'slug': 'lesson-7i8eif',
+        'title': 'محاضرة تقييم اعضاء النطق',
+        'video_source': 'mux',
+        'duration_seconds': 1639,
+        'duration_minutes': 27,
+        'min_completion_percentage': 90,
+        'is_accessible': true,
+        'is_completed': false,
+      });
+
+      expect(lesson.durationInSeconds, 1639);
+      expect(lesson.effectiveCompletionThresholdPercentage, 95);
+      // Should never invent a fake muxPlaybackId from slug!
+      expect(lesson.muxPlaybackId, isEmpty);
+      expect(lesson.videoStreamUrl, isEmpty);
+      expect(lesson.hasVideo, isTrue);
     });
   });
 }

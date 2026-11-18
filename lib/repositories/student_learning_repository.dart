@@ -1,80 +1,81 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
+import '../core/di/injection_container.dart';
 import '../models/assignment.dart';
 import '../models/assignment_submission.dart';
 import '../models/lesson.dart';
-import '../models/watch_log_entry.dart';
+import '../models/lesson_playback_data.dart';
+import '../repositories/student_watch_repository.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
 
-/// نتيجة تحليل رابط البث الآمن للمحاضرة (يدعم الروابط الموقعة JWT ومجموعة الدروس المحمية).
-class ResolvedLessonPlayback {
-  final String streamUrl;
-  final String thumbnailUrl;
+export '../models/lesson_playback_data.dart' show ResolvedLessonPlayback;
+export '../repositories/student_watch_repository.dart'
+    show PlaybackAuthorizationException, PlaybackProviderIncompatibleException;
 
-  const ResolvedLessonPlayback({
-    required this.streamUrl,
-    required this.thumbnailUrl,
-  });
-}
-
-/// استثناء أمني يُطلق عند فشل التحقق من صلاحية وصول الطالب للمحاضرة لمنع التراجع لروابط غير محمية.
-class PlaybackAuthorizationException extends StateError {
-  final int? statusCode;
-
-  PlaybackAuthorizationException(
-    super.message, {
-    this.statusCode,
-  });
-
-  @override
-  String toString() => message;
-}
-
-/// واجهة نظيفة تفصل طبقة العرض (UI Widgets) عن تفاصيل Firestore و Storage و Cloud Functions.
+/// واجهة موحدة تفصل طبقة العرض (UI Widgets) عن تفاصيل التشغيل والتقدم (Laravel) والتكليفات (P6).
 abstract class StudentLearningRepository {
+  // --- P6 Assignments (retained until P6 migration) ---
   Stream<List<Assignment>> streamCourseAssignments(String courseId);
   Stream<List<AssignmentSubmission>> streamStudentSubmissions(String studentId);
-  Stream<List<WatchLogEntry>> streamStudentWatchLogs(String studentId);
-
-  Future<void> toggleLessonCompletion({
-    required String uid,
-    required String lessonId,
-    required bool isCompleted,
-  });
-
+  Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId);
+  Future<Assignment?> getAssignment(String assignmentId);
   Future<void> submitAssignment({
     required AssignmentSubmission submission,
     File? attachmentFile,
   });
 
-  Future<void> recordWatchEvent(Map<String, dynamic> event);
-
+  // --- P5 Video Playback & Progress (Laravel REST API) ---
   Future<ResolvedLessonPlayback> resolveLessonPlayback({
     required String courseId,
     required Lesson lesson,
+  });
+
+  Future<PlaybackTokenResponse> refreshPlaybackToken({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+  });
+
+  Future<WatchProgressResult> recordLessonProgress({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+    required int watchedSeconds,
+    required int positionSeconds,
+    bool? isCompleted,
+  });
+
+  Future<void> toggleLessonCompletion({
+    required String courseSlugOrId,
+    required Lesson lesson,
+    required bool isCompleted,
   });
 }
 
 class StudentLearningRepositoryImpl implements StudentLearningRepository {
   final FirestoreService _firestoreService;
   final StorageService _storageService;
+  final StudentWatchRepository? _watchRepository;
   final Map<String, Stream<List<AssignmentSubmission>>> _submissionStreams = {};
-
-  static const String _functionsBaseUrl = String.fromEnvironment(
-    'FUNCTIONS_BASE_URL',
-    defaultValue: 'https://us-central1-elameen.cloudfunctions.net',
-  );
-  static bool _cloudPlaybackUnavailable = false;
 
   StudentLearningRepositoryImpl({
     FirestoreService? firestoreService,
     StorageService? storageService,
+    StudentWatchRepository? watchRepository,
   })  : _firestoreService = firestoreService ?? FirestoreService(),
-        _storageService = storageService ?? StorageService();
+        _storageService = storageService ?? StorageService(),
+        _watchRepository = watchRepository;
+
+  StudentWatchRepository get _watchRepo {
+    if (_watchRepository != null) return _watchRepository;
+    if (sl.isRegistered<StudentWatchRepository>()) {
+      return sl<StudentWatchRepository>();
+    }
+    throw StateError('StudentWatchRepository is not registered in GetIt.');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // P6 ASSIGNMENTS (retained cleanly until P6)
+  // ══════════════════════════════════════════════════════════════════════════
 
   @override
   Stream<List<Assignment>> streamCourseAssignments(String courseId) {
@@ -96,17 +97,13 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
   }
 
   @override
-  Stream<List<WatchLogEntry>> streamStudentWatchLogs(String studentId) {
-    return _firestoreService.streamStudentWatchLogs(studentId);
+  Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId) {
+    return _firestoreService.getStudentSubmissions(studentId);
   }
 
   @override
-  Future<void> toggleLessonCompletion({
-    required String uid,
-    required String lessonId,
-    required bool isCompleted,
-  }) {
-    return _firestoreService.toggleLessonCompletion(uid, lessonId, isCompleted);
+  Future<Assignment?> getAssignment(String assignmentId) {
+    return _firestoreService.getAssignment(assignmentId);
   }
 
   @override
@@ -124,7 +121,9 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
           )
           .timeout(
             const Duration(seconds: 15),
-            onTimeout: () => throw TimeoutException('استغرق رفع المرفق وقتاً طويلاً. تأكد من سرعة اتصالك بالإنترنت.'),
+            onTimeout: () => throw TimeoutException(
+              'استغرق رفع المرفق وقتاً طويلاً. تأكد من سرعة اتصالك بالإنترنت.',
+            ),
           );
       finalSubmission = AssignmentSubmission(
         id: submission.id,
@@ -148,94 +147,71 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
         .submitAssignment(finalSubmission)
         .timeout(
           const Duration(seconds: 10),
-          onTimeout: () => throw TimeoutException('استغرق حفظ بيانات التكليف وقتاً طويلاً. تأكد من اتصالك بالإنترنت.'),
+          onTimeout: () => throw TimeoutException(
+            'استغرق حفظ بيانات التكليف وقتاً طويلاً. تأكد من اتصالك بالإنترنت.',
+          ),
         );
   }
 
-  @override
-  Future<void> recordWatchEvent(Map<String, dynamic> event) {
-    return _firestoreService.recordWatchEvent(event);
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // P5 PROTECTED PLAYBACK & PROGRESS (Laravel REST API ONLY — ZERO FIREBASE)
+  // ══════════════════════════════════════════════════════════════════════════
 
   @override
   Future<ResolvedLessonPlayback> resolveLessonPlayback({
     required String courseId,
     required Lesson lesson,
   }) async {
-    // 1. محاولة الحصول على رابط بث موقع قصير الصلاحية (Signed JWT) من Cloud Functions إن وجدت
-    if (_functionsBaseUrl.isNotEmpty && !_cloudPlaybackUnavailable) {
-      try {
-        final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
-        final headers = <String, String>{
-          'Content-Type': 'application/json',
-          if (idToken != null) 'Authorization': 'Bearer $idToken',
-        };
-        final resp = await http
-            .post(
-              Uri.parse('$_functionsBaseUrl/getSignedPlaybackUrl'),
-              headers: headers,
-              body: jsonEncode({
-                'courseId': courseId,
-                'lessonId': lesson.id,
-              }),
-            )
-            .timeout(const Duration(seconds: 4));
+    return await _watchRepo.resolveLessonPlayback(
+      courseSlugOrId: courseId,
+      lesson: lesson,
+    );
+  }
 
-        if (resp.statusCode == 404) {
-          _cloudPlaybackUnavailable = true;
-        } else if (resp.statusCode == 401 || resp.statusCode == 403) {
-          throw PlaybackAuthorizationException(
-            'تم رفض الوصول: لا تملك صلاحية مشاهدة هذه المحاضرة. يرجى تفعيل اشتراكك في الدورة.',
-            statusCode: resp.statusCode,
-          );
-        } else if (resp.statusCode == 200) {
-          final body = jsonDecode(resp.body) as Map<String, dynamic>;
-          final signedStream = (body['streamUrl'] as String?)?.trim() ?? '';
-          final signedThumb = (body['thumbnailUrl'] as String?)?.trim() ?? '';
-          if (signedStream.isNotEmpty) {
-            return ResolvedLessonPlayback(
-              streamUrl: signedStream,
-              thumbnailUrl: signedThumb,
-            );
-          }
-        }
-      } catch (e) {
-        if (e is PlaybackAuthorizationException) {
-          rethrow;
-        }
-        // التراجع السلس لـ Firestore protected_lessons عند تعذر الاتصال بالدوال السحابية
-      }
-    }
+  @override
+  Future<PlaybackTokenResponse> refreshPlaybackToken({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+  }) async {
+    return await _watchRepo.refreshPlaybackToken(
+      courseSlugOrId: courseSlugOrId,
+      lessonSlugOrId: lessonSlugOrId,
+    );
+  }
 
-    if (lesson.isVideoProcessing) {
-      throw StateError('المحاضرة قيد التجهيز والمعالجة السحابية في Mux وستكون متاحة للمشاهدة فور اكتمالها.');
-    }
+  @override
+  Future<WatchProgressResult> recordLessonProgress({
+    required String courseSlugOrId,
+    required String lessonSlugOrId,
+    required int watchedSeconds,
+    required int positionSeconds,
+    bool? isCompleted,
+  }) async {
+    return await _watchRepo.recordLessonProgress(
+      courseSlugOrId: courseSlugOrId,
+      lessonSlugOrId: lessonSlugOrId,
+      watchedSeconds: watchedSeconds,
+      positionSeconds: positionSeconds,
+      isCompleted: isCompleted,
+    );
+  }
 
-    // 2. إذا كان الدرس مدفوعاً ومعزولاً في protected_lessons، يُجلب بصلاحية الطالب المشترك
-    var playbackId = lesson.muxPlaybackId.trim();
-    if (playbackId.isEmpty && !lesson.isFreePreview) {
-      playbackId = (await _firestoreService.fetchProtectedLessonPlaybackId(
-            courseId: courseId,
-            lessonId: lesson.id,
-          )) ??
-          '';
-    }
-
-    if (playbackId.isEmpty) {
-      if (!lesson.isFreePreview) {
-        throw PlaybackAuthorizationException(
-          'تعذر التحقق من صلاحية الوصول إلى هذه المحاضرة المحمية. تأكد من تفعيل اشتراكك بالدورة.',
-          statusCode: 403,
-        );
-      }
-      throw StateError('تعذر العثور على رابط البث لهذه المحاضرة.');
-    }
-
-    return ResolvedLessonPlayback(
-      streamUrl: 'https://stream.mux.com/$playbackId.m3u8',
-      thumbnailUrl: lesson.thumbnailUrl.isNotEmpty
-          ? lesson.thumbnailUrl
-          : 'https://image.mux.com/$playbackId/thumbnail.jpg?width=600&height=340&fit_mode=smart',
+  @override
+  Future<void> toggleLessonCompletion({
+    required String courseSlugOrId,
+    required Lesson lesson,
+    required bool isCompleted,
+  }) async {
+    final lessonKey = (lesson.slug != null && lesson.slug!.trim().isNotEmpty)
+        ? lesson.slug!.trim()
+        : lesson.id;
+    final durSec = lesson.durationInSeconds;
+    await _watchRepo.recordLessonProgress(
+      courseSlugOrId: courseSlugOrId,
+      lessonSlugOrId: lessonKey,
+      watchedSeconds: lesson.watchedSeconds > 0 ? lesson.watchedSeconds : durSec,
+      positionSeconds: durSec,
+      isCompleted: isCompleted,
     );
   }
 }

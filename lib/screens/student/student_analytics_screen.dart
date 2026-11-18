@@ -43,9 +43,7 @@ class StudentAnalyticsScreen extends StatelessWidget {
                   ? coursesState.allCourses
                   : const <Course>[];
               final enrolledCount = allCourses
-                  .where((c) =>
-                      currentUser.isEnrolled(c.id) ||
-                      c.allowedStudentIds.contains(currentUser.uid))
+                  .where((c) => currentUser.isEnrolled(c.id) || c.hasEnrolled)
                   .length;
 
               return RefreshIndicator(

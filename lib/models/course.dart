@@ -3,6 +3,7 @@ import '../core/config/app_config.dart';
 import '../core/converters/firestore_date_time_converter.dart';
 import 'course_access_mode.dart';
 import 'course_level.dart';
+import 'lesson.dart';
 
 /// نموذج بيانات الدورة التعليمية (Course)
 class Course extends Equatable {
@@ -28,6 +29,12 @@ class Course extends Equatable {
   final bool isPublished;
   final bool hasEnrolled;
   final List<int> accessibleVideoIds;
+  final List<int> completedVideoIds;
+  final bool autoEnrollStudents;
+  final bool isDetailedFromAuthServer;
+  final int? serverProgressPercent;
+  final int? serverCompletedCount;
+  final Lesson? resumeVideo;
 
   const Course({
     required this.id,
@@ -52,6 +59,12 @@ class Course extends Equatable {
     this.isPublished = true,
     this.hasEnrolled = false,
     this.accessibleVideoIds = const [],
+    this.completedVideoIds = const [],
+    this.autoEnrollStudents = false,
+    this.isDetailedFromAuthServer = false,
+    this.serverProgressPercent,
+    this.serverCompletedCount,
+    this.resumeVideo,
   });
 
   int get totalLessonsCount {
@@ -89,6 +102,12 @@ class Course extends Equatable {
         'fixedExpiryDate': fixedExpiryDate?.toIso8601String(),
         'videosCount': videosCount,
         'isPublished': isPublished,
+        'hasEnrolled': hasEnrolled,
+        'accessibleVideoIds': accessibleVideoIds,
+        'completedVideoIds': completedVideoIds,
+        'autoEnrollStudents': autoEnrollStudents,
+        'serverProgressPercent': serverProgressPercent,
+        'serverCompletedCount': serverCompletedCount,
         'levels': levels.map((lvl) => lvl.toMap()).toList(),
       };
 
@@ -113,6 +132,7 @@ class Course extends Equatable {
         ? (json['videos_count'] as num).toInt()
         : null;
     final isPublished = json['is_published'] != false;
+    final autoEnroll = json['auto_enroll_students'] == true;
 
     return Course(
       id: id,
@@ -132,10 +152,14 @@ class Course extends Equatable {
       validityDays: accessDurationDays,
       videosCount: videosCount,
       isPublished: isPublished,
+      autoEnrollStudents: autoEnroll,
     );
   }
 
-  factory Course.fromLaravelDetailsJson(Map<String, dynamic> json) {
+  factory Course.fromLaravelDetailsJson(
+    Map<String, dynamic> json, {
+    bool isDetailedFromAuthServer = false,
+  }) {
     final courseData = json['course'] is Map<String, dynamic>
         ? json['course'] as Map<String, dynamic>
         : json;
@@ -146,6 +170,25 @@ class Course extends Equatable {
         .map((lvl) => CourseLevel.fromLaravelJson(Map<String, dynamic>.from(lvl as Map)))
         .toList();
     parsedLevels.sort((a, b) => a.order.compareTo(b.order));
+
+    // Include unleveled_videos if returned by backend
+    final rawUnleveled = json['unleveled_videos'] as List? ?? [];
+    if (rawUnleveled.isNotEmpty) {
+      final unleveledLessons = rawUnleveled
+          .map((v) => Lesson.fromLaravelVideoJson(Map<String, dynamic>.from(v as Map)))
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      parsedLevels.add(
+        CourseLevel(
+          id: 'unleveled_${baseCourse.id}',
+          title: 'محاضرات عامة',
+          description: '',
+          order: parsedLevels.length + 1,
+          isAccessible: json['has_enrolled'] == true,
+          lessons: unleveledLessons,
+        ),
+      );
+    }
 
     final totalVideos = (json['total_videos'] is num)
         ? (json['total_videos'] as num).toInt()
@@ -160,17 +203,42 @@ class Course extends Equatable {
         .where((id) => id > 0)
         .toList();
 
+    final rawCompleted = json['completed_video_ids'] as List? ?? [];
+    final parsedCompleted = rawCompleted
+        .map((id) => (id is num) ? id.toInt() : (int.tryParse(id.toString()) ?? 0))
+        .where((id) => id > 0)
+        .toList();
+
+    final progressPct = (json['progress_percent'] is num)
+        ? (json['progress_percent'] as num).toInt()
+        : null;
+    final completedCnt = (json['completed_count'] is num)
+        ? (json['completed_count'] as num).toInt()
+        : null;
+
+    Lesson? parsedResumeVideo;
+    if (json['resume_video'] is Map) {
+      parsedResumeVideo = Lesson.fromLaravelVideoJson(
+        Map<String, dynamic>.from(json['resume_video'] as Map),
+      );
+    }
+
     return baseCourse.copyWith(
       levels: parsedLevels,
       videosCount: totalVideos,
       hasEnrolled: hasEnrolled,
       accessibleVideoIds: parsedAccessible,
+      completedVideoIds: parsedCompleted,
+      isDetailedFromAuthServer: isDetailedFromAuthServer,
+      serverProgressPercent: progressPct,
+      serverCompletedCount: completedCnt,
+      resumeVideo: parsedResumeVideo,
     );
   }
 
   factory Course.fromMap(Map<String, dynamic> map) {
-    // If it's a Laravel API response object with slug and currency
-    if (map.containsKey('slug') && (map.containsKey('currency_symbol') || map.containsKey('access_duration_days'))) {
+    if (map.containsKey('slug') &&
+        (map.containsKey('currency_symbol') || map.containsKey('access_duration_days'))) {
       if (map.containsKey('levels') || map.containsKey('course')) {
         return Course.fromLaravelDetailsJson(map);
       }
@@ -204,6 +272,22 @@ class Course extends Equatable {
       currencyName: map['currencyName']?.toString(),
       videosCount: (map['videosCount'] is num) ? (map['videosCount'] as num).toInt() : null,
       isPublished: map['isPublished'] != false,
+      hasEnrolled: map['hasEnrolled'] == true,
+      accessibleVideoIds: (map['accessibleVideoIds'] as List? ?? const [])
+          .map((e) => e is num ? e.toInt() : int.tryParse(e.toString()) ?? 0)
+          .where((e) => e > 0)
+          .toList(),
+      completedVideoIds: (map['completedVideoIds'] as List? ?? const [])
+          .map((e) => e is num ? e.toInt() : int.tryParse(e.toString()) ?? 0)
+          .where((e) => e > 0)
+          .toList(),
+      autoEnrollStudents: map['autoEnrollStudents'] == true,
+      serverProgressPercent: (map['serverProgressPercent'] is num)
+          ? (map['serverProgressPercent'] as num).toInt()
+          : null,
+      serverCompletedCount: (map['serverCompletedCount'] is num)
+          ? (map['serverCompletedCount'] as num).toInt()
+          : null,
       levels: parsedLevels,
       accessMode: CourseAccessMode.fromName(map['accessMode'] as String?),
       allowedStudentIds:
@@ -240,6 +324,12 @@ class Course extends Equatable {
     bool? isPublished,
     bool? hasEnrolled,
     List<int>? accessibleVideoIds,
+    List<int>? completedVideoIds,
+    bool? autoEnrollStudents,
+    bool? isDetailedFromAuthServer,
+    int? serverProgressPercent,
+    int? serverCompletedCount,
+    Lesson? resumeVideo,
   }) {
     return Course(
       id: id ?? this.id,
@@ -264,6 +354,14 @@ class Course extends Equatable {
       isPublished: isPublished ?? this.isPublished,
       hasEnrolled: hasEnrolled ?? this.hasEnrolled,
       accessibleVideoIds: accessibleVideoIds ?? this.accessibleVideoIds,
+      completedVideoIds: completedVideoIds ?? this.completedVideoIds,
+      autoEnrollStudents: autoEnrollStudents ?? this.autoEnrollStudents,
+      isDetailedFromAuthServer:
+          isDetailedFromAuthServer ?? this.isDetailedFromAuthServer,
+      serverProgressPercent:
+          serverProgressPercent ?? this.serverProgressPercent,
+      serverCompletedCount: serverCompletedCount ?? this.serverCompletedCount,
+      resumeVideo: resumeVideo ?? this.resumeVideo,
     );
   }
 
@@ -291,5 +389,11 @@ class Course extends Equatable {
         isPublished,
         hasEnrolled,
         accessibleVideoIds,
+        completedVideoIds,
+        autoEnrollStudents,
+        isDetailedFromAuthServer,
+        serverProgressPercent,
+        serverCompletedCount,
+        resumeVideo,
       ];
 }

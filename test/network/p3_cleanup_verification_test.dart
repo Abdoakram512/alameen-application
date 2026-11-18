@@ -459,9 +459,13 @@ void main() {
 
       verify(() => mockApiClient.post(
         '/student/security/violation',
-        data: any(named: 'data', that: isA<Map<String, dynamic>>()
-            .having((m) => m['type'], 'type', 'screenshot_attempt')
-            .having((m) => m['details'], 'details', contains('laravel_student@alameen.com'))),
+        data: any(
+          named: 'data',
+          that: isA<Map<String, dynamic>>()
+              .having((m) => m['type'], 'type', 'screenshot_attempt')
+              .having((m) => m['details'], 'details', contains('platform:'))
+              .having((m) => m['details'], 'details', isNot(contains('@'))),
+        ),
       )).called(1);
     });
   });

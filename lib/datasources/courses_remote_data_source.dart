@@ -80,7 +80,10 @@ class CoursesRemoteDataSourceImpl implements CoursesRemoteDataSource {
 
       if (data is Map<String, dynamic> && data['data'] != null) {
         final courseMap = Map<String, dynamic>.from(data['data'] as Map);
-        return Course.fromLaravelDetailsJson(courseMap);
+        return Course.fromLaravelDetailsJson(
+          courseMap,
+          isDetailedFromAuthServer: false,
+        );
       }
 
       throw const ApiException(
@@ -136,7 +139,10 @@ class CoursesRemoteDataSourceImpl implements CoursesRemoteDataSource {
 
       if (data is Map<String, dynamic> && data['data'] != null) {
         final courseMap = Map<String, dynamic>.from(data['data'] as Map);
-        return Course.fromLaravelDetailsJson(courseMap);
+        return Course.fromLaravelDetailsJson(
+          courseMap,
+          isDetailedFromAuthServer: true,
+        );
       }
 
       throw const ApiException(

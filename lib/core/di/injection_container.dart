@@ -7,6 +7,7 @@ import '../storage/secure_token_storage.dart';
 import '../../datasources/auth_remote_data_source.dart';
 import '../../datasources/courses_remote_data_source.dart';
 import '../../datasources/payment_remote_data_source.dart';
+import '../../datasources/watch_remote_data_source.dart';
 import '../../logic/access/access_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -14,16 +15,19 @@ import '../../repositories/impl/student_content_repository_impl.dart';
 import '../../repositories/impl/student_courses_repository_impl.dart';
 import '../../repositories/impl/student_payment_repository_impl.dart';
 import '../../repositories/impl/student_profile_repository_impl.dart';
+import '../../repositories/impl/student_watch_repository_impl.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_content_repository.dart';
 import '../../repositories/student_courses_repository.dart';
 import '../../repositories/student_learning_repository.dart';
 import '../../repositories/student_payment_repository.dart';
 import '../../repositories/student_profile_repository.dart';
+import '../../repositories/student_watch_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/watch_queue.dart';
 
 final sl = GetIt.instance; // Service Locator
 
@@ -76,6 +80,13 @@ Future<void> initDependencies() async {
       ),
     );
   }
+  if (!sl.isRegistered<WatchRemoteDataSource>()) {
+    sl.registerLazySingleton<WatchRemoteDataSource>(
+      () => WatchRemoteDataSourceImpl(
+        apiClient: sl<ApiClient>(),
+      ),
+    );
+  }
 
   // 2. Services
   if (!sl.isRegistered<AuthService>()) {
@@ -124,11 +135,24 @@ Future<void> initDependencies() async {
       ),
     );
   }
+  if (!sl.isRegistered<StudentWatchRepository>()) {
+    sl.registerLazySingleton<StudentWatchRepository>(
+      () => StudentWatchRepositoryImpl(
+        remoteDataSource: sl<WatchRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<WatchQueue>()) {
+    sl.registerLazySingleton<WatchQueue>(
+      () => WatchQueue.forRepository(sl<StudentWatchRepository>()),
+    );
+  }
   if (!sl.isRegistered<StudentLearningRepository>()) {
     sl.registerLazySingleton<StudentLearningRepository>(
       () => StudentLearningRepositoryImpl(
         firestoreService: sl<FirestoreService>(),
         storageService: sl<StorageService>(),
+        watchRepository: sl<StudentWatchRepository>(),
       ),
     );
   }
@@ -162,6 +186,7 @@ Future<void> initDependencies() async {
     sl.registerFactory<AccessCubit>(
       () => AccessCubit(
         paymentRepository: sl<StudentPaymentRepository>(),
+        coursesRepository: sl<StudentCoursesRepository>(),
       ),
     );
   }

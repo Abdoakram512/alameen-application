@@ -2,27 +2,34 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../models/course_level.dart';
+import '../../../../models/course_progress_policy.dart';
 import '../../../../models/lesson.dart';
 
-/// قسم المنهج الدراسي المقسم إلى مستويات ومحاضرات واضحة.
+/// قسم المنهج الدراسي المقسم إلى مستويات ومحاضرات مع تطبيق الفتح المتسلسل (95%) وقفل الخادم.
 class CourseCurriculumSection extends StatelessWidget {
   final List<CourseLevel> levels;
   final bool isEnrolled;
   final Set<String> completedLessonIds;
+  final List<int> accessibleVideoIds;
+  final bool enforceServerAccessibleList;
   final Map<String, String> lockedReasons;
   final ValueChanged<Lesson> onPlayLesson;
   final VoidCallback onLockedLessonTap;
   final void Function(String reason)? onAssignmentLockedLessonTap;
+  final void Function(String reason)? onSequentialLockedLessonTap;
 
   const CourseCurriculumSection({
     super.key,
     required this.levels,
     required this.isEnrolled,
     required this.completedLessonIds,
+    this.accessibleVideoIds = const [],
+    this.enforceServerAccessibleList = false,
     this.lockedReasons = const {},
     required this.onPlayLesson,
     required this.onLockedLessonTap,
     this.onAssignmentLockedLessonTap,
+    this.onSequentialLockedLessonTap,
   });
 
   @override
@@ -55,11 +62,21 @@ class CourseCurriculumSection extends StatelessWidget {
             levelIndex: i + 1,
             initiallyExpanded: i == 0,
             isEnrolled: isEnrolled,
+            isLevelUnlocked: CourseProgressPolicy.isLevelUnlocked(
+              levels: levels,
+              levelIndex: i,
+              isEnrolled: isEnrolled,
+              completedLessonIds: completedLessonIds,
+            ),
+            previousLevelTitle: i > 0 ? levels[i - 1].title : null,
             completedLessonIds: completedLessonIds,
+            accessibleVideoIds: accessibleVideoIds,
+            enforceServerAccessibleList: enforceServerAccessibleList,
             lockedReasons: lockedReasons,
             onPlayLesson: onPlayLesson,
             onLockedLessonTap: onLockedLessonTap,
             onAssignmentLockedLessonTap: onAssignmentLockedLessonTap,
+            onSequentialLockedLessonTap: onSequentialLockedLessonTap,
           ),
           if (i < levels.length - 1) const SizedBox(height: 12),
         ],
@@ -73,11 +90,16 @@ class CourseLevelCard extends StatelessWidget {
   final int levelIndex;
   final bool initiallyExpanded;
   final bool isEnrolled;
+  final bool isLevelUnlocked;
+  final String? previousLevelTitle;
   final Set<String> completedLessonIds;
+  final List<int> accessibleVideoIds;
+  final bool enforceServerAccessibleList;
   final Map<String, String> lockedReasons;
   final ValueChanged<Lesson> onPlayLesson;
   final VoidCallback onLockedLessonTap;
   final void Function(String reason)? onAssignmentLockedLessonTap;
+  final void Function(String reason)? onSequentialLockedLessonTap;
 
   const CourseLevelCard({
     super.key,
@@ -85,18 +107,24 @@ class CourseLevelCard extends StatelessWidget {
     required this.levelIndex,
     required this.initiallyExpanded,
     required this.isEnrolled,
+    this.isLevelUnlocked = true,
+    this.previousLevelTitle,
     required this.completedLessonIds,
+    this.accessibleVideoIds = const [],
+    this.enforceServerAccessibleList = false,
     this.lockedReasons = const {},
     required this.onPlayLesson,
     required this.onLockedLessonTap,
     this.onAssignmentLockedLessonTap,
+    this.onSequentialLockedLessonTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final completedInLevel = level.lessons
-        .where((l) => completedLessonIds.contains(l.id))
+        .where((l) => l.isCompleted || completedLessonIds.contains(l.id))
         .length;
+    final sequentialLockActive = isEnrolled && !isLevelUnlocked;
 
     return Container(
       decoration: BoxDecoration(
@@ -113,15 +141,32 @@ class CourseLevelCard extends StatelessWidget {
           leading: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: sequentialLockActive
+                  ? AppColors.surfaceLevel2
+                  : AppColors.primaryLight,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(
-              'المستوى $levelIndex',
-              style: AppTextStyles.label.copyWith(
-                color: AppColors.royalNavy,
-                fontWeight: FontWeight.w800,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sequentialLockActive) ...[
+                  const Icon(
+                    Icons.lock_outline_rounded,
+                    size: 13,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  'المستوى $levelIndex',
+                  style: AppTextStyles.label.copyWith(
+                    color: sequentialLockActive
+                        ? AppColors.textSecondary
+                        : AppColors.royalNavy,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
           title: Text(
@@ -129,7 +174,9 @@ class CourseLevelCard extends StatelessWidget {
             style: AppTextStyles.heading3.copyWith(fontWeight: FontWeight.w800),
           ),
           subtitle: Text(
-            '${level.lessons.length} محاضرات • تم إكمال $completedInLevel',
+            sequentialLockActive
+                ? '${level.lessons.length} محاضرات • مغلق (أكمل 95% من المستوى السابق)'
+                : '${level.lessons.length} محاضرات • تم إكمال $completedInLevel',
             style: AppTextStyles.caption,
           ),
           children: [
@@ -148,14 +195,27 @@ class CourseLevelCard extends StatelessWidget {
                   final item = level.lessons[idx];
                   final lockReason = lockedReasons[item.id];
                   final isAvailable = item.isAvailableNow;
-                  final isUnlocked = (isEnrolled || item.isFreePreview) &&
-                      lockReason == null &&
-                      isAvailable;
+                  final isLessonCompleted =
+                      item.isCompleted || completedLessonIds.contains(item.id);
+                  final numericId = int.tryParse(item.id);
+                  final blockedByServerList = enforceServerAccessibleList &&
+                      numericId != null &&
+                      accessibleVideoIds.isNotEmpty &&
+                      !accessibleVideoIds.contains(numericId) &&
+                      !item.isAccessible;
+                  final canAccessLesson = item.isFreePreview
+                      ? item.isAccessible
+                      : (isEnrolled &&
+                          isLevelUnlocked &&
+                          item.isAccessible &&
+                          !blockedByServerList);
+                  final isUnlocked =
+                      canAccessLesson && lockReason == null && isAvailable;
 
                   return CourseLessonTile(
                     lesson: item,
                     isUnlocked: isUnlocked,
-                    isCompleted: completedLessonIds.contains(item.id),
+                    isCompleted: isLessonCompleted,
                     assignmentLockReason: lockReason,
                     onTap: () {
                       if (!item.isAvailableNow) {
@@ -177,8 +237,19 @@ class CourseLevelCard extends StatelessWidget {
                         } else {
                           onLockedLessonTap();
                         }
-                      } else if (isEnrolled || item.isFreePreview) {
+                      } else if (isUnlocked) {
                         onPlayLesson(item);
+                      } else if (isEnrolled && !isLevelUnlocked) {
+                        final msg = previousLevelTitle != null
+                            ? 'يجب إتمام 95% على الأقل من "$previousLevelTitle" لفتح هذا المستوى.'
+                            : 'هذا المستوى مغلق حالياً وفق قواعد التقدم المتسلسل.';
+                        if (onSequentialLockedLessonTap != null) {
+                          onSequentialLockedLessonTap!(msg);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(msg)),
+                          );
+                        }
                       } else {
                         onLockedLessonTap();
                       }

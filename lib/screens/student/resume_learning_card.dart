@@ -5,7 +5,7 @@ import '../../core/painters/learning_progress_ring_painter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/course.dart';
-import '../../models/course_access_mode.dart';
+import '../../models/course_progress_policy.dart';
 import '../../models/learning_history.dart';
 import '../../models/user_profile.dart';
 import 'video_player_screen.dart';
@@ -72,10 +72,25 @@ class _ResumeLearningCardState extends State<ResumeLearningCard> {
     final found = lessons.where((lesson) => lesson.id == recent.lessonId);
     if (found.isEmpty) return const SizedBox.shrink();
     final lesson = found.first;
-    final isOpenCourse = course.accessMode == CourseAccessMode.open;
-    if (!widget.user.isEnrolled(course.id) &&
-        !lesson.isFreePreview &&
-        !isOpenCourse) {
+
+    final isExpired = widget.user.isCourseExpired(course.id);
+    final isEnrolled = !isExpired &&
+        (course.isDetailedFromAuthServer
+            ? course.hasEnrolled
+            : (course.hasEnrolled || widget.user.isEnrolled(course.id)));
+
+    final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(
+      course: course,
+      userCompletedLessonIds: {...widget.user.completedLessonIds},
+    );
+
+    final lockReason = CourseProgressPolicy.lessonLockReason(
+      levels: course.levels,
+      lesson: lesson,
+      isEnrolled: isEnrolled,
+      completedLessonIds: completedSet,
+    );
+    if (lockReason != null) {
       return const SizedBox.shrink();
     }
 
@@ -173,10 +188,12 @@ class _ResumeLearningCardState extends State<ResumeLearningCard> {
         builder: (_) => VideoPlayerScreen(
           lesson: lesson,
           courseId: course.id,
+          courseSlug: course.slug,
           courseTitle: course.title,
           courseAccessMode: course.accessMode,
           currentUser: widget.user,
           playlist: lessons.cast(),
+          levels: course.levels,
         ),
       ),
     );

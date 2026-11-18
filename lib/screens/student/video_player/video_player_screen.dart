@@ -9,16 +9,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/network/api_exceptions.dart';
 import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/network_error_mapper.dart';
 import '../../../../logic/auth/auth_cubit.dart';
 import '../../../../logic/auth/auth_state.dart';
+import '../../../../logic/courses/courses_cubit.dart';
 import '../../../../models/course_access_mode.dart';
+import '../../../../models/course_level.dart';
+import '../../../../models/course_progress_policy.dart';
 import '../../../../models/lesson.dart';
 import '../../../../models/user_profile.dart';
 import '../../../../models/video_quality.dart';
 import '../../../../repositories/student_learning_repository.dart';
-import '../../../../services/firestore_service.dart';
 import '../../security/security_protection_watcher.dart';
 import '../widgets/submit_assignment_sheet.dart';
 import 'controllers/watch_progress_coordinator.dart';
@@ -28,24 +32,27 @@ import 'widgets/lesson_playlist_panel.dart';
 import 'widgets/mobile_single_column_player_view.dart';
 import 'widgets/player_view.dart';
 
-/// الشاشة الرئيسية لمشغل الفيديو التعليمي في منصة مركز الأمين.
-/// تم تطويرها ومعماريتها بنمط معياري يفصل بين مشهد العرض، وحساب التقدم الموثوق، والتحكم بالأجهزة المتعددة.
+/// الشاشة الرئيسية لمشغل الفيديو التعليمي المحمي في منصة مركز الأمين (P5 Laravel API).
 class VideoPlayerScreen extends StatefulWidget {
   final Lesson lesson;
   final String courseId;
+  final String? courseSlug;
   final String courseTitle;
   final CourseAccessMode courseAccessMode;
   final UserModel? currentUser;
   final List<Lesson> playlist;
+  final List<CourseLevel> levels;
 
   const VideoPlayerScreen({
     super.key,
     required this.lesson,
     required this.courseId,
+    this.courseSlug,
     this.courseTitle = '',
     this.courseAccessMode = CourseAccessMode.closed,
     this.currentUser,
     this.playlist = const [],
+    this.levels = const [],
   });
 
   @override
@@ -65,11 +72,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isMuted = false;
   VideoQuality _selectedQuality = VideoQuality.auto;
   bool _isChangingQuality = false;
+  bool _isRenewingToken = false;
+  bool _hasAttemptedExpiredTokenRetry = false;
   String _baseStreamUrl = '';
 
   StreamSubscription<AuthState>? _accessSubscription;
   Set<String> _submittedAssignmentIds = <String>{};
   ValueNotifier<bool>? _screenCaptureNotifier;
+  ValueNotifier<int?>? _activeVideoIdNotifier;
 
   bool _savingCompletion = false;
   bool _fullscreen = false;
@@ -83,6 +93,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isSeekingRight = true;
   Timer? _seekFeedbackTimer;
   Timer? _watchTickTimer;
+  Timer? _tokenRenewalTimer;
 
   Timer? _watermarkTimer;
   final ValueNotifier<Alignment> _watermarkAlignmentNotifier =
@@ -103,9 +114,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           ? sl<StudentLearningRepository>()
           : StudentLearningRepositoryImpl();
 
+  String get _effectiveCourseSlug =>
+      (widget.courseSlug != null && widget.courseSlug!.trim().isNotEmpty)
+          ? widget.courseSlug!.trim()
+          : widget.courseId;
+
+  String get _effectiveLessonSlug =>
+      (widget.lesson.slug != null && widget.lesson.slug!.trim().isNotEmpty)
+          ? widget.lesson.slug!.trim()
+          : widget.lesson.id;
+
   Map<String, String> get _lockedReasons {
     final panel = LessonPlaylistPanel(
       playlist: widget.playlist,
+      levels: widget.levels,
       currentLessonId: widget.lesson.id,
       courseId: widget.courseId,
       courseAccessMode: widget.courseAccessMode,
@@ -120,16 +142,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _isCompleted =
-        widget.currentUser?.isLessonCompleted(widget.lesson.id) ?? false;
+    _isCompleted = widget.lesson.isCompleted ||
+        (widget.currentUser?.isLessonCompleted(widget.lesson.id) ?? false);
 
     if (widget.currentUser != null) {
       _progressCoordinator = WatchProgressCoordinator(
         currentUser: widget.currentUser!,
         courseId: widget.courseId,
+        courseSlug: _effectiveCourseSlug,
         courseTitle: widget.courseTitle,
         lesson: widget.lesson,
         onLessonAutoCompleted: _onAutoCompletedEarned,
+        onAuthorizationLost: _handleAuthorizationLost,
       );
       _progressCoordinator!.initialize();
       _loadStudentSubmissions();
@@ -142,32 +166,56 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _startPlaybackTicker();
   }
 
+  void _handleAuthorizationLost(int statusCode, String message) {
+    if (!mounted) return;
+    _tokenRenewalTimer?.cancel();
+    _controller?.pause();
+    try {
+      final authCubit = context.read<AuthCubit>();
+      context.read<CoursesCubit>().syncStudentState(authCubit: authCubit);
+    } catch (_) {}
+
+    setState(() {
+      _hasError = true;
+      _isInitialized = false;
+      _errorMessage = statusCode == 401
+          ? 'انتهت صلاحية الجلسة (401). يرجى إعادة تسجيل الدخول لمتابعة المشاهدة.'
+          : (message.isNotEmpty
+              ? message
+              : 'تم رفض الوصول للمحاضرة (403): تم سحب صلاحية الاشتراك أو انتهت مدته.');
+    });
+  }
+
   void _onAutoCompletedEarned() {
-    if (mounted) {
-      setState(() => _isCompleted = true);
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.success,
-          content: Text('player.lesson_auto_completed_earned'.tr()),
-        ),
-      );
-    }
+    if (!mounted) return;
+    setState(() => _isCompleted = true);
+    try {
+      context.read<AuthCubit>().markLessonCompleted(widget.lesson.id);
+    } catch (_) {}
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.success,
+        content: Text('player.lesson_auto_completed_earned'.tr()),
+      ),
+    );
   }
 
   void _listenToAuthAccess() {
     _accessSubscription = context.read<AuthCubit>().stream.listen((state) {
-      final isOpenCourse = widget.courseAccessMode == CourseAccessMode.open;
+      // لا يُمنح الوصول لمجرد كون الدورة open؛ المصدر المعتمد هو اشتراك الطالب أو معاينة معتمدة من الخادم
       final revoked = state is Unauthenticated ||
+          state is AuthSuspended ||
+          state is AuthPendingApproval ||
           state is AuthError ||
           (state is Authenticated &&
               (state.user.uid != widget.currentUser?.uid ||
                   (!widget.lesson.isFreePreview &&
-                      !isOpenCourse &&
                       !state.user.isEnrolled(widget.courseId))));
       if (revoked && mounted && !_closingForAccess) {
         _closingForAccess = true;
+        _tokenRenewalTimer?.cancel();
         if (_isInitialized) _controller?.pause();
         Navigator.of(context).pop();
       }
@@ -178,7 +226,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final uid = widget.currentUser?.uid;
     if (uid == null) return;
     try {
-      final subs = await FirestoreService().getStudentSubmissions(uid);
+      final subs = await _learningRepository.getStudentSubmissions(uid);
       if (mounted) {
         setState(() {
           _submittedAssignmentIds =
@@ -191,7 +239,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final notifier = ScreenProtectionScope.notifierOf(context);
+    final scope =
+        context.getInheritedWidgetOfExactType<ScreenProtectionScope>();
+    final notifier = scope?.notifier;
     if (_screenCaptureNotifier != notifier) {
       _screenCaptureNotifier?.removeListener(_handleScreenCaptureChanged);
       _screenCaptureNotifier = notifier;
@@ -200,6 +250,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _handleScreenCaptureChanged();
       }
     }
+
+    _activeVideoIdNotifier = scope?.activeVideoIdNotifier;
+    _activeVideoIdNotifier?.value = int.tryParse(widget.lesson.id);
   }
 
   void _handleScreenCaptureChanged() {
@@ -279,6 +332,87 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  int? _extractSecondsUntilExpiry(String url, int? explicitExpiresIn) {
+    if (explicitExpiresIn != null && explicitExpiresIn > 0) {
+      return explicitExpiresIn;
+    }
+    final uri = Uri.tryParse(url.trim());
+    final rawExp = uri?.queryParameters['expires'] ?? uri?.queryParameters['exp'];
+    final epoch = rawExp != null ? int.tryParse(rawExp) : null;
+    if (epoch != null && epoch > 0) {
+      final expiresAt =
+          DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
+      final diff = expiresAt.difference(DateTime.now().toUtc()).inSeconds;
+      return diff > 0 ? diff : 1;
+    }
+    return null;
+  }
+
+  void _scheduleTokenRenewal(String url, int? explicitExpiresIn) {
+    _tokenRenewalTimer?.cancel();
+    final ttl = _extractSecondsUntilExpiry(url, explicitExpiresIn);
+    if (ttl == null) return;
+
+    // جدولة التجديد الاستباقي قبل انتهاء صلاحية الرابط الموقع بـ 60 ثانية
+    final delaySec = max(30, ttl - 60);
+    _tokenRenewalTimer = Timer(Duration(seconds: delaySec), () {
+      if (mounted && !_hasError) {
+        unawaited(_renewPlaybackToken(fromPlaybackError: false));
+      }
+    });
+  }
+
+  Future<void> _renewPlaybackToken({bool fromPlaybackError = false}) async {
+    if (_isRenewingToken || !mounted) return;
+    _isRenewingToken = true;
+    try {
+      final resp = await _learningRepository.refreshPlaybackToken(
+        courseSlugOrId: _effectiveCourseSlug,
+        lessonSlugOrId: _effectiveLessonSlug,
+      );
+      if (!mounted) return;
+
+      final nextUrl = resp.hlsUrl?.trim() ?? '';
+      if (nextUrl.isEmpty) {
+        if (fromPlaybackError) {
+          setState(() {
+            _hasError = true;
+            _isInitialized = false;
+            _errorMessage =
+                'انتهت صلاحية رابط البث الآمن وتعذر الحصول على رابط HLS جديد من الخادم.';
+          });
+        }
+        return;
+      }
+
+      _scheduleTokenRenewal(nextUrl, resp.expiresIn);
+
+      if (nextUrl != _baseStreamUrl || fromPlaybackError) {
+        await _swapControllerStream(
+          newBaseUrl: nextUrl,
+          targetQuality: _selectedQuality,
+        );
+      }
+    } on UnauthorizedException catch (e) {
+      _handleAuthorizationLost(401, e.message);
+    } on ForbiddenException catch (e) {
+      _handleAuthorizationLost(403, e.message);
+    } on PlaybackAuthorizationException catch (e) {
+      _handleAuthorizationLost(e.statusCode ?? 403, e.message);
+    } catch (_) {
+      if (fromPlaybackError && mounted) {
+        setState(() {
+          _hasError = true;
+          _isInitialized = false;
+          _errorMessage =
+              'تعذر تجديد تصريح البث بعد انتهاء صلاحيته. يرجى التحقق من الإنترنت وإعادة المحاولة.';
+        });
+      }
+    } finally {
+      _isRenewingToken = false;
+    }
+  }
+
   Future<void> _initializeVideo() async {
     if (!widget.lesson.isAvailableNow) {
       if (mounted) {
@@ -292,36 +426,68 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    String streamUrl = widget.lesson.videoStreamUrl;
+    _hasAttemptedExpiredTokenRetry = false;
+    String streamUrl = '';
+    int serverLastPosSec = 0;
+    int? expiresInSec;
+
     try {
       final resolved = await _learningRepository.resolveLessonPlayback(
-        courseId: widget.courseId,
+        courseId: _effectiveCourseSlug,
         lesson: widget.lesson,
       );
       if (!mounted) return;
       streamUrl = resolved.streamUrl;
       _resolvedThumbnailUrl = resolved.thumbnailUrl;
+      serverLastPosSec = resolved.lastPositionSeconds;
+      expiresInSec = resolved.expiresInSeconds;
+
+      _progressCoordinator?.seedServerProgress(
+        watchedSeconds: resolved.watchedSeconds,
+        lastPositionSeconds: resolved.lastPositionSeconds,
+        isCompleted: resolved.isCompleted,
+      );
+      if (resolved.isCompleted && !_isCompleted) {
+        _isCompleted = true;
+      }
     } on PlaybackAuthorizationException catch (authEx) {
-      // حماية صارمة: منع التراجع لروابط غير محمية عند فشل التحقق من الصلاحية
+      _handleAuthorizationLost(authEx.statusCode ?? 403, authEx.message);
+      return;
+    } on PlaybackProviderIncompatibleException catch (compatEx) {
       if (!mounted) return;
       setState(() {
         _hasError = true;
-        _errorMessage = authEx.message;
+        _errorMessage = compatEx.message;
+      });
+      return;
+    } on ApiException catch (apiEx) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _errorMessage = NetworkErrorMapper.toArabicMessage(
+          apiEx,
+          defaultMessage: 'تعذر تحميل بيانات البث المحمي للمحاضرة.',
+        );
       });
       return;
     } catch (_) {
-      // خطأ شبكة عابر
       if (!mounted) return;
-      if (widget.lesson.muxPlaybackId.trim().isEmpty &&
-          !widget.lesson.isFreePreview) {
+      setState(() {
+        _hasError = true;
+        _errorMessage =
+            'تعذر التحقق من صلاحية الوصول إلى هذه المحاضرة. تأكد من اتصالك وتفعيل اشتراكك ثم أعد المحاولة.';
+      });
+      return;
+    }
+
+    if (streamUrl.trim().isEmpty) {
+      if (mounted) {
         setState(() {
           _hasError = true;
-          _errorMessage =
-              'تعذر التحقق من صلاحية الوصول إلى هذه المحاضرة. تأكد من تفعيل اشتراكك ثم أعد المحاولة.';
+          _errorMessage = 'لم يصدر الخادم رابط بث صالحاً لهذه المحاضرة.';
         });
-        return;
       }
-      _resolvedThumbnailUrl = widget.lesson.thumbnailUrl;
+      return;
     }
 
     _baseStreamUrl = streamUrl;
@@ -337,16 +503,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await ctrl.initialize();
       if (!mounted) return;
 
-      final saved =
-          await _preferences.getInt(_progressCoordinator?.positionKey ?? '') ?? 0;
+      final localSavedMs =
+          await _preferences.getInt(_progressCoordinator?.positionKey ?? '');
+      final serverSavedMs = serverLastPosSec * 1000;
+      final resumeMs = (localSavedMs != null && localSavedMs > 0)
+          ? localSavedMs
+          : serverSavedMs;
 
       if (!mounted) return;
-      if (saved > 0 && saved < ctrl.value.duration.inMilliseconds - 2000) {
-        await ctrl.seekTo(Duration(milliseconds: saved));
+      final durMs = ctrl.value.duration.inMilliseconds;
+      if (resumeMs > 0 && durMs > 2000 && resumeMs < durMs - 2000) {
+        await ctrl.seekTo(Duration(milliseconds: resumeMs));
       }
       if (_screenCaptureNotifier?.value == true) {
         await ctrl.setVolume(0.0);
       }
+
+      _scheduleTokenRenewal(_baseStreamUrl, expiresInSec);
+
       if (mounted) {
         setState(() {
           _isInitialized = true;
@@ -369,20 +543,86 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _onControllerStateChanged() {
     final ctrl = _controller;
     if (ctrl == null) return;
+
+    if (ctrl.value.hasError && !_hasAttemptedExpiredTokenRetry && !_hasError) {
+      _hasAttemptedExpiredTokenRetry = true;
+      unawaited(_renewPlaybackToken(fromPlaybackError: true));
+      return;
+    }
+
     final isPlaying = ctrl.value.isPlaying;
     if (isPlaying != _wasPlaying) {
       _wasPlaying = isPlaying;
       if (isPlaying) {
-        _progressCoordinator?.sendPresenceHeartbeat(
-          ctrl.value.position.inSeconds,
-          isPlaying: true,
-        );
+        _hasAttemptedExpiredTokenRetry = false;
       } else {
-        // موثوقية عالية: عند الإيقاف المؤقت، يُحفظ الموضع وتُسجل حالة نهاية الجلسة حتى لو كانت الثواني المعلقة صفراً
         _progressCoordinator?.savePosition(ctrl.value.position.inMilliseconds);
-        _progressCoordinator?.flushWatchTime(isSessionEnd: true);
-        _progressCoordinator?.removePresenceHeartbeat();
+        _progressCoordinator?.flushWatchTime(
+          isSessionEnd: true,
+          currentPositionSeconds: ctrl.value.position.inSeconds,
+        );
       }
+    }
+  }
+
+  /// مساعد مشترك لتبديل مصدر البث (تغيير الجودة أو تجديد الرمز الموقع) بدون فقدان موضع التشغيل.
+  Future<bool> _swapControllerStream({
+    required String newBaseUrl,
+    required VideoQuality targetQuality,
+  }) async {
+    final oldCtrl = _controller;
+    if (oldCtrl == null) return false;
+
+    final currentPosition =
+        oldCtrl.value.isInitialized ? oldCtrl.value.position : Duration.zero;
+    final wasPlaying = oldCtrl.value.isInitialized && oldCtrl.value.isPlaying;
+    final currentSpeed =
+        oldCtrl.value.isInitialized ? oldCtrl.value.playbackSpeed : 1.0;
+
+    oldCtrl.setVolume(0.0);
+
+    try {
+      final newUri = targetQuality.buildStreamUri(newBaseUrl);
+      final newCtrl = VideoPlayerController.networkUrl(
+        newUri,
+        httpHeaders: const {'User-Agent': 'AlameenPlayer/1.0 (Flutter)'},
+      );
+
+      await newCtrl.initialize();
+      if (!mounted) {
+        await newCtrl.dispose();
+        return false;
+      }
+
+      if (currentPosition > Duration.zero &&
+          currentPosition < newCtrl.value.duration) {
+        await newCtrl.seekTo(currentPosition);
+      }
+      await newCtrl.setPlaybackSpeed(currentSpeed);
+      final isVolumeZero = _isMuted || (_screenCaptureNotifier?.value == true);
+      await newCtrl.setVolume(isVolumeZero ? 0.0 : 1.0);
+
+      if (wasPlaying && _screenCaptureNotifier?.value != true) {
+        await newCtrl.play();
+      }
+
+      newCtrl.addListener(_onControllerStateChanged);
+      oldCtrl.removeListener(_onControllerStateChanged);
+
+      if (mounted) {
+        setState(() {
+          _baseStreamUrl = newBaseUrl;
+          _controller = newCtrl;
+          _selectedQuality = targetQuality;
+          _isInitialized = true;
+          _hasError = false;
+        });
+      }
+      await oldCtrl.dispose();
+      return true;
+    } catch (_) {
+      oldCtrl.setVolume(_isMuted ? 0.0 : 1.0);
+      return false;
     }
   }
 
@@ -398,76 +638,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _isChangingQuality = true;
     });
 
-    final currentPosition = oldCtrl.value.position;
-    final wasPlaying = oldCtrl.value.isPlaying;
-    final currentSpeed = oldCtrl.value.playbackSpeed;
+    final swapped = await _swapControllerStream(
+      newBaseUrl: _baseStreamUrl,
+      targetQuality: quality,
+    );
 
-    // كتم مؤقت للقديم لمنع تداخل الصوت
-    oldCtrl.setVolume(0.0);
+    if (!mounted) return;
+    setState(() {
+      _isChangingQuality = false;
+    });
+    _scheduleHideControls();
 
-    try {
-      final newUri = quality.buildStreamUri(_baseStreamUrl);
-      final newCtrl = VideoPlayerController.networkUrl(
-        newUri,
-        httpHeaders: const {'User-Agent': 'AlameenPlayer/1.0 (Flutter)'},
+    if (swapped) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          content: Text('تم ضبط جودة الفيديو: ${quality.label}'),
+        ),
       );
-
-      await newCtrl.initialize();
-      if (!mounted) {
-        await newCtrl.dispose();
-        return;
-      }
-
-      if (currentPosition > Duration.zero &&
-          currentPosition < newCtrl.value.duration) {
-        await newCtrl.seekTo(currentPosition);
-      }
-      await newCtrl.setPlaybackSpeed(currentSpeed);
-      final isVolumeZero =
-          _isMuted || (_screenCaptureNotifier?.value == true);
-      await newCtrl.setVolume(isVolumeZero ? 0.0 : 1.0);
-
-      if (wasPlaying && _screenCaptureNotifier?.value != true) {
-        await newCtrl.play();
-      }
-
-      newCtrl.addListener(_onControllerStateChanged);
-      oldCtrl.removeListener(_onControllerStateChanged);
-
-      if (mounted) {
-        setState(() {
-          _controller = newCtrl;
-          _selectedQuality = quality;
-          _isChangingQuality = false;
-        });
-        _scheduleHideControls();
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-            content: Text('تم ضبط جودة الفيديو: ${quality.label}'),
-          ),
-        );
-      }
-      await oldCtrl.dispose();
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isChangingQuality = false;
-        });
-        _scheduleHideControls();
-        oldCtrl.setVolume(_isMuted ? 0.0 : 1.0);
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppColors.error,
-            content:
-                Text('تعذر تغيير جودة الفيديو، تم الإبقاء على الجودة الحالية.'),
-          ),
-        );
-      }
+    } else {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text('تعذر تغيير جودة الفيديو، تم الإبقاء على الجودة الحالية.'),
+        ),
+      );
     }
   }
 
@@ -479,6 +678,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (ctrl != null) {
         _progressCoordinator?.prepareToLeave(ctrl.value.position.inMilliseconds);
       }
+    } else if (state == AppLifecycleState.resumed &&
+        _baseStreamUrl.isNotEmpty &&
+        ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(_baseStreamUrl)) {
+      unawaited(_renewPlaybackToken(fromPlaybackError: false));
     }
   }
 
@@ -517,12 +720,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _seek(int seconds) async {
     final ctrl = _controller;
     if (!_isInitialized || ctrl == null) return;
-    _progressCoordinator?.onSeekPerformed();
-    final value = (ctrl.value.position.inSeconds + seconds).clamp(
+    final target = (ctrl.value.position.inSeconds + seconds).clamp(
       0,
       ctrl.value.duration.inSeconds,
     );
-    await ctrl.seekTo(Duration(seconds: value));
+    _progressCoordinator?.onSeekPerformed(targetPositionSeconds: target);
+    await ctrl.seekTo(Duration(seconds: target));
   }
 
   void _togglePlay() {
@@ -535,6 +738,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ctrl.pause();
         _hideControlsTimer?.cancel();
       } else {
+        if (_baseStreamUrl.isNotEmpty &&
+            ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(_baseStreamUrl)) {
+          unawaited(_renewPlaybackToken(fromPlaybackError: false));
+        }
         ctrl.play();
         _scheduleHideControls();
       }
@@ -555,7 +762,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final assignmentId = widget.lesson.assignmentId;
     if (user == null || assignmentId == null || assignmentId.isEmpty) return;
     try {
-      final assignment = await FirestoreService().getAssignment(assignmentId);
+      final assignment = await _learningRepository.getAssignment(assignmentId);
       if (assignment == null || !mounted) return;
       await showModalBottomSheet(
         context: context,
@@ -591,17 +798,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       return;
     }
+
     final state = context.read<AuthCubit>().state;
-    final isOpenCourse = widget.courseAccessMode == CourseAccessMode.open;
-    if (state is! Authenticated ||
-        (!lesson.isFreePreview &&
-            !isOpenCourse &&
-            !state.user.isEnrolled(widget.courseId))) {
+    final isEnrolled =
+        state is Authenticated && state.user.isEnrolled(widget.courseId);
+    final completedSet = <String>{
+      if (state is Authenticated) ...state.user.completedLessonIds,
+      for (final l in widget.playlist)
+        if (l.isCompleted) l.id,
+      if (_isCompleted) widget.lesson.id,
+    };
+
+    final policyReason = CourseProgressPolicy.lessonLockReason(
+      levels: widget.levels,
+      lesson: lesson,
+      isEnrolled: isEnrolled,
+      completedLessonIds: completedSet,
+      assignmentLockReasons: _lockedReasons,
+    );
+
+    if (state is! Authenticated || policyReason != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('player.no_permission'.tr())),
+        SnackBar(
+          content: Text(policyReason ?? 'player.no_permission'.tr()),
+        ),
       );
       return;
     }
+
     _changingLesson = true;
     try {
       if (_isInitialized) await _controller?.pause();
@@ -616,10 +840,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           builder: (_) => VideoPlayerScreen(
             lesson: lesson,
             courseId: widget.courseId,
+            courseSlug: widget.courseSlug,
             courseTitle: widget.courseTitle,
             courseAccessMode: widget.courseAccessMode,
             currentUser: state.user,
             playlist: widget.playlist,
+            levels: widget.levels,
           ),
         ),
       );
@@ -641,15 +867,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final totalDur = (ctrl != null && ctrl.value.isInitialized)
         ? ctrl.value.duration.inSeconds
         : widget.lesson.durationInSeconds;
-    final threshold = widget.lesson.completionThresholdPercentage;
+    final threshold = max(
+      CourseProgressPolicy.strictLevelThresholdPercent.toInt(),
+      widget.lesson.effectiveCompletionThresholdPercentage,
+    );
     final tracker = _progressCoordinator?.coverageTracker;
-    final actualCoveragePct =
-        tracker?.coveragePercentage(totalDur) ?? 0.0;
+    final actualCoveragePct = tracker?.coveragePercentage(totalDur) ?? 0.0;
 
-    // اشتراط بلوغ نسبة 95% على الأقل يدوياً
-    if (target &&
-        tracker != null &&
-        !tracker.isComplete(totalDur, threshold)) {
+    if (target && tracker != null && !tracker.isComplete(totalDur, threshold)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
@@ -665,18 +890,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() => _savingCompletion = true);
     try {
       await _learningRepository.toggleLessonCompletion(
-        uid: widget.currentUser!.uid,
-        lessonId: widget.lesson.id,
+        courseSlugOrId: _effectiveCourseSlug,
+        lesson: widget.lesson,
         isCompleted: target,
       );
       if (!mounted) return;
       setState(() => _isCompleted = target);
-      if (target) HapticFeedback.mediumImpact();
+      if (target) {
+        context.read<AuthCubit>().markLessonCompleted(widget.lesson.id);
+        HapticFeedback.mediumImpact();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          backgroundColor:
-              target ? AppColors.primary : const Color(0xFF334155),
+          backgroundColor: target ? AppColors.primary : const Color(0xFF334155),
           content: Text(
             target
                 ? 'تم تسجيل إكمال المحاضرة وحفظ تقدمك التدريبي.'
@@ -699,20 +926,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    if (_activeVideoIdNotifier?.value == int.tryParse(widget.lesson.id)) {
+      _activeVideoIdNotifier?.value = null;
+    }
     _screenCaptureNotifier?.removeListener(_handleScreenCaptureChanged);
     _accessSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _hideControlsTimer?.cancel();
     _seekFeedbackTimer?.cancel();
     _watchTickTimer?.cancel();
+    _tokenRenewalTimer?.cancel();
     _watermarkTimer?.cancel();
     _watermarkAlignmentNotifier.dispose();
     _restoreSystemUiAndOrientation();
 
-    // حفظ الموضع والثواني المعلقة بأمان
     final pos = _controller?.value.position.inMilliseconds ?? 0;
     _progressCoordinator?.savePosition(pos);
-    _progressCoordinator?.flushWatchTime(isSessionEnd: true);
+    _progressCoordinator?.flushWatchTime(
+      isSessionEnd: true,
+      currentPositionSeconds: pos ~/ 1000,
+    );
     _progressCoordinator?.dispose();
 
     _controller?.removeListener(_onControllerStateChanged);
@@ -726,9 +959,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final studentUid = widget.currentUser?.uid ?? '';
     final effectiveThumb = _resolvedThumbnailUrl.isNotEmpty
         ? _resolvedThumbnailUrl
-        : (widget.lesson.muxPlaybackId.trim().isNotEmpty
-            ? widget.lesson.thumbnailUrl
-            : '');
+        : widget.lesson.thumbnailUrl;
 
     return PlayerView(
       controller: _controller,
@@ -848,6 +1079,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         savingCompletion: _savingCompletion,
                         canComplete: widget.currentUser != null,
                         playlist: widget.playlist,
+                        levels: widget.levels,
                         showInlinePlaylist: false,
                         lockedReasons: _lockedReasons,
                         isAssignmentSubmitted: _submittedAssignmentIds
@@ -860,6 +1092,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       ),
                       playlistPanel: LessonPlaylistPanel(
                         playlist: widget.playlist,
+                        levels: widget.levels,
                         currentLessonId: widget.lesson.id,
                         courseId: widget.courseId,
                         courseAccessMode: widget.courseAccessMode,
@@ -869,8 +1102,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     )
                   : MobileSingleColumnPlayerView(
                       stageWidget: _buildStage(showTopBar: false),
-                      stageMaxHeight:
-                          (size.height * 0.40).clamp(190.0, 380.0),
+                      stageMaxHeight: (size.height * 0.40).clamp(190.0, 380.0),
                       detailsPanel: LessonDetailsPanel(
                         lesson: widget.lesson,
                         courseId: widget.courseId,
@@ -878,6 +1110,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         savingCompletion: _savingCompletion,
                         canComplete: widget.currentUser != null,
                         playlist: widget.playlist,
+                        levels: widget.levels,
                         showInlinePlaylist: true,
                         lockedReasons: _lockedReasons,
                         isAssignmentSubmitted: _submittedAssignmentIds

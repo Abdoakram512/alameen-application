@@ -1,63 +1,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/active_watch_session.dart';
 import '../models/assignment.dart';
 import '../models/assignment_submission.dart';
-import '../models/course.dart';
-import '../models/watch_log_entry.dart';
 import '../repositories/student_assignments_repository.dart';
-import '../repositories/student_content_repository.dart';
-import '../repositories/student_courses_repository.dart';
-import '../repositories/student_profile_repository.dart';
-import '../repositories/student_watch_repository.dart';
 import '../repositories/impl/student_assignments_repository_impl.dart';
-import '../repositories/impl/student_content_repository_impl.dart';
-import '../repositories/impl/student_courses_repository_impl.dart';
-import '../repositories/impl/student_profile_repository_impl.dart';
-import '../repositories/impl/student_watch_repository_impl.dart';
 
-/// واجهة خفيفة موحدة (Facade Pattern) لتطبيق الطالب تُغلّف المستودعات المتخصصة الستة
-/// وتضمن توافقاً كاملاً بنسبة 100% مع كافة Cubits وشاشات التطبيق والاختبارات الحالية.
+/// واجهة موحدة لخدمات التكليفات والواجبات المتبقية في Firebase مؤقتاً حتى المرحلة P6.
+/// تم استئصال كافة عمليات الدورات والحسابات والمدفوعات والمشاهدة والفيديوهات المحمية من هذه الخدمة بالكامل.
 class FirestoreService {
   static final FirestoreService _instance = FirestoreService._internal();
   factory FirestoreService() => _instance;
 
   final FirebaseFirestore? _explicitFirestore;
-
-  final StudentCoursesRepository _coursesRepository;
-  final StudentProfileRepository _profileRepository;
   final StudentAssignmentsRepository _assignmentsRepository;
-  final StudentWatchRepository _watchRepository;
-  final StudentContentRepository _contentRepository;
 
   FirestoreService._internal({FirebaseFirestore? firestore})
       : _explicitFirestore = firestore,
-        _coursesRepository = StudentCoursesRepositoryImpl(firestore: firestore),
-        _profileRepository = StudentProfileRepositoryImpl(),
-        _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: firestore),
-        _watchRepository = StudentWatchRepositoryImpl(firestore: firestore),
-        _contentRepository = StudentContentRepositoryImpl();
+        _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: firestore);
 
   FirestoreService.withRepositories({
     FirebaseFirestore? firestore,
-    StudentCoursesRepository? coursesRepository,
-    StudentProfileRepository? profileRepository,
     StudentAssignmentsRepository? assignmentsRepository,
-    StudentWatchRepository? watchRepository,
-    StudentContentRepository? contentRepository,
   })  : _explicitFirestore = firestore,
-        _coursesRepository = coursesRepository ?? StudentCoursesRepositoryImpl(firestore: firestore),
-        _profileRepository = profileRepository ?? StudentProfileRepositoryImpl(),
-        _assignmentsRepository = assignmentsRepository ?? StudentAssignmentsRepositoryImpl(firestore: firestore),
-        _watchRepository = watchRepository ?? StudentWatchRepositoryImpl(firestore: firestore),
-        _contentRepository = contentRepository ?? StudentContentRepositoryImpl();
+        _assignmentsRepository = assignmentsRepository ??
+            StudentAssignmentsRepositoryImpl(firestore: firestore);
 
   FirestoreService.forDatabase(FirebaseFirestore database)
       : _explicitFirestore = database,
-        _coursesRepository = StudentCoursesRepositoryImpl(firestore: database),
-        _profileRepository = StudentProfileRepositoryImpl(),
-        _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: database),
-        _watchRepository = StudentWatchRepositoryImpl(firestore: database),
-        _contentRepository = StudentContentRepositoryImpl();
+        _assignmentsRepository = StudentAssignmentsRepositoryImpl(firestore: database);
 
   FirebaseFirestore get db => _explicitFirestore ?? FirebaseFirestore.instance;
 
@@ -70,19 +39,9 @@ class FirestoreService {
     }
   }
 
-  // --- الوصول المباشر للمستودعات المتخصصة ---
-  StudentCoursesRepository get coursesRepository => _coursesRepository;
-  StudentProfileRepository get profileRepository => _profileRepository;
   StudentAssignmentsRepository get assignmentsRepository => _assignmentsRepository;
-  StudentWatchRepository get watchRepository => _watchRepository;
-  StudentContentRepository get contentRepository => _contentRepository;
 
-  // --- Realtime Streams & Queries Facade ---
-
-  Stream<List<Course>> streamCourses() => _coursesRepository.streamCourses();
-
-  Future<List<Course>> getCourses({Source? source}) =>
-      _coursesRepository.getCourses();
+  // --- P6 Assignments (Retained until Phase P6) ---
 
   Stream<List<Assignment>> streamCourseAssignments(String courseId) =>
       _assignmentsRepository.streamCourseAssignments(courseId);
@@ -96,61 +55,6 @@ class FirestoreService {
   Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId) =>
       _assignmentsRepository.getStudentSubmissions(studentId);
 
-  Stream<List<WatchLogEntry>> streamStudentWatchLogs(String studentId) =>
-      _watchRepository.streamStudentWatchLogs(studentId);
-
-  Future<String?> fetchProtectedLessonPlaybackId({
-    required String courseId,
-    required String lessonId,
-  }) =>
-      _coursesRepository.fetchProtectedLessonPlaybackId(
-        courseId: courseId,
-        lessonId: lessonId,
-      );
-
-  // --- عمليات التعديل والكتابة ---
-
-  Future<void> toggleLessonCompletion(
-    String uid,
-    String lessonId,
-    bool isCompleted,
-  ) =>
-      _watchRepository.toggleLessonCompletion(uid, lessonId, isCompleted);
-
-  Future<void> updateStudentProfile({
-    required String uid,
-    required String displayName,
-    required String phone,
-  }) =>
-      _profileRepository.updateStudentProfile(
-        uid: uid,
-        displayName: displayName,
-        phone: phone,
-      );
-
-  Future<void> deleteStudentAccount(String uid) =>
-      _profileRepository.deleteStudentAccount(uid);
-
   Future<void> submitAssignment(AssignmentSubmission submission) =>
       _assignmentsRepository.submitAssignment(submission);
-
-  Future<void> updateActiveWatchSession(ActiveWatchSession session) =>
-      _watchRepository.updateActiveWatchSession(session);
-
-  Future<void> removeActiveWatchSession(String sessionId) =>
-      _watchRepository.removeActiveWatchSession(sessionId);
-
-  Future<String?> getLatestLessonCoverage({
-    required String uid,
-    required String courseId,
-    required String lessonId,
-  }) =>
-      _watchRepository.getLatestLessonCoverage(
-        uid: uid,
-        courseId: courseId,
-        lessonId: lessonId,
-      );
-
-  Future<void> recordWatchEvent(Map<String, dynamic> event) =>
-      _watchRepository.recordWatchEvent(event);
 }

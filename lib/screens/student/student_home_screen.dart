@@ -29,7 +29,7 @@ class StudentHomeScreen extends StatelessWidget {
     if (c.accessMode == CourseAccessMode.closed) return false;
     if (c.accessMode == CourseAccessMode.assignedOnly) {
       if (user == null) return false;
-      return c.allowedStudentIds.contains(user.uid) || user.isEnrolled(c.id);
+      return c.hasEnrolled || user.isEnrolled(c.id);
     }
     return true;
   }
@@ -78,7 +78,11 @@ class StudentHomeScreen extends StatelessWidget {
               final enrolledCount = currentUser == null
                   ? 0
                   : allCourses
-                        .where((c) => currentUser.isEnrolled(c.id))
+                        .where(
+                          (c) => c.isDetailedFromAuthServer
+                              ? c.hasEnrolled
+                              : (c.hasEnrolled || currentUser.isEnrolled(c.id)),
+                        )
                         .length;
 
               return RefreshIndicator(

@@ -7,6 +7,7 @@ class CourseLevel extends Equatable {
   final String title;
   final String description;
   final int order;
+  final bool isAccessible;
   final List<Lesson> lessons;
 
   const CourseLevel({
@@ -15,6 +16,7 @@ class CourseLevel extends Equatable {
     required this.description,
     required this.order,
     required this.lessons,
+    this.isAccessible = true,
   });
 
   int get totalLessons => lessons.length;
@@ -24,6 +26,7 @@ class CourseLevel extends Equatable {
         'title': title,
         'description': description,
         'order': order,
+        'isAccessible': isAccessible,
         'lessons': lessons.map((l) => l.toMap()).toList(),
       };
 
@@ -34,6 +37,10 @@ class CourseLevel extends Equatable {
         .toList();
     parsedLessons.sort((a, b) => a.order.compareTo(b.order));
 
+    final accessible = json.containsKey('is_accessible')
+        ? json['is_accessible'] == true
+        : true;
+
     return CourseLevel(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? json['title_ar']?.toString() ?? '',
@@ -41,6 +48,7 @@ class CourseLevel extends Equatable {
       order: (json['sort_order'] is num)
           ? (json['sort_order'] as num).toInt()
           : ((json['order'] is num) ? (json['order'] as num).toInt() : 1),
+      isAccessible: accessible,
       lessons: parsedLessons,
     );
   }
@@ -60,6 +68,7 @@ class CourseLevel extends Equatable {
       title: map['title']?.toString() ?? '',
       description: map['description']?.toString() ?? '',
       order: (map['order'] is num) ? (map['order'] as num).toInt() : 1,
+      isAccessible: map['isAccessible'] != false && map['is_accessible'] != false,
       lessons: parsedLessons,
     );
   }
@@ -69,6 +78,7 @@ class CourseLevel extends Equatable {
     String? title,
     String? description,
     int? order,
+    bool? isAccessible,
     List<Lesson>? lessons,
   }) {
     return CourseLevel(
@@ -76,10 +86,11 @@ class CourseLevel extends Equatable {
       title: title ?? this.title,
       description: description ?? this.description,
       order: order ?? this.order,
+      isAccessible: isAccessible ?? this.isAccessible,
       lessons: lessons ?? List.from(this.lessons),
     );
   }
 
   @override
-  List<Object?> get props => [id, title, description, order, lessons];
+  List<Object?> get props => [id, title, description, order, isAccessible, lessons];
 }

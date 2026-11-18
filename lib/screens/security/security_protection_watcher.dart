@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:screen_protector/screen_protector.dart';
 import '../../core/di/injection_container.dart';
@@ -7,11 +6,15 @@ import '../../core/network/api_client.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/screen_capture_shield_overlay.dart';
 
-/// نطاق وراثي يمكّن مشغل الفيديو من إيقاف الصوت والصورة تلقائياً فور رصد تسجيل الشاشة.
+/// نطاق وراثي يمكّن مشغل الفيديو من إيقاف الصوت والصورة فور رصد تسجيل الشاشة،
+/// كما يتتبع معرّف الفيديو النشط لربطه ببلاغات الحماية الرسمية.
 class ScreenProtectionScope extends InheritedNotifier<ValueNotifier<bool>> {
+  final ValueNotifier<int?>? activeVideoIdNotifier;
+
   const ScreenProtectionScope({
     super.key,
     required ValueNotifier<bool> notifier,
+    this.activeVideoIdNotifier,
     required super.child,
   }) : super(notifier: notifier);
 
@@ -25,6 +28,14 @@ class ScreenProtectionScope extends InheritedNotifier<ValueNotifier<bool>> {
     final scope = context
         .getInheritedWidgetOfExactType<ScreenProtectionScope>();
     return scope?.notifier;
+  }
+
+  static void setActiveVideoId(BuildContext context, int? videoId) {
+    final scope = context
+        .getInheritedWidgetOfExactType<ScreenProtectionScope>();
+    if (scope?.activeVideoIdNotifier != null) {
+      scope!.activeVideoIdNotifier!.value = videoId;
+    }
   }
 }
 
@@ -50,6 +61,7 @@ class SecurityProtectionWatcher extends StatefulWidget {
 class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
     with WidgetsBindingObserver {
   final ValueNotifier<bool> _captureNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<int?> _activeVideoIdNotifier = ValueNotifier<int?>(null);
   bool _isRecordingDetected = false;
   Timer? _pollingTimer;
   DateTime? _lastAlertSentAt;
@@ -120,7 +132,12 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
     } catch (_) {}
   }
 
-  Future<void> _reportSecurityViolation(String alertType) async {
+  /// الإبلاغ الحصري عبر Laravel REST API بدون أي كتابة احتياطية في Firestore
+  /// ودون إرسال بيانات شخصية غير ضرورية (مثل البريد الإلكتروني) في التفاصيل.
+  Future<void> _reportSecurityViolation(
+    String alertType, {
+    int? videoId,
+  }) async {
     final uid = widget.studentId;
     if (uid == null || uid.isEmpty) return;
 
@@ -133,42 +150,31 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
 
     try {
       final platformName = mounted ? Theme.of(context).platform.name : 'unknown';
+      final effectiveVideoId = videoId ?? _activeVideoIdNotifier.value;
 
-      // 1. Primary: Report directly to Laravel REST API security violation endpoint
       final client = widget.apiClient ??
           (sl.isRegistered<ApiClient>() ? sl<ApiClient>() : null);
-      if (client != null) {
-        try {
-          await client.post(
-            '/student/security/violation',
-            data: {
-              'type': alertType,
-              'details': 'platform: $platformName, email: ${widget.studentEmail ?? ""}',
-            },
-          );
-          // Successfully reported to Laravel backend; return to prevent duplicate events.
-          return;
-        } catch (e) {
-          debugPrint('Security violation report to Laravel API non-fatal: $e');
-        }
-      }
+      if (client == null) return;
 
-      // 2. Legacy fallback for unmigrated Firebase sessions
-      await FirebaseFirestore.instance.collection('security_alerts').add({
-        'userId': uid,
-        'studentId': uid,
-        'studentEmail': widget.studentEmail ?? '',
-        'role': 'student_app',
-        'alertType': alertType,
-        'platform': platformName,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
+      await client.post(
+        '/student/security/violation',
+        data: <String, dynamic>{
+          'type': alertType,
+          'video_id': ?effectiveVideoId,
+          'details': 'platform: $platformName',
+        },
+      );
+    } catch (e) {
+      debugPrint('Security violation report non-fatal: $e');
+    }
   }
 
   @visibleForTesting
-  Future<void> reportSecurityViolationForTesting(String alertType) =>
-      _reportSecurityViolation(alertType);
+  Future<void> reportSecurityViolationForTesting(
+    String alertType, {
+    int? videoId,
+  }) =>
+      _reportSecurityViolation(alertType, videoId: videoId);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -181,6 +187,7 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
   void dispose() {
     _pollingTimer?.cancel();
     _captureNotifier.dispose();
+    _activeVideoIdNotifier.dispose();
     try {
       ScreenProtector.removeListener();
     } catch (_) {}
@@ -192,6 +199,7 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
   Widget build(BuildContext context) {
     return ScreenProtectionScope(
       notifier: _captureNotifier,
+      activeVideoIdNotifier: _activeVideoIdNotifier,
       child: Stack(
         children: [
           widget.child,

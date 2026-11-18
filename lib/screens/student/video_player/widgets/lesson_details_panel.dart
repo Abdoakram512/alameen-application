@@ -5,6 +5,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../logic/auth/auth_cubit.dart';
 import '../../../../logic/auth/auth_state.dart';
+import '../../../../models/course_level.dart';
+import '../../../../models/course_progress_policy.dart';
 import '../../../../models/lesson.dart';
 import '../../lesson_playlist.dart';
 
@@ -16,6 +18,7 @@ class LessonDetailsPanel extends StatelessWidget {
   final bool savingCompletion;
   final bool canComplete;
   final List<Lesson> playlist;
+  final List<CourseLevel> levels;
   final bool showInlinePlaylist;
   final Map<String, String> lockedReasons;
   final bool isAssignmentSubmitted;
@@ -31,6 +34,7 @@ class LessonDetailsPanel extends StatelessWidget {
     required this.savingCompletion,
     required this.canComplete,
     required this.playlist,
+    this.levels = const [],
     required this.showInlinePlaylist,
     this.lockedReasons = const {},
     this.isAssignmentSubmitted = false,
@@ -274,7 +278,7 @@ class LessonDetailsPanel extends StatelessWidget {
                         isCompleted
                             ? 'player.lesson_completed_desc'.tr()
                             : 'player.lesson_auto_track_desc'.tr(args: [
-                                '${lesson.completionThresholdPercentage}%',
+                                '${lesson.effectiveCompletionThresholdPercentage}%',
                               ]),
                         style: AppTextStyles.caption.copyWith(
                           color: isCompleted
@@ -293,6 +297,13 @@ class LessonDetailsPanel extends StatelessWidget {
             BlocBuilder<AuthCubit, AuthState>(
               builder: (context, state) {
                 final user = state is Authenticated ? state.user : null;
+                final isEnrolled = user?.isEnrolled(courseId) ?? false;
+                final completedSet = <String>{
+                  ...?user?.completedLessonIds,
+                  for (final l in playlist)
+                    if (l.isCompleted) l.id,
+                  if (isCompleted) lesson.id,
+                };
                 final currentIndex = playlist.indexWhere(
                   (item) => item.id == lesson.id,
                 );
@@ -302,10 +313,17 @@ class LessonDetailsPanel extends StatelessWidget {
                         : null;
                 final isNextLockedByAssignment =
                     next != null && lockedReasons.containsKey(next.id);
-                final canOpenNext = next != null &&
-                    user != null &&
-                    !isNextLockedByAssignment &&
-                    (next.isFreePreview || user.isEnrolled(courseId));
+                final nextLockReason = next == null
+                    ? null
+                    : CourseProgressPolicy.lessonLockReason(
+                        levels: levels,
+                        lesson: next,
+                        isEnrolled: isEnrolled,
+                        completedLessonIds: completedSet,
+                        assignmentLockReasons: lockedReasons,
+                      );
+                final canOpenNext =
+                    next != null && user != null && nextLockReason == null;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -352,15 +370,49 @@ class LessonDetailsPanel extends StatelessWidget {
                               ),
                             ],
                           ),
+                        )
+                      else if (nextLockReason != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.borderHairline),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.lock_outline_rounded,
+                                size: 16,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  nextLockReason,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                     if (showInlinePlaylist) ...[
                       const SizedBox(height: 22),
                       LessonPlaylist(
                         lessons: playlist,
+                        levels: levels,
                         selectedId: lesson.id,
-                        enrolled: user?.isEnrolled(courseId) ?? false,
-                        completedIds: {...?user?.completedLessonIds},
+                        enrolled: isEnrolled,
+                        completedIds: completedSet,
                         lockedReasons: lockedReasons,
                         onSelected: onSelectLesson,
                       ),
