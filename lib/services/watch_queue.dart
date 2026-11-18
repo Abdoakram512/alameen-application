@@ -70,12 +70,28 @@ class WatchQueue {
     return result;
   }
 
-  static String storageKeyForUser(String uid) => 'watch.queue.v1.$uid';
+  static bool isValidUid(String uid) {
+    final trimmed = uid.trim();
+    if (trimmed.isEmpty ||
+        trimmed.toLowerCase() == 'uid' ||
+        trimmed.toLowerCase() == 'null' ||
+        trimmed == '0') {
+      return false;
+    }
+    return true;
+  }
+
+  static String storageKeyForUser(String uid) {
+    if (!isValidUid(uid)) {
+      throw ArgumentError('Invalid user ID for watch queue storage key: "$uid"');
+    }
+    return 'watch.queue.v1.${uid.trim()}';
+  }
 
   String _key(String uid) => storageKeyForUser(uid);
 
   Future<List<Map<String, dynamic>>> _load(String uid) async {
-    if (uid.trim().isEmpty) return [];
+    if (!isValidUid(uid)) return [];
     final raw = await read(_key(uid));
     if (raw == null || raw.trim().isEmpty) return [];
     try {
@@ -92,7 +108,7 @@ class WatchQueue {
 
   /// مسح الطابور المحلي لمستخدم محدد (يُستدعى عند تسجيل الخروج أو حذف الحساب لمنع التسرب).
   Future<void> clearUser(String uid) => _serial(() async {
-        if (uid.trim().isEmpty) return;
+        if (!isValidUid(uid)) return;
         await write(_key(uid), '[]');
       });
 
@@ -101,7 +117,7 @@ class WatchQueue {
     String uid, {
     SharedPreferencesAsync? preferences,
   }) async {
-    if (uid.trim().isEmpty) return;
+    if (!isValidUid(uid)) return;
     try {
       final prefs = preferences ?? SharedPreferencesAsync();
       await prefs.remove(storageKeyForUser(uid));
@@ -109,6 +125,7 @@ class WatchQueue {
   }
 
   Future<int> pendingCount(String uid) => _serial<int>(() async {
+        if (!isValidUid(uid)) return 0;
         final events = await _load(uid);
         return events.length;
       });
@@ -138,7 +155,7 @@ class WatchQueue {
     String? coverageRanges,
   }) =>
       _serial(() async {
-        if (uid.trim().isEmpty) return;
+        if (!isValidUid(uid)) return;
         if (seconds <= 0 &&
             (watchedSeconds ?? 0) <= 0 &&
             isSessionEnd != true &&
@@ -192,7 +209,7 @@ class WatchQueue {
   }
 
   Future<void> flush(String uid) => _serial(() async {
-        if (uid.trim().isEmpty) return;
+        if (!isValidUid(uid)) return;
         final events = await _load(uid);
         while (events.isNotEmpty) {
           final current = events.first;

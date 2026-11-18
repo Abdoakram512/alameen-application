@@ -7,9 +7,21 @@ import '../../models/assignment_submission.dart';
 import '../../models/clinical_task_data.dart';
 import '../student_assignments_repository.dart';
 
+class UnsupportedFileAttachmentException implements Exception {
+  final String message;
+  final String fileName;
+  const UnsupportedFileAttachmentException(this.message, {this.fileName = ''});
+
+  @override
+  String toString() => message;
+}
+
 class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
   final AssignmentsRemoteDataSource? _remoteDataSource;
 
+  // ملاحظة معمارية هامة:
+  // هذه التدفقات (StreamControllers) توفر تحديثات تفاعلية محلية للواجهة (Reactive UI Updates)
+  // عقب إتمام استدعاءات REST والتحديث المحلي في الذاكرة، وليست بثاً خادمياً لحظياً (Server Push).
   final StreamController<List<Assignment>> _assignmentsStreamController =
       StreamController<List<Assignment>>.broadcast();
   final StreamController<List<AssignmentSubmission>> _submissionsStreamController =
@@ -169,12 +181,34 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
     File? attachmentFile,
   }) async {
     final taskId = _parseTaskId(submission.assignmentId);
+
+    File? audioFile;
+    if (attachmentFile != null) {
+      final ext = attachmentFile.path.split('.').last.toLowerCase();
+      const supportedAudioExts = {'m4a', 'mp3', 'wav', 'ogg', 'webm', 'aac'};
+      if (supportedAudioExts.contains(ext)) {
+        audioFile = attachmentFile;
+      } else {
+        throw UnsupportedFileAttachmentException(
+          'رفع ملفات الصور والمستندات ($ext) غير مدعوم حالياً في واجهة خادم المنصة؛ حيث تقبل المهام السريرية ملفات التسجيل الصوتي فقط (m4a, mp3, wav). يرجى إدراج رابط الملف الخارجي (مثل Google Drive) أو إرسال تسجيل صوتي.',
+          fileName: attachmentFile.path.split(Platform.pathSeparator).last,
+        );
+      }
+    }
+
+    final notesBuffer = StringBuffer();
+    if (submission.solutionText.trim().isNotEmpty) {
+      notesBuffer.write(submission.solutionText.trim());
+    }
+    if (submission.attachmentUrl.trim().isNotEmpty) {
+      if (notesBuffer.isNotEmpty) notesBuffer.write('\n\n');
+      notesBuffer.write('رابط المرفق الخارجي: ${submission.attachmentUrl.trim()}');
+    }
+
     return await submitClinicalTask(
       taskId: taskId,
-      audioFile: attachmentFile,
-      studentNotes: submission.solutionText.isNotEmpty
-          ? submission.solutionText
-          : submission.attachmentUrl,
+      audioFile: audioFile,
+      studentNotes: notesBuffer.isNotEmpty ? notesBuffer.toString() : null,
     );
   }
 }

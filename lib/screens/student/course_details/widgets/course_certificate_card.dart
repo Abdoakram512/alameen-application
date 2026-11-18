@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../models/course.dart';
 import '../../../../models/course_certificate.dart';
 import '../../../../models/user_profile.dart';
+import '../../../../repositories/student_certificates_repository.dart';
 import '../../certificate/course_certificate_screen.dart';
 
-/// بطاقة متابعة واستحقاق شهادة الدورة التدريبية (تفتح فقط عند إتمام 95%+)
-class CourseCertificateCard extends StatelessWidget {
+/// بطاقة متابعة واستحقاق شهادة الدورة التدريبية الصادرة رسمياً عبر Laravel REST API
+/// تمنع التوليد المحلي المزيف للشهادات وتعتمد حصرياً على الإصدار الرسمي من الخادم
+class CourseCertificateCard extends StatefulWidget {
   final Course course;
   final UserModel? user;
   final int completedLessonsCount;
@@ -23,30 +26,107 @@ class CourseCertificateCard extends StatelessWidget {
   });
 
   @override
+  State<CourseCertificateCard> createState() => _CourseCertificateCardState();
+}
+
+class _CourseCertificateCardState extends State<CourseCertificateCard> {
+  CourseCertificate? _officialCertificate;
+  bool _isChecking = false;
+  bool _hasChecked = false;
+
+  StudentCertificatesRepository get _repository =>
+      sl.isRegistered<StudentCertificatesRepository>()
+          ? sl<StudentCertificatesRepository>()
+          : StudentCertificatesRepositoryImpl();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkServerCertificate();
+  }
+
+  @override
+  void didUpdateWidget(covariant CourseCertificateCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.course.id != widget.course.id ||
+        oldWidget.user?.uid != widget.user?.uid ||
+        oldWidget.completedLessonsCount != widget.completedLessonsCount) {
+      _checkServerCertificate();
+    }
+  }
+
+  Future<void> _checkServerCertificate({bool forceRefresh = false}) async {
+    final user = widget.user;
+    if (user == null) return;
+
+    if (!forceRefresh && _hasChecked && _officialCertificate != null) return;
+
+    setState(() => _isChecking = true);
+    try {
+      final certs = await _repository.getStudentCertificates(
+        forceRefresh: forceRefresh,
+        currentStudentId: user.uid,
+      );
+
+      CourseCertificate? matched;
+      final courseIdStr = widget.course.id.trim();
+      for (final c in certs) {
+        if (c.courseId.trim() == courseIdStr ||
+            (c.courseTitle.trim().isNotEmpty &&
+                c.courseTitle.trim() == widget.course.title.trim())) {
+          matched = c;
+          break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _officialCertificate = matched;
+          _hasChecked = true;
+          _isChecking = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _hasChecked = true;
+          _isChecking = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (totalLessonsCount <= 0 || user == null) {
+    if (widget.totalLessonsCount <= 0 || widget.user == null) {
       return const SizedBox.shrink();
     }
 
     final isAr = Directionality.of(context) == TextDirection.rtl;
-    final progressPct = (completedLessonsCount / totalLessonsCount * 100).clamp(0.0, 100.0);
+    final progressPct = (widget.completedLessonsCount /
+            widget.totalLessonsCount *
+            100)
+        .clamp(0.0, 100.0);
     final isEligible = progressPct >= 95.0;
+    final hasOfficialCert = _officialCertificate != null;
     final remainingPct = (95.0 - progressPct).clamp(0.0, 95.0);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isEligible ? const Color(0xFF0B192C) : Colors.white,
+        color: hasOfficialCert ? const Color(0xFF0B192C) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isEligible
+          color: hasOfficialCert
               ? const Color(0xFFC5A059)
-              : AppColors.borderHairline,
-          width: isEligible ? 2 : 1,
+              : (isEligible
+                  ? const Color(0xFF10B981)
+                  : AppColors.borderHairline),
+          width: hasOfficialCert ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: isEligible
+            color: hasOfficialCert
                 ? const Color(0x33C5A059)
                 : Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
@@ -63,18 +143,22 @@ class CourseCertificateCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isEligible
+                  color: hasOfficialCert
                       ? const Color(0xFFC5A059).withValues(alpha: 0.2)
-                      : AppColors.surfaceLevel0,
+                      : (isEligible
+                          ? const Color(0xFFD1FAE5)
+                          : AppColors.surfaceLevel0),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isEligible
+                  hasOfficialCert
                       ? PhosphorIconsFill.certificate
-                      : PhosphorIconsRegular.lockSimple,
-                  color: isEligible
+                      : (isEligible
+                          ? Icons.hourglass_top_rounded
+                          : PhosphorIconsRegular.lockSimple),
+                  color: hasOfficialCert
                       ? const Color(0xFFC5A059)
-                      : AppColors.textMuted,
+                      : (isEligible ? const Color(0xFF059669) : AppColors.textMuted),
                   size: 24,
                 ),
               ),
@@ -84,34 +168,48 @@ class CourseCertificateCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isEligible
+                      hasOfficialCert
                           ? (isAr
                               ? 'شهادة إتمام الدورة المعتمدة جاهزة!'
                               : 'Course Certificate Ready!')
-                          : (isAr
-                              ? 'شهادة إتمام الدورة المعتمدة'
-                              : 'Official Certificate'),
+                          : (isEligible
+                              ? (isAr
+                                  ? 'متطلبات الشهادة مكتملة (95%+)'
+                                  : 'Certificate Requirements Met')
+                              : (isAr
+                                  ? 'شهادة إتمام الدورة المعتمدة'
+                                  : 'Official Certificate')),
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
-                        color: isEligible ? Colors.white : AppColors.textPrimary,
+                        color: hasOfficialCert
+                            ? Colors.white
+                            : AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isEligible
+                      hasOfficialCert
                           ? (isAr
-                              ? 'تهانينا! حققت نسبة الإنجاز المطلوبة (95%+)'
-                              : 'Congrats! You completed 95%+ of the course')
-                          : (isAr
-                              ? 'أنجزت ${progressPct.toStringAsFixed(0)}% - متبقي ${remainingPct.toStringAsFixed(0)}% للتأهل للشهادة'
-                              : 'Progress: ${progressPct.toStringAsFixed(0)}% (95% required)'),
+                              ? 'رقم الاعتماد الرسمي: ${_officialCertificate!.certificateCode}'
+                              : 'Code: ${_officialCertificate!.certificateCode}')
+                          : (isEligible
+                              ? (isAr
+                                  ? 'أتممت المشاهدة بنجاح — بانتظار الاعتماد والإصدار الرسمي من الإدارة'
+                                  : 'Requirements completed. Pending official approval & issuance.')
+                              : (isAr
+                                  ? 'أنجزت ${progressPct.toStringAsFixed(0)}% - متبقي ${remainingPct.toStringAsFixed(0)}% للتأهل للشهادة'
+                                  : 'Progress: ${progressPct.toStringAsFixed(0)}% (95% required)')),
                       style: TextStyle(
                         fontSize: 12,
-                        color: isEligible
+                        color: hasOfficialCert
                             ? const Color(0xFFC5A059)
-                            : AppColors.textSecondary,
-                        fontWeight: isEligible ? FontWeight.bold : FontWeight.normal,
+                            : (isEligible
+                                ? const Color(0xFF059669)
+                                : AppColors.textSecondary),
+                        fontWeight: (hasOfficialCert || isEligible)
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -127,19 +225,21 @@ class CourseCertificateCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: (progressPct / 100.0).clamp(0.0, 1.0),
               minHeight: 7,
-              backgroundColor: isEligible
+              backgroundColor: hasOfficialCert
                   ? Colors.white12
                   : AppColors.surfaceLevel1,
               valueColor: AlwaysStoppedAnimation<Color>(
-                isEligible ? const Color(0xFFC5A059) : AppColors.primary,
+                hasOfficialCert
+                    ? const Color(0xFFC5A059)
+                    : (isEligible ? const Color(0xFF10B981) : AppColors.primary),
               ),
             ),
           ),
 
           const SizedBox(height: 14),
 
-          // Action Button
-          if (isEligible)
+          // Action Buttons
+          if (hasOfficialCert)
             SizedBox(
               width: double.infinity,
               height: 46,
@@ -152,38 +252,62 @@ class CourseCertificateCard extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {
-                  final serial =
-                      'ALM-2026-${course.id.hashCode.abs().toString().padLeft(4, '0').substring(0, 4)}-${user!.uid.hashCode.abs().toString().padLeft(4, '0').substring(0, 4)}';
-                  final cert = CourseCertificate(
-                    id: 'cert_${user!.uid}_${course.id}',
-                    courseId: course.id,
-                    courseTitle: course.title,
-                    studentId: user!.uid,
-                    studentName: user!.displayName.isNotEmpty
-                        ? user!.displayName
-                        : 'متدرب مركز الأمين',
-                    studentEmail: user!.email,
-                    serialNumber: serial,
-                    issuedAt: DateTime.now(),
-                    completionPercentage: progressPct,
-                  );
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => CourseCertificateScreen(certificate: cert),
+                      builder: (_) => CourseCertificateScreen(
+                        certificate: _officialCertificate!,
+                      ),
                     ),
                   );
                 },
-                icon: const Icon(PhosphorIconsFill.filePdf, size: 20),
+                icon: const Icon(PhosphorIconsFill.certificate, size: 20),
                 label: Text(
                   isAr
-                      ? 'عرض وتحميل الشهادة المعتمدة (PDF)'
-                      : 'View & Download Certificate (PDF)',
+                      ? 'عرض وتوثيق الشهادة الرسمية'
+                      : 'View & Verify Official Certificate',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13.5,
                   ),
                 ),
               ),
+            )
+          else if (isEligible)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF059669),
+                      side: const BorderSide(color: Color(0xFF059669)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _isChecking
+                        ? null
+                        : () => _checkServerCertificate(forceRefresh: true),
+                    icon: _isChecking
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF059669),
+                            ),
+                          )
+                        : const Icon(Icons.sync_rounded, size: 18),
+                    label: Text(
+                      _isChecking
+                          ? (isAr ? 'جاري الفحص...' : 'Checking...')
+                          : (isAr
+                              ? 'التحقق من حالة إصدار الشهادة'
+                              : 'Check Issuance Status'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
             )
           else
             Container(
@@ -203,8 +327,8 @@ class CourseCertificateCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       isAr
-                          ? 'شاهد ما لا يقل عن 95% من فيديوهات المحاضرات لتفعيل واستخراج شهادتك المعتمدة تلقائياً.'
-                          : 'Watch at least 95% of lectures to automatically unlock your certificate.',
+                          ? 'شاهد ما لا يقل عن 95% من فيديوهات المحاضرات لتأهيل حسابك لاستخراج الشهادة المعتمدة من الخادم.'
+                          : 'Watch at least 95% of lectures to become eligible for an official certificate.',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,

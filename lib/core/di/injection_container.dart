@@ -6,6 +6,7 @@ import '../storage/course_local_cache.dart';
 import '../storage/secure_token_storage.dart';
 import '../../datasources/assignments_remote_data_source.dart';
 import '../../datasources/auth_remote_data_source.dart';
+import '../../datasources/certificates_remote_data_source.dart';
 import '../../datasources/courses_remote_data_source.dart';
 import '../../datasources/payment_remote_data_source.dart';
 import '../../datasources/watch_remote_data_source.dart';
@@ -20,6 +21,7 @@ import '../../repositories/impl/student_profile_repository_impl.dart';
 import '../../repositories/impl/student_watch_repository_impl.dart';
 import '../../repositories/student_assignments_repository.dart';
 import '../../repositories/student_auth_repository.dart';
+import '../../repositories/student_certificates_repository.dart';
 import '../../repositories/student_content_repository.dart';
 import '../../repositories/student_courses_repository.dart';
 import '../../repositories/student_learning_repository.dart';
@@ -95,6 +97,13 @@ Future<void> initDependencies() async {
       ),
     );
   }
+  if (!sl.isRegistered<CertificatesRemoteDataSource>()) {
+    sl.registerLazySingleton<CertificatesRemoteDataSource>(
+      () => CertificatesRemoteDataSourceImpl(
+        apiClient: sl<ApiClient>(),
+      ),
+    );
+  }
 
   // 2. Services
   if (!sl.isRegistered<AuthService>()) {
@@ -153,6 +162,13 @@ Future<void> initDependencies() async {
     sl.registerLazySingleton<StudentAssignmentsRepository>(
       () => StudentAssignmentsRepositoryImpl(
         remoteDataSource: sl<AssignmentsRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<StudentCertificatesRepository>()) {
+    sl.registerLazySingleton<StudentCertificatesRepository>(
+      () => StudentCertificatesRepositoryImpl(
+        remoteDataSource: sl<CertificatesRemoteDataSource>(),
       ),
     );
   }

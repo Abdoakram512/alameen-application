@@ -124,9 +124,24 @@ class UserModel extends Equatable {
       };
 
   factory UserModel.fromLaravelJson(Map<String, dynamic> json) {
-    final dynamic idVal = json['id'];
-    final int? numericId = idVal is int ? idVal : int.tryParse(idVal?.toString() ?? '');
-    final String resolvedUid = (numericId != null) ? numericId.toString() : (json['uid']?.toString() ?? '');
+    final dynamic idVal = json['id'] ?? json['user_id'];
+    int? numericId;
+    if (idVal is int) {
+      numericId = idVal;
+    } else if (idVal != null) {
+      numericId = int.tryParse(idVal.toString());
+    }
+    // Only accept uid if it parses to a valid positive integer ID
+    if (numericId == null && json['uid'] != null) {
+      numericId = int.tryParse(json['uid'].toString());
+    }
+
+    if (numericId == null || numericId <= 0) {
+      throw FormatException(
+        'Authenticated Laravel user identity is missing or invalid: id=$idVal, uid=${json['uid']}',
+      );
+    }
+    final String resolvedUid = numericId.toString();
 
     DateTime parseDate(dynamic val) {
       if (val == null) return DateTime.now();

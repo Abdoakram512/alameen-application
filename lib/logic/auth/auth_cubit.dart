@@ -8,6 +8,7 @@ import '../../models/course.dart';
 import '../../models/student_courses_data.dart';
 import '../../models/student_dashboard_data.dart';
 import '../../repositories/student_auth_repository.dart';
+import '../../repositories/student_certificates_repository.dart';
 import '../../repositories/student_profile_repository.dart';
 import '../../services/watch_queue.dart';
 import '../access/access_cubit.dart';
@@ -332,6 +333,9 @@ class AuthCubit extends Cubit<AuthState> {
       if (sl.isRegistered<CourseLocalCache>()) {
         await sl<CourseLocalCache>().clearAllUserCaches();
       }
+      if (sl.isRegistered<StudentCertificatesRepository>()) {
+        sl<StudentCertificatesRepository>().clearCache();
+      }
       await _authRepository.logout().timeout(const Duration(seconds: 4));
     } catch (_) {}
   }
@@ -419,6 +423,9 @@ class AuthCubit extends Cubit<AuthState> {
       }
       if (sl.isRegistered<CourseLocalCache>()) {
         await sl<CourseLocalCache>().clearAllUserCaches();
+      }
+      if (sl.isRegistered<StudentCertificatesRepository>()) {
+        sl<StudentCertificatesRepository>().clearCache();
       }
 
       await _authRepository.logout();

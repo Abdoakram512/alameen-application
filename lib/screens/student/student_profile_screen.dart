@@ -19,6 +19,7 @@ import '../../models/course.dart';
 import '../../widgets/app_dialogs.dart';
 import '../../widgets/language_switch_button.dart';
 import '../onboarding/onboarding_screen.dart';
+import 'certificate/student_certificates_screen.dart';
 import 'profile/widgets/edit_student_profile_sheet.dart';
 import 'profile/widgets/enrolled_courses_section.dart';
 import 'profile/widgets/student_profile_header_card.dart';
@@ -205,6 +206,78 @@ class StudentProfileScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 20),
                         const StudentRequestsStatusSection(),
+                        const SizedBox(height: 20),
+
+                        // ══════════════════════════════════════════════════════
+                        // الشهادات المعتمدة الصادرة رسمياً عبر خادم Laravel
+                        // ══════════════════════════════════════════════════════
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFC5A059), width: 1.2),
+                            boxShadow: AppColors.cardShadow,
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const StudentCertificatesScreen(),
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0B192C),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        PhosphorIconsFill.certificate,
+                                        color: Color(0xFFC5A059),
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'شهاداتي المعتمدة',
+                                            style: AppTextStyles.bodyMedium.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'استعراض وتوثيق وتحميل شهادات إتمام الدورات التدريبية',
+                                            style: AppTextStyles.caption.copyWith(
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.arrow_forward_ios_rounded,
+                                      size: 16,
+                                      color: Color(0xFFC5A059),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 20),
 
                         // ══════════════════════════════════════════════════════

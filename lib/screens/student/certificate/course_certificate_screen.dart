@@ -2,12 +2,15 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:printing/printing.dart';
 
+import '../../../core/di/injection_container.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/course_certificate.dart';
-import '../../../services/certificate_pdf_service.dart';
+import '../../../repositories/student_certificates_repository.dart';
+import 'widgets/certificate_verification_dialog.dart';
 
-/// شاشة عرض وتحميل ومشاركة شهادة إتمام الدورة المعتمدة
+/// شاشة عرض وتحميل ومشاركة شهادة إتمام الدورة المعتمدة رسمياً عبر خادم Laravel
 class CourseCertificateScreen extends StatefulWidget {
   final CourseCertificate certificate;
 
@@ -24,17 +27,40 @@ class CourseCertificateScreen extends StatefulWidget {
 class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
   bool _isExporting = false;
 
+  StudentCertificatesRepository get _repository =>
+      sl.isRegistered<StudentCertificatesRepository>()
+          ? sl<StudentCertificatesRepository>()
+          : StudentCertificatesRepositoryImpl();
+
   Future<void> _downloadPdf() async {
     if (_isExporting) return;
+
+    final fileUrl = widget.certificate.fileUrl;
+    if (fileUrl == null || fileUrl.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'ملف الـ PDF الرسمي للشهادة لم يصدر بعد على خادم المنصة. يرجى مراجعة إدارة المركز.',
+          ),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isExporting = true);
     try {
       HapticFeedback.mediumImpact();
-      await CertificatePdfService.downloadOrPrintCertificate(widget.certificate);
+      final pdfBytes = await _repository.downloadOfficialCertificatePdf(fileUrl);
+      await Printing.layoutPdf(
+        onLayout: (_) => pdfBytes,
+        name: 'شهادة_مركز_الأمين_${widget.certificate.certificateCode}.pdf',
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تعذر تحميل الشهادة: $e'),
+          content: Text('تعذر تحميل ملف الشهادة الرسمي: $e'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -45,10 +71,28 @@ class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
 
   Future<void> _sharePdf() async {
     if (_isExporting) return;
+
+    final fileUrl = widget.certificate.fileUrl;
+    if (fileUrl == null || fileUrl.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'ملف الـ PDF الرسمي للشهادة غير متاح للمشاركة حالياً من الخادم.',
+          ),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isExporting = true);
     try {
       HapticFeedback.lightImpact();
-      await CertificatePdfService.shareCertificatePdf(widget.certificate);
+      final pdfBytes = await _repository.downloadOfficialCertificatePdf(fileUrl);
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'شهادة_مركز_الأمين_${widget.certificate.certificateCode}.pdf',
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -446,10 +490,10 @@ class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
                         ),
                   label: Text(
                     _isExporting
-                        ? 'جاري إنشاء ملف PDF...'
+                        ? 'جاري تنزيل ملف PDF الرسمي...'
                         : (isAr
-                            ? 'تحميل الشهادة بصيغة PDF عالية الجودة'
-                            : 'Download Certificate PDF'),
+                            ? 'تحميل الشهادة الرسمية من الخادم (PDF)'
+                            : 'Download Official Certificate PDF'),
                     style: const TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
@@ -474,9 +518,39 @@ class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
                   onPressed: _isExporting ? null : _sharePdf,
                   icon: const Icon(PhosphorIconsRegular.shareNetwork, size: 20),
                   label: Text(
-                    isAr ? 'مشاركة الشهادة' : 'Share Certificate',
+                    isAr ? 'مشاركة ملف الشهادة' : 'Share Certificate',
                     style: const TextStyle(
                       fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFC5A059),
+                    side: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () => CertificateVerificationDialog.show(
+                    context,
+                    widget.certificate.certificateCode,
+                  ),
+                  icon: const Icon(Icons.verified_user_outlined, size: 20),
+                  label: Text(
+                    isAr
+                        ? 'التحقق الأكاديمي المباشر من الخادم (Verify)'
+                        : 'Verify Authenticity on Laravel',
+                    style: const TextStyle(
+                      fontSize: 13.5,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

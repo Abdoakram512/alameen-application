@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/injection_container.dart';
@@ -8,7 +7,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/app_validators.dart';
 import '../../../core/utils/network_error_mapper.dart';
-import '../../../core/widgets/app_directional_icons.dart';
 import '../../../models/assignment.dart';
 import '../../../models/assignment_submission.dart';
 import '../../../models/user_profile.dart';
@@ -49,16 +47,30 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
   }
 
   Future<void> _pickAttachmentImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 75,
-      maxWidth: 1280,
-      maxHeight: 1600,
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('تنبيه المرفقات المباشرة'),
+          ],
+        ),
+        content: const Text(
+          'ميزة الرفع المباشر لملفات الصور من الجهاز غير مدعومة حالياً في واجهة خادم المنصة (تقتصر الواجهة على التسجيلات الصوتية).\n\n'
+          'يمكنك بكل سهولة إرفاق رابط خارجي لملف ورقة العمل أو الصور (عبر Google Drive أو OneDrive) في حقل (رابط ملف خارجي) أدناه ليتمكن المشرف من مراجعته.',
+          style: TextStyle(height: 1.5, fontSize: 13.5),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('حسناً، سأستخدم الرابط'),
+          ),
+        ],
+      ),
     );
-    if (picked != null && mounted) {
-      setState(() => _pickedImageAttachment = File(picked.path));
-    }
   }
 
   Future<void> _submit() async {
@@ -268,19 +280,14 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                               alignment: Alignment.center,
                             ),
                             onPressed: _isSubmitting ? null : _pickAttachmentImage,
-                            icon: _pickedImageAttachment != null
-                                ? AppDirectionalIcons.checkCircle(
-                                    color: AppColors.success,
-                                    size: 18,
-                                  )
-                                : const Icon(
-                                    Icons.attach_file_rounded,
-                                    size: 18,
-                                  ),
-                            label: Text(
-                              _pickedImageAttachment != null
-                                  ? 'تم إرفاق صورة للتكليف'
-                                  : 'إرفاق صورة ورقة عمل (اختياري)',
+                            icon: const Icon(
+                              Icons.info_outline_rounded,
+                              size: 18,
+                              color: AppColors.textMuted,
+                            ),
+                            label: const Text(
+                              'إرفاق صورة مباشرة (غير متاح حالياً - استخدم الرابط أدناه)',
+                              style: TextStyle(fontSize: 12),
                             ),
                           ),
                         ),
