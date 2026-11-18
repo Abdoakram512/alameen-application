@@ -7,10 +7,7 @@ import 'package:secure_screen_app/models/video_quality.dart';
 import 'package:secure_screen_app/repositories/student_learning_repository.dart';
 import 'package:secure_screen_app/repositories/student_watch_repository.dart';
 import 'package:secure_screen_app/screens/student/video_player/controllers/watch_progress_coordinator.dart';
-import 'package:secure_screen_app/services/firestore_service.dart';
 import 'package:secure_screen_app/services/watch_queue.dart';
-
-class _MockFirestoreService extends Fake implements FirestoreService {}
 
 class MockStudentWatchRepository extends Fake implements StudentWatchRepository {
   final List<Map<String, dynamic>> recordedEvents = [];
@@ -256,7 +253,6 @@ void main() {
 
     test('Fix 5: PlaybackAuthorizationException refuses unprotected fallback', () async {
       final repo = StudentLearningRepositoryImpl(
-        firestoreService: _MockFirestoreService(),
         watchRepository: mockWatchRepo..throwForbiddenOnResolve = true,
       );
 

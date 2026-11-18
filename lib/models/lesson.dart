@@ -213,12 +213,10 @@ class Lesson extends Equatable {
         : ((json['duration_minutes'] is num)
             ? ((json['duration_minutes'] as num).toDouble() * 60).round()
             : 0);
-    final durationMinutes = (json['duration_minutes'] is num)
+    final durMin = (json['duration_minutes'] is num)
         ? (json['duration_minutes'] as num).toInt()
         : 0;
-    final durationStr = durationMinutes > 0
-        ? '$durationMinutes دقيقة'
-        : _formatSeconds(durSec);
+    final durationStr = durMin > 0 ? '$durMin دقيقة' : _formatSeconds(durSec);
 
     final progressMap = json['progress'] is Map
         ? Map<String, dynamic>.from(json['progress'] as Map)

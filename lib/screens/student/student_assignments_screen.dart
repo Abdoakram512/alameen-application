@@ -13,6 +13,8 @@ import '../../models/assignment.dart';
 import '../../models/assignment_submission.dart';
 import '../../models/course.dart';
 import '../../models/user_profile.dart';
+import '../../repositories/impl/student_assignments_repository_impl.dart';
+import '../../repositories/student_assignments_repository.dart';
 import '../../repositories/student_learning_repository.dart';
 import 'assignments_widgets/pending_assignments_tab_view.dart';
 import 'assignments_widgets/student_assignments_kpi_header.dart';
@@ -32,11 +34,17 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
   late final TabController _tabController;
   Stream<List<AssignmentSubmission>>? _submissionsStream;
   String? _lastStudentId;
+  List<Assignment> _serverTasks = const [];
 
   StudentLearningRepository get _repository =>
       sl.isRegistered<StudentLearningRepository>()
           ? sl<StudentLearningRepository>()
           : StudentLearningRepositoryImpl();
+
+  StudentAssignmentsRepository get _assignmentsRepo =>
+      sl.isRegistered<StudentAssignmentsRepository>()
+          ? sl<StudentAssignmentsRepository>()
+          : StudentAssignmentsRepositoryImpl();
 
   @override
   void initState() {
@@ -54,15 +62,25 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
     if (uid != _lastStudentId && uid != null && uid.isNotEmpty) {
       _lastStudentId = uid;
       _submissionsStream = _repository.streamStudentSubmissions(uid);
+      _fetchServerAssignments();
     }
+  }
+
+  Future<void> _fetchServerAssignments() async {
+    try {
+      final data = await _assignmentsRepo.getAssignments();
+      if (mounted && data.tasks.isNotEmpty) {
+        setState(() => _serverTasks = data.tasks);
+      }
+    } catch (_) {}
   }
 
   void _openSubmitSheet(
     BuildContext context,
     Assignment assignment,
     UserModel user,
-  ) {
-    showModalBottomSheet(
+  ) async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -74,6 +92,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
         user: user,
       ),
     );
+    _fetchServerAssignments();
   }
 
   @override
@@ -139,15 +158,20 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
                               gradedSubs.length)
                           .round();
 
-                  // تجمع كافة تكليفات الكورسات المشترك بها الطالب
-                  final allCourseAssignments = <Assignment>[];
+                  // تجمع كافة تكليفات الكورسات المشترك بها الطالب من خادم Laravel والمنهج
+                  final Map<String, Assignment> combinedTasks = {};
+                  for (final t in _serverTasks) {
+                    combinedTasks[t.id] = t;
+                  }
                   for (final c in enrolledCourses) {
                     for (final lvl in c.levels) {
                       for (final lsn in lvl.lessons) {
                         if (lsn.hasAssignment) {
-                          allCourseAssignments.add(
-                            Assignment(
-                              id: lsn.assignmentId ?? 'asg_${lsn.id}',
+                          final asgId = lsn.assignmentId ?? 'asg_${lsn.id}';
+                          combinedTasks.putIfAbsent(
+                            asgId,
+                            () => Assignment(
+                              id: asgId,
                               courseId: c.id,
                               courseTitle: c.title,
                               lessonId: lsn.id,
@@ -160,6 +184,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
                       }
                     }
                   }
+                  final allCourseAssignments = combinedTasks.values.toList();
 
                   final submittedIds =
                       submissions.map((s) => s.assignmentId).toSet();

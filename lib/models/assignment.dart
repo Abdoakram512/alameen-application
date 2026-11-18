@@ -116,6 +116,43 @@ class Assignment extends Equatable {
         'blocksNextLesson': blocksNextLesson,
       };
 
+  factory Assignment.fromLaravelJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime.now();
+      if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+      return DateTime.now();
+    }
+
+    final idVal = json['id']?.toString() ?? '';
+    final courseIdStr = json['course_id']?.toString() ?? '';
+    final videoIdStr = json['video_id']?.toString() ?? '';
+    final titleStr = json['title']?.toString() ??
+        json['title_ar']?.toString() ??
+        json['title_en']?.toString() ??
+        '';
+    final instructionsStr = json['instructions']?.toString() ??
+        json['instructions_ar']?.toString() ??
+        json['instructions_en']?.toString() ??
+        '';
+    final maxScoreVal = (json['max_score'] is num)
+        ? (json['max_score'] as num).toInt()
+        : 100;
+
+    return Assignment(
+      id: idVal,
+      courseId: courseIdStr,
+      courseTitle: json['course_title']?.toString() ?? '',
+      lessonId: videoIdStr,
+      title: titleStr,
+      instructions: instructionsStr,
+      maxScore: maxScoreVal,
+      createdAt: parseDate(json['created_at']),
+      attachmentUrl: json['attachment_url']?.toString() ?? '',
+      pdfAttachmentName: json['pdf_attachment_name']?.toString(),
+      blocksNextLesson: json['blocks_next_lesson'] == true,
+    );
+  }
+
   factory Assignment.fromMap(Map<String, dynamic> map, {String? id}) {
     return Assignment(
       id: id ?? map['id']?.toString() ?? '',

@@ -1,93 +1,180 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'dart:io';
+import '../../core/di/injection_container.dart';
+import '../../datasources/assignments_remote_data_source.dart';
 import '../../models/assignment.dart';
 import '../../models/assignment_submission.dart';
+import '../../models/clinical_task_data.dart';
 import '../student_assignments_repository.dart';
 
 class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
-  final FirebaseFirestore? _explicitFirestore;
+  final AssignmentsRemoteDataSource? _remoteDataSource;
 
-  StudentAssignmentsRepositoryImpl({FirebaseFirestore? firestore})
-      : _explicitFirestore = firestore;
+  final StreamController<List<Assignment>> _assignmentsStreamController =
+      StreamController<List<Assignment>>.broadcast();
+  final StreamController<List<AssignmentSubmission>> _submissionsStreamController =
+      StreamController<List<AssignmentSubmission>>.broadcast();
 
-  bool get isAvailable {
-    try {
-      final _ = db;
-      return true;
-    } catch (_) {
-      return false;
+  List<Assignment> _cachedTasks = const [];
+  List<AssignmentSubmission> _cachedSubmissions = const [];
+
+  StudentAssignmentsRepositoryImpl({
+    AssignmentsRemoteDataSource? remoteDataSource,
+  }) : _remoteDataSource = remoteDataSource;
+
+  AssignmentsRemoteDataSource get _remote {
+    if (_remoteDataSource != null) return _remoteDataSource;
+    if (sl.isRegistered<AssignmentsRemoteDataSource>()) {
+      return sl<AssignmentsRemoteDataSource>();
     }
+    throw StateError('AssignmentsRemoteDataSource is not registered in GetIt.');
   }
 
-  FirebaseFirestore get db => _explicitFirestore ?? FirebaseFirestore.instance;
+  int _parseTaskId(String rawId) {
+    final direct = int.tryParse(rawId.trim());
+    if (direct != null && direct > 0) return direct;
+    final match = RegExp(r'(\d+)').firstMatch(rawId);
+    if (match != null) {
+      final parsed = int.tryParse(match.group(1)!);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return 1;
+  }
 
-  CollectionReference<Map<String, dynamic>> get _assignmentsRef =>
-      db.collection('assignments');
+  @override
+  Future<StudentAssignmentsData> getAssignments() async {
+    final data = await _remote.getAssignments();
+    _cachedTasks = data.tasks;
+    _cachedSubmissions = data.submissions;
+    if (!_assignmentsStreamController.isClosed) {
+      _assignmentsStreamController.add(_cachedTasks);
+    }
+    if (!_submissionsStreamController.isClosed) {
+      _submissionsStreamController.add(_cachedSubmissions);
+    }
+    return data;
+  }
 
-  CollectionReference<Map<String, dynamic>> get _submissionsRef =>
-      db.collection('submissions');
+  @override
+  Future<ClinicalTaskDetails> getAssignmentDetails(int taskId) async {
+    return await _remote.getAssignmentDetails(taskId);
+  }
+
+  @override
+  Future<AssignmentSubmission> submitClinicalTask({
+    required int taskId,
+    File? audioFile,
+    String? audioBase64,
+    int? durationSeconds,
+    String? studentNotes,
+  }) async {
+    final submission = await _remote.submitAssignment(
+      taskId: taskId,
+      audioFile: audioFile,
+      audioBase64: audioBase64,
+      durationSeconds: durationSeconds,
+      studentNotes: studentNotes,
+    );
+
+    // تحديث الذاكرة المؤقتة والبث الحي
+    final updated = List<AssignmentSubmission>.from(_cachedSubmissions);
+    final existingIdx = updated.indexWhere(
+      (s) => s.id == submission.id || s.assignmentId == submission.assignmentId,
+    );
+    if (existingIdx >= 0) {
+      updated[existingIdx] = submission;
+    } else {
+      updated.insert(0, submission);
+    }
+    _cachedSubmissions = updated;
+    if (!_submissionsStreamController.isClosed) {
+      _submissionsStreamController.add(_cachedSubmissions);
+    }
+
+    return submission;
+  }
+
+  @override
+  Future<StudentGradesData> getStudentGrades() async {
+    final grades = await _remote.getStudentGrades();
+    if (grades.submissions.isNotEmpty) {
+      _cachedSubmissions = grades.submissions;
+      if (!_submissionsStreamController.isClosed) {
+        _submissionsStreamController.add(_cachedSubmissions);
+      }
+    }
+    return grades;
+  }
+
+  @override
+  Future<AssignmentSubmission> getSubmissionDetails(int submissionId) async {
+    return await _remote.getSubmissionDetails(submissionId);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // توافق الواجهات مع شاشات التطبيق الحالية (Laravel REST API حصراً - صفر Firebase)
+  // ══════════════════════════════════════════════════════════════════════════
 
   @override
   Stream<List<Assignment>> streamCourseAssignments(String courseId) {
-    if (!isAvailable) return Stream.value(const <Assignment>[]);
-    return _assignmentsRef
-        .where('courseId', isEqualTo: courseId)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return Assignment.fromMap(data, id: doc.id);
-      }).toList();
+    if (_cachedTasks.isEmpty) {
+      getAssignments().catchError((_) => const StudentAssignmentsData());
+    }
+    return _assignmentsStreamController.stream.map((tasks) {
+      if (courseId.trim().isEmpty) return tasks;
+      return tasks.where((t) => t.courseId == courseId).toList();
     });
   }
 
   @override
   Future<Assignment?> getAssignment(String assignmentId) async {
-    if (!isAvailable) return null;
+    final taskId = _parseTaskId(assignmentId);
     try {
-      final doc = await _assignmentsRef.doc(assignmentId).get();
-      if (!doc.exists || doc.data() == null) return null;
-      return Assignment.fromMap(doc.data()!, id: doc.id);
+      final details = await getAssignmentDetails(taskId);
+      return details.task;
     } catch (_) {
+      for (final t in _cachedTasks) {
+        if (t.id == assignmentId || t.id == taskId.toString()) {
+          return t;
+        }
+      }
       return null;
     }
   }
 
   @override
   Stream<List<AssignmentSubmission>> streamStudentSubmissions(String studentId) {
-    if (!isAvailable) return Stream.value(const <AssignmentSubmission>[]);
-    return _submissionsRef
-        .where('studentId', isEqualTo: studentId)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return AssignmentSubmission.fromMap(data, id: doc.id);
-      }).toList();
-    });
+    if (_cachedSubmissions.isEmpty) {
+      getAssignments().catchError((_) => const StudentAssignmentsData());
+    }
+    return _submissionsStreamController.stream;
   }
 
   @override
   Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId) async {
-    if (!isAvailable) return const [];
+    if (_cachedSubmissions.isNotEmpty) {
+      return _cachedSubmissions;
+    }
     try {
-      final snapshot = await _submissionsRef
-          .where('studentId', isEqualTo: studentId)
-          .get(const GetOptions(source: Source.serverAndCache));
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return AssignmentSubmission.fromMap(data, id: doc.id);
-      }).toList();
+      final data = await getAssignments();
+      return data.submissions;
     } catch (_) {
       return const [];
     }
   }
 
   @override
-  Future<void> submitAssignment(AssignmentSubmission submission) async {
-    if (!isAvailable) return;
-    await _submissionsRef.doc(submission.id).set(submission.toMap());
+  Future<AssignmentSubmission> submitAssignment({
+    required AssignmentSubmission submission,
+    File? attachmentFile,
+  }) async {
+    final taskId = _parseTaskId(submission.assignmentId);
+    return await submitClinicalTask(
+      taskId: taskId,
+      audioFile: attachmentFile,
+      studentNotes: submission.solutionText.isNotEmpty
+          ? submission.solutionText
+          : submission.attachmentUrl,
+    );
   }
 }

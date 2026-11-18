@@ -155,9 +155,7 @@ class LessonPlaybackBundle extends Equatable {
         ? (currentProgress['last_position_seconds'] as num).toInt()
         : (currentProgress['position_seconds'] is num
             ? (currentProgress['position_seconds'] as num).toInt()
-            : (videoProgress['last_position_seconds'] is num
-                ? (videoProgress['last_position_seconds'] as num).toInt()
-                : currentVideo.lastPositionSeconds));
+            : currentVideo.lastPositionSeconds);
 
     final isDone = currentProgress['is_completed'] == true ||
         videoProgress['is_completed'] == true ||
@@ -302,3 +300,4 @@ class WatchProgressResult extends Equatable {
         certificateCode,
       ];
 }
+

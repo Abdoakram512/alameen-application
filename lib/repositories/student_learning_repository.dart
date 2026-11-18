@@ -5,9 +5,9 @@ import '../models/assignment.dart';
 import '../models/assignment_submission.dart';
 import '../models/lesson.dart';
 import '../models/lesson_playback_data.dart';
+import '../repositories/impl/student_assignments_repository_impl.dart';
+import '../repositories/student_assignments_repository.dart';
 import '../repositories/student_watch_repository.dart';
-import '../services/firestore_service.dart';
-import '../services/storage_service.dart';
 
 export '../models/lesson_playback_data.dart' show ResolvedLessonPlayback;
 export '../repositories/student_watch_repository.dart'
@@ -52,18 +52,24 @@ abstract class StudentLearningRepository {
 }
 
 class StudentLearningRepositoryImpl implements StudentLearningRepository {
-  final FirestoreService _firestoreService;
-  final StorageService _storageService;
+  final StudentAssignmentsRepository? _assignmentsRepository;
   final StudentWatchRepository? _watchRepository;
-  final Map<String, Stream<List<AssignmentSubmission>>> _submissionStreams = {};
 
   StudentLearningRepositoryImpl({
-    FirestoreService? firestoreService,
-    StorageService? storageService,
+    StudentAssignmentsRepository? assignmentsRepository,
     StudentWatchRepository? watchRepository,
-  })  : _firestoreService = firestoreService ?? FirestoreService(),
-        _storageService = storageService ?? StorageService(),
+    dynamic firestoreService,
+    dynamic storageService,
+  })  : _assignmentsRepository = assignmentsRepository,
         _watchRepository = watchRepository;
+
+  StudentAssignmentsRepository get _assignmentsRepo {
+    if (_assignmentsRepository != null) return _assignmentsRepository;
+    if (sl.isRegistered<StudentAssignmentsRepository>()) {
+      return sl<StudentAssignmentsRepository>();
+    }
+    return StudentAssignmentsRepositoryImpl();
+  }
 
   StudentWatchRepository get _watchRepo {
     if (_watchRepository != null) return _watchRepository;
@@ -74,36 +80,29 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // P6 ASSIGNMENTS (retained cleanly until P6)
+  // P6 ASSIGNMENTS (Laravel REST API ONLY — ZERO FIREBASE)
   // ══════════════════════════════════════════════════════════════════════════
 
   @override
   Stream<List<Assignment>> streamCourseAssignments(String courseId) {
-    return _firestoreService.streamCourseAssignments(courseId);
+    return _assignmentsRepo.streamCourseAssignments(courseId);
   }
 
   @override
   Stream<List<AssignmentSubmission>> streamStudentSubmissions(
     String studentId,
   ) {
-    return _submissionStreams.putIfAbsent(studentId, () {
-      return _firestoreService
-          .streamStudentSubmissions(studentId)
-          .asBroadcastStream(onCancel: (sub) {
-        _submissionStreams.remove(studentId);
-        sub.cancel();
-      });
-    });
+    return _assignmentsRepo.streamStudentSubmissions(studentId);
   }
 
   @override
   Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId) {
-    return _firestoreService.getStudentSubmissions(studentId);
+    return _assignmentsRepo.getStudentSubmissions(studentId);
   }
 
   @override
   Future<Assignment?> getAssignment(String assignmentId) {
-    return _firestoreService.getAssignment(assignmentId);
+    return _assignmentsRepo.getAssignment(assignmentId);
   }
 
   @override
@@ -111,46 +110,10 @@ class StudentLearningRepositoryImpl implements StudentLearningRepository {
     required AssignmentSubmission submission,
     File? attachmentFile,
   }) async {
-    var finalSubmission = submission;
-    if (attachmentFile != null) {
-      final uploadedUrl = await _storageService
-          .uploadAssignmentAttachment(
-            studentId: submission.studentId,
-            assignmentId: submission.assignmentId,
-            file: attachmentFile,
-          )
-          .timeout(
-            const Duration(seconds: 15),
-            onTimeout: () => throw TimeoutException(
-              'استغرق رفع المرفق وقتاً طويلاً. تأكد من سرعة اتصالك بالإنترنت.',
-            ),
-          );
-      finalSubmission = AssignmentSubmission(
-        id: submission.id,
-        assignmentId: submission.assignmentId,
-        assignmentTitle: submission.assignmentTitle,
-        courseId: submission.courseId,
-        studentId: submission.studentId,
-        studentName: submission.studentName,
-        studentEmail: submission.studentEmail,
-        solutionText: submission.solutionText,
-        attachmentUrl: uploadedUrl,
-        status: submission.status,
-        score: submission.score,
-        maxScore: submission.maxScore,
-        adminFeedback: submission.adminFeedback,
-        submittedAt: submission.submittedAt,
-        gradedAt: submission.gradedAt,
-      );
-    }
-    await _firestoreService
-        .submitAssignment(finalSubmission)
-        .timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => throw TimeoutException(
-            'استغرق حفظ بيانات التكليف وقتاً طويلاً. تأكد من اتصالك بالإنترنت.',
-          ),
-        );
+    await _assignmentsRepo.submitAssignment(
+      submission: submission,
+      attachmentFile: attachmentFile,
+    );
   }
 
   // ══════════════════════════════════════════════════════════════════════════
