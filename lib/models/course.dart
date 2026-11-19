@@ -223,8 +223,29 @@ class Course extends Equatable {
       );
     }
 
+    // Reconcile video & level accessibility with server-confirmed accessible_video_ids
+    final reconciledLevels = parsedLevels.map((lvl) {
+      final updatedLessons = lvl.lessons.map((lesson) {
+        final numericId = int.tryParse(lesson.id);
+        final isServerAccessible =
+            numericId != null && parsedAccessible.contains(numericId);
+        return lesson.copyWith(
+          isAccessible: lesson.isAccessible || isServerAccessible,
+        );
+      }).toList();
+
+      final hasAccessibleLesson = updatedLessons.any((l) => l.isAccessible);
+      final isLevelAccessible = lvl.isAccessible ||
+          (hasEnrolled && (lvl.order <= 1 || hasAccessibleLesson));
+
+      return lvl.copyWith(
+        isAccessible: isLevelAccessible,
+        lessons: updatedLessons,
+      );
+    }).toList();
+
     return baseCourse.copyWith(
-      levels: parsedLevels,
+      levels: reconciledLevels,
       videosCount: totalVideos,
       hasEnrolled: hasEnrolled,
       accessibleVideoIds: parsedAccessible,
