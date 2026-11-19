@@ -74,12 +74,22 @@ class StudentHomeScreen extends StatelessWidget {
               }
 
               final allCourses = coursesState.allCourses
-                  .where((c) =>
-                      _isCourseVisibleToStudent(c, currentUser, entitlementState))
+                  .where(
+                    (c) => _isCourseVisibleToStudent(
+                      c,
+                      currentUser,
+                      entitlementState,
+                    ),
+                  )
                   .toList();
               final filteredCourses = coursesState.filteredCourses
-                  .where((c) =>
-                      _isCourseVisibleToStudent(c, currentUser, entitlementState))
+                  .where(
+                    (c) => _isCourseVisibleToStudent(
+                      c,
+                      currentUser,
+                      entitlementState,
+                    ),
+                  )
                   .toList();
               final categories = <String>{
                 'home.all_categories'.tr(),
@@ -90,79 +100,137 @@ class StudentHomeScreen extends StatelessWidget {
               final enrolledCount = currentUser == null
                   ? 0
                   : allCourses
-                      .where((c) => entitlementState.isCourseAuthorized(c.id))
-                      .length;
+                        .where((c) => entitlementState.isCourseAuthorized(c.id))
+                        .length;
 
               return RefreshIndicator(
                 color: AppColors.primary,
-                onRefresh: () async {
-                  context.read<CoursesCubit>().loadCourses();
-                },
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  children: [
-                    ResponsiveCenter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (currentUser != null)
-                            ResumeLearningCard(
-                              user: currentUser,
-                              courses: allCourses,
-                            ),
-                          StudentWelcomeBanner(
-                            totalCourses: allCourses.length,
-                            enrolledCount: enrolledCount,
+                onRefresh: () => context.read<CoursesCubit>().loadCourses(
+                  forceRefresh: true,
+                ),
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: ResponsiveCenter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (currentUser != null)
+                                ResumeLearningCard(
+                                  user: currentUser,
+                                  courses: allCourses,
+                                ),
+                              StudentWelcomeBanner(
+                                totalCourses: allCourses.length,
+                                enrolledCount: enrolledCount,
+                              ),
+                              const SizedBox(height: 18),
+                              CourseSearchFilterBar(
+                                categories: categories,
+                                selectedCategory: coursesState.selectedCategory,
+                                onSearchChanged: context
+                                    .read<CoursesCubit>()
+                                    .search,
+                                onCategorySelected: context
+                                    .read<CoursesCubit>()
+                                    .filterByCategory,
+                              ),
+                              const SizedBox(height: 20),
+                              AppSectionHeader(
+                                title: 'home.available_courses'.tr(),
+                                subtitle: 'home.courses_count'.tr(
+                                  args: ['${filteredCourses.length}'],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
                           ),
-                          const SizedBox(height: 18),
-                          CourseSearchFilterBar(
-                            categories: categories,
-                            selectedCategory: coursesState.selectedCategory,
-                            onSearchChanged:
-                                context.read<CoursesCubit>().search,
-                            onCategorySelected:
-                                context.read<CoursesCubit>().filterByCategory,
-                          ),
-                          const SizedBox(height: 20),
-                          AppSectionHeader(
-                            title: 'home.available_courses'.tr(),
-                            subtitle: 'home.courses_count'.tr(args: [
-                              '${filteredCourses.length}',
-                            ]),
-                          ),
-                          const SizedBox(height: 14),
-                          if (filteredCourses.isEmpty)
-                            AppEmptyState(
-                              title: 'home.no_matching_courses'.tr(),
-                              description: 'home.try_different_search'.tr(),
-                            )
-                          else
-                            ResponsiveCardGrid(
-                              minItemWidth: 320,
-                              maxColumns: 3,
-                              children: [
-                                for (final course in filteredCourses)
-                                  StudentCourseCard(
-                                    course: course,
-                                    isEnrolled: currentUser != null &&
-                                        entitlementState
-                                            .isCourseAuthorized(course.id),
-                                    progress: (course.serverProgressPercent != null)
-                                        ? (course.serverProgressPercent! / 100.0).clamp(0.0, 1.0)
-                                        : (currentUser?.calculateCourseProgress(
-                                              course.allLessonIds,
-                                            ) ??
-                                            0.0),
-                                    onTap: () =>
-                                        context.go('/course/${course.id}'),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(
-                              height: kBottomNavigationBarHeight + 24,
-                            ),
-                        ],
+                        ),
                       ),
+                    ),
+                    if (filteredCourses.isEmpty)
+                      SliverToBoxAdapter(
+                        child: AppEmptyState(
+                          title: 'home.no_matching_courses'.tr(),
+                          description: 'home.try_different_search'.tr(),
+                        ),
+                      )
+                    else
+                      SliverLayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.crossAxisExtent;
+                          final horizontal = context.horizontalPagePadding;
+                          final contentWidth = (width - horizontal * 2).clamp(
+                            0.0,
+                            AppBreakpoints.maxContentWidth - horizontal * 2,
+                          );
+                          final columns = (contentWidth / 320).floor().clamp(
+                            1,
+                            3,
+                          );
+                          return SliverPadding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: (width - contentWidth) / 2,
+                            ),
+                            sliver: SliverList.builder(
+                              itemCount: (filteredCourses.length / columns)
+                                  .ceil(),
+                              itemBuilder: (context, row) => Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    for (var col = 0; col < columns; col++) ...[
+                                      if (col > 0) const SizedBox(width: 16),
+                                      Expanded(
+                                        child:
+                                            row * columns + col >=
+                                                filteredCourses.length
+                                            ? const SizedBox.shrink()
+                                            : Builder(
+                                                builder: (context) {
+                                                  final course =
+                                                      filteredCourses[row *
+                                                              columns +
+                                                          col];
+                                                  return StudentCourseCard(
+                                                    course: course,
+                                                    isEnrolled:
+                                                        currentUser != null &&
+                                                        entitlementState
+                                                            .isCourseAuthorized(
+                                                              course.id,
+                                                            ),
+                                                    progress:
+                                                        (course.serverProgressPercent !=
+                                                            null)
+                                                        ? (course.serverProgressPercent! /
+                                                                  100.0)
+                                                              .clamp(0.0, 1.0)
+                                                        : (currentUser?.calculateCourseProgress(
+                                                                course
+                                                                    .allLessonIds,
+                                                              ) ??
+                                                              0.0),
+                                                    onTap: () => context.push(
+                                                      '/course/${course.id}',
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: kBottomNavigationBarHeight + 24),
                     ),
                   ],
                 ),

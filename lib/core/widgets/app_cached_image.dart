@@ -10,6 +10,7 @@ class AppCachedImage extends StatelessWidget {
   final double? width;
   final double? height;
   final BoxFit fit;
+  final int? cacheWidth;
   final BorderRadius? borderRadius;
 
   const AppCachedImage({
@@ -18,6 +19,7 @@ class AppCachedImage extends StatelessWidget {
     this.width,
     this.height,
     this.fit = BoxFit.cover,
+    this.cacheWidth,
     this.borderRadius,
   });
 
@@ -38,6 +40,7 @@ class AppCachedImage extends StatelessWidget {
           height: height,
           fit: fit,
           gaplessPlayback: true,
+          cacheWidth: cacheWidth,
           errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
         );
       } else {
@@ -51,7 +54,9 @@ class AppCachedImage extends StatelessWidget {
                 height: height,
                 fit: fit,
                 gaplessPlayback: true,
-                errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+                cacheWidth: cacheWidth,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildPlaceholder(),
               );
             }
             if (snapshot.hasError) {
@@ -65,6 +70,7 @@ class AppCachedImage extends StatelessWidget {
       final resolvedUrl = AppConfig.resolveMediaUrl(trimmed);
       image = CachedNetworkImage(
         imageUrl: resolvedUrl,
+        memCacheWidth: cacheWidth,
         width: width,
         height: height,
         fit: fit,
@@ -74,10 +80,7 @@ class AppCachedImage extends StatelessWidget {
     }
 
     if (borderRadius != null) {
-      return ClipRRect(
-        borderRadius: borderRadius!,
-        child: image,
-      );
+      return ClipRRect(borderRadius: borderRadius!, child: image);
     }
 
     return image;
@@ -87,11 +90,7 @@ class AppCachedImage extends StatelessWidget {
     return Shimmer.fromColors(
       baseColor: Colors.grey.shade200,
       highlightColor: Colors.grey.shade100,
-      child: Container(
-        width: width,
-        height: height,
-        color: Colors.white,
-      ),
+      child: Container(width: width, height: height, color: Colors.white),
     );
   }
 
@@ -104,11 +103,7 @@ class AppCachedImage extends StatelessWidget {
         borderRadius: borderRadius,
       ),
       child: const Center(
-        child: Icon(
-          Icons.school_outlined,
-          color: Color(0xFF7B8AB8),
-          size: 28,
-        ),
+        child: Icon(Icons.school_outlined, color: Color(0xFF7B8AB8), size: 28),
       ),
     );
   }

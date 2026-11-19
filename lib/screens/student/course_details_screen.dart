@@ -55,6 +55,8 @@ class CourseDetailsScreen extends StatefulWidget {
 class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
   late final AssignmentsCubit _assignmentsCubit;
   bool _ownsAssignmentsCubit = false;
+  bool _loadingDetails = true;
+  bool _detailsFailed = false;
 
   @override
   void initState() {
@@ -70,34 +72,26 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       );
       _ownsAssignmentsCubit = true;
     }
-    _assignmentsCubit.loadAssignments(reset: false);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _refreshCourseDetailsAndReceipts();
-      }
-    });
+    unawaited(_refreshCourseDetailsAndReceipts());
   }
 
   Future<void> _refreshCourseDetailsAndReceipts() async {
     final authCubit = context.read<AuthCubit>();
     final coursesCubit = context.read<CoursesCubit>();
     final entitlementCubit = context.read<CourseEntitlementCubit>();
-    final receiptsCubit = context.read<ReceiptsCubit>();
-
-    final authState = authCubit.state;
-    if (authState is Authenticated) {
-      unawaited(
-        receiptsCubit.loadReceipts(studentId: authState.user.uid, silent: true),
+    if (!_loadingDetails && mounted) setState(() => _loadingDetails = true);
+    try {
+      final detailed = await coursesCubit.loadCourseDetails(
+        widget.courseId,
+        authCubit: authCubit,
       );
-    }
-
-    final detailed = await coursesCubit.loadCourseDetails(
-      widget.courseId,
-      authCubit: authCubit,
-    );
-    if (mounted && detailed != null && detailed.isDetailedFromAuthServer) {
-      entitlementCubit.applyServerCourseDetails(detailed);
+      if (mounted) _detailsFailed = detailed == null;
+      if (mounted && detailed != null && detailed.isDetailedFromAuthServer) {
+        entitlementCubit.applyServerCourseDetails(detailed);
+      }
+    } finally {
+      if (mounted) setState(() => _loadingDetails = false);
     }
   }
 
@@ -153,10 +147,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (_) => SubmitAssignmentSheet(
-        assignment: assignment,
-        user: user,
-      ),
+      builder: (_) => SubmitAssignmentSheet(assignment: assignment, user: user),
     );
     if (mounted) {
       _assignmentsCubit.loadAssignments(reset: false);
@@ -205,6 +196,8 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
 
     if (lesson.isAssignmentLesson) {
       if (currentUser != null) {
+        await _assignmentsCubit.loadAssignments(reset: false);
+        if (!context.mounted) return;
         final loadedAssignments = _assignmentsCubit.state is AssignmentsLoaded
             ? (_assignmentsCubit.state as AssignmentsLoaded).data.tasks
             : const <Assignment>[];
@@ -290,23 +283,26 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
 
         return BlocBuilder<AuthCubit, AuthState>(
           builder: (context, authState) {
-            final currentUser =
-                authState is Authenticated ? authState.user : null;
+            final currentUser = authState is Authenticated
+                ? authState.user
+                : null;
             final isExpired =
                 currentUser != null && currentUser.isCourseExpired(course.id);
 
             final allIds = course.allLessonIds;
-            final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(
-              course: course,
-              userCompletedLessonIds: {...?currentUser?.completedLessonIds},
-            );
-            final completedInCourse = course.serverCompletedCount ??
+            final completedSet =
+                CourseProgressPolicy.effectiveCompletedLessonIds(
+                  course: course,
+                  userCompletedLessonIds: {...?currentUser?.completedLessonIds},
+                );
+            final completedInCourse =
+                course.serverCompletedCount ??
                 allIds.where(completedSet.contains).length;
             final progress = (course.serverProgressPercent != null)
                 ? (course.serverProgressPercent! / 100.0).clamp(0.0, 1.0)
                 : (allIds.isNotEmpty
-                    ? (completedInCourse / allIds.length).clamp(0.0, 1.0)
-                    : 0.0);
+                      ? (completedInCourse / allIds.length).clamp(0.0, 1.0)
+                      : 0.0);
 
             return BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(
               builder: (context, entitlementState) {
@@ -318,8 +314,8 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
 
                 return BlocBuilder<ReceiptsCubit, ReceiptsState>(
                   builder: (context, receiptsState) {
-                    final latestReceipt =
-                        receiptsState.historyOrNull?.latestForCourse(course.id);
+                    final latestReceipt = receiptsState.historyOrNull
+                        ?.latestForCourse(course.id);
                     final isResubmission =
                         latestReceipt?.status == ReceiptStatus.rejected;
 
@@ -434,30 +430,50 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                                                 isEnrolled: isEnrolled,
                                               ),
                                               const SizedBox(height: 24),
-                                              CourseCurriculumSection(
-                                                levels: course.levels,
-                                                isEnrolled: isEnrolled,
-                                                completedLessonIds:
-                                                    completedSet,
-                                                accessibleVideoIds:
-                                                    course.accessibleVideoIds,
-                                                enforceServerAccessibleList: course
-                                                    .isDetailedFromAuthServer,
-                                                onPlayLesson: (lesson) =>
-                                                    _openLesson(
-                                                  context,
-                                                  course,
-                                                  lesson,
-                                                  currentUser,
+                                              if (_loadingDetails &&
+                                                  course.levels.isEmpty)
+                                                const Padding(
+                                                  padding: EdgeInsets.all(24),
+                                                  child: Center(
+                                                    child:
+                                                        CircularProgressIndicator(),
+                                                  ),
+                                                )
+                                              else if (_detailsFailed &&
+                                                  course.levels.isEmpty)
+                                                TextButton(
+                                                  onPressed:
+                                                      _refreshCourseDetailsAndReceipts,
+                                                  child: const Text(
+                                                    'تعذر تحميل المستويات. اضغط لإعادة المحاولة.',
+                                                  ),
+                                                )
+                                              else
+                                                CourseCurriculumSection(
+                                                  levels: course.levels,
                                                   isEnrolled: isEnrolled,
                                                   completedLessonIds:
                                                       completedSet,
+                                                  accessibleVideoIds:
+                                                      course.accessibleVideoIds,
+                                                  enforceServerAccessibleList:
+                                                      course
+                                                          .isDetailedFromAuthServer,
+                                                  onPlayLesson: (lesson) =>
+                                                      _openLesson(
+                                                        context,
+                                                        course,
+                                                        lesson,
+                                                        currentUser,
+                                                        isEnrolled: isEnrolled,
+                                                        completedLessonIds:
+                                                            completedSet,
+                                                      ),
+                                                  onLockedLessonTap:
+                                                      handleLockedLessonTap,
+                                                  onSequentialLockedLessonTap:
+                                                      handleSequentialLockedTap,
                                                 ),
-                                                onLockedLessonTap:
-                                                    handleLockedLessonTap,
-                                                onSequentialLockedLessonTap:
-                                                    handleSequentialLockedTap,
-                                              ),
                                               CourseAssignmentsSection(
                                                 courseId: course.id,
                                                 studentId: currentUser?.uid,
@@ -543,27 +559,48 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                                                 course.totalLessonsCount,
                                           ),
                                         const SizedBox(height: 22),
-                                        CourseCurriculumSection(
-                                          levels: course.levels,
-                                          isEnrolled: isEnrolled,
-                                          completedLessonIds: completedSet,
-                                          accessibleVideoIds:
-                                              course.accessibleVideoIds,
-                                          enforceServerAccessibleList:
-                                              course.isDetailedFromAuthServer,
-                                          onPlayLesson: (lesson) => _openLesson(
-                                            context,
-                                            course,
-                                            lesson,
-                                            currentUser,
+                                        if (_loadingDetails &&
+                                            course.levels.isEmpty)
+                                          const Padding(
+                                            padding: EdgeInsets.all(24),
+                                            child: Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            ),
+                                          )
+                                        else if (_detailsFailed &&
+                                            course.levels.isEmpty)
+                                          TextButton(
+                                            onPressed:
+                                                _refreshCourseDetailsAndReceipts,
+                                            child: const Text(
+                                              'تعذر تحميل المستويات. اضغط لإعادة المحاولة.',
+                                            ),
+                                          )
+                                        else
+                                          CourseCurriculumSection(
+                                            levels: course.levels,
                                             isEnrolled: isEnrolled,
                                             completedLessonIds: completedSet,
+                                            accessibleVideoIds:
+                                                course.accessibleVideoIds,
+                                            enforceServerAccessibleList:
+                                                course.isDetailedFromAuthServer,
+                                            onPlayLesson: (lesson) =>
+                                                _openLesson(
+                                                  context,
+                                                  course,
+                                                  lesson,
+                                                  currentUser,
+                                                  isEnrolled: isEnrolled,
+                                                  completedLessonIds:
+                                                      completedSet,
+                                                ),
+                                            onLockedLessonTap:
+                                                handleLockedLessonTap,
+                                            onSequentialLockedLessonTap:
+                                                handleSequentialLockedTap,
                                           ),
-                                          onLockedLessonTap:
-                                              handleLockedLessonTap,
-                                          onSequentialLockedLessonTap:
-                                              handleSequentialLockedTap,
-                                        ),
                                         CourseAssignmentsSection(
                                           courseId: course.id,
                                           studentId: currentUser?.uid,

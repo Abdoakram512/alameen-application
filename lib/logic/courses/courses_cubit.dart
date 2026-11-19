@@ -20,14 +20,16 @@ class CoursesCubit extends Cubit<CoursesState> {
   StudentDashboardData? _dashboardData;
   String _currentCategory = 'الكل';
   String _query = '';
+  int _sessionGeneration = 0;
+  final Map<String, Future<Course?>> _detailRequests = {};
 
-  CoursesCubit({
-    StudentCoursesRepository? coursesRepository,
-  })  : _coursesRepository = coursesRepository ??
-            (sl.isRegistered<StudentCoursesRepository>()
-                ? sl<StudentCoursesRepository>()
-                : StudentCoursesRepositoryImpl()),
-        super(CoursesLoading()) {
+  CoursesCubit({StudentCoursesRepository? coursesRepository})
+    : _coursesRepository =
+          coursesRepository ??
+          (sl.isRegistered<StudentCoursesRepository>()
+              ? sl<StudentCoursesRepository>()
+              : StudentCoursesRepositoryImpl()),
+      super(CoursesLoading()) {
     loadCourses();
   }
 
@@ -79,7 +81,11 @@ class CoursesCubit extends Cubit<CoursesState> {
       }
     } catch (e) {
       if (_cachedCourses.isEmpty) {
-        emit(CoursesError('تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.'));
+        emit(
+          CoursesError(
+            'تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.',
+          ),
+        );
       }
     }
   }
@@ -90,6 +96,24 @@ class CoursesCubit extends Cubit<CoursesState> {
     String slugOrId, {
     AuthCubit? authCubit,
   }) async {
+    final existing = _detailRequests[slugOrId];
+    if (existing != null) return existing;
+    final request = _fetchCourseDetails(slugOrId, authCubit: authCubit);
+    _detailRequests[slugOrId] = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_detailRequests[slugOrId], request)) {
+        _detailRequests.remove(slugOrId);
+      }
+    }
+  }
+
+  Future<Course?> _fetchCourseDetails(
+    String slugOrId, {
+    AuthCubit? authCubit,
+  }) async {
+    final generation = _sessionGeneration;
     try {
       // البحث عن السلاج الفعلي إذا كانت المصفوفة تحتوي على معرف رقمي
       String targetSlug = slugOrId;
@@ -101,6 +125,7 @@ class CoursesCubit extends Cubit<CoursesState> {
       }
 
       final detailed = await _coursesRepository.getCourseDetails(targetSlug);
+      if (isClosed || generation != _sessionGeneration) return null;
       _detailedCoursesById[detailed.id] = detailed;
       if (detailed.slug != null && detailed.slug!.isNotEmpty) {
         _detailedCoursesById[detailed.slug!] = detailed;
@@ -108,7 +133,9 @@ class CoursesCubit extends Cubit<CoursesState> {
 
       final updatedList = List<Course>.from(_cachedCourses);
       final idx = updatedList.indexWhere(
-        (c) => c.id == detailed.id || (detailed.slug != null && c.slug == detailed.slug),
+        (c) =>
+            c.id == detailed.id ||
+            (detailed.slug != null && c.slug == detailed.slug),
       );
       if (idx >= 0) {
         updatedList[idx] = detailed;
@@ -120,20 +147,24 @@ class CoursesCubit extends Cubit<CoursesState> {
       authCubit?.markCourseDetailEntitlement(detailed);
       return detailed;
     } catch (_) {
-      return _detailedCoursesById[slugOrId];
+      return null;
     }
   }
 
   /// مزامنة اشتراكات وإحصائيات الطالب المعتمدة من GET /student/courses و GET /student/dashboard.
   Future<void> syncStudentState({AuthCubit? authCubit}) async {
+    final generation = _sessionGeneration;
     try {
       final results = await Future.wait([
-        _coursesRepository.getStudentCourses().catchError((_) => const StudentCoursesData()),
-        _coursesRepository
-            .getStudentDashboard()
-            .catchError((_) => const StudentDashboardData(enrolledCourses: [])),
+        _coursesRepository.getStudentCourses().catchError(
+          (_) => const StudentCoursesData(),
+        ),
+        _coursesRepository.getStudentDashboard().catchError(
+          (_) => const StudentDashboardData(enrolledCourses: []),
+        ),
       ]);
 
+      if (isClosed || generation != _sessionGeneration) return;
       final studentCourses = results[0] as StudentCoursesData;
       final dashboard = results[1] as StudentDashboardData;
 
@@ -154,15 +185,14 @@ class CoursesCubit extends Cubit<CoursesState> {
 
       _updateCourses(updatedList);
 
-      authCubit?.syncStudentEntitlements(
-        studentCourses,
-        dashboard: dashboard,
-      );
+      authCubit?.syncStudentEntitlements(studentCourses, dashboard: dashboard);
     } catch (_) {}
   }
 
   /// مسح حالة الطالب المخصصة عند تسجيل الخروج أو تبديل الحساب لمنع أي بقايا وصول.
   void clearStudentSession() {
+    _sessionGeneration++;
+    _detailRequests.clear();
     _studentCourses = null;
     _dashboardData = null;
     _detailedCoursesById.clear();
@@ -196,7 +226,8 @@ class CoursesCubit extends Cubit<CoursesState> {
           ? cachedDetailed
           : course;
 
-      final resolvedHasEnrolled = activeIds != null && !source.isDetailedFromAuthServer
+      final resolvedHasEnrolled =
+          activeIds != null && !source.isDetailedFromAuthServer
           ? activeIds.contains(source.id)
           : source.hasEnrolled;
 

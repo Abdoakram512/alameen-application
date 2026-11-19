@@ -180,82 +180,92 @@ class CourseLevelCard extends StatelessWidget {
             style: AppTextStyles.caption,
           ),
           children: [
-            const Divider(height: 1),
-            if (level.lessons.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'لا توجد محاضرات مضافة في هذا المستوى بعد.',
-                  style: AppTextStyles.bodyMedium,
-                ),
-              )
-            else
-              for (int idx = 0; idx < level.lessons.length; idx++) ...[
-                () {
-                  final item = level.lessons[idx];
-                  final lockReason = lockedReasons[item.id];
-                  final isAvailable = item.isAvailableNow;
-                  final isLessonCompleted =
-                      item.isCompleted || completedLessonIds.contains(item.id);
-                  final numericId = int.tryParse(item.id);
-                  final blockedByServerList =
-                      enforceServerAccessibleList &&
-                      numericId != null &&
-                      !accessibleVideoIds.contains(numericId);
-                  final canAccessLesson = item.isFreePreview
-                      ? item.isAccessible
-                      : (isEnrolled &&
-                            isLevelUnlocked &&
-                            item.isAccessible &&
-                            !blockedByServerList);
-                  final isUnlocked =
-                      canAccessLesson && lockReason == null && isAvailable;
+            Builder(
+              builder: (context) => Column(
+                children: [
+                  const Divider(height: 1),
+                  if (level.lessons.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'لا توجد محاضرات مضافة في هذا المستوى بعد.',
+                        style: AppTextStyles.bodyMedium,
+                      ),
+                    )
+                  else
+                    for (int idx = 0; idx < level.lessons.length; idx++) ...[
+                      () {
+                        final item = level.lessons[idx];
+                        final lockReason = lockedReasons[item.id];
+                        final isAvailable = item.isAvailableNow;
+                        final isLessonCompleted =
+                            item.isCompleted ||
+                            completedLessonIds.contains(item.id);
+                        final numericId = int.tryParse(item.id);
+                        final blockedByServerList =
+                            enforceServerAccessibleList &&
+                            numericId != null &&
+                            !accessibleVideoIds.contains(numericId);
+                        final canAccessLesson = item.isFreePreview
+                            ? item.isAccessible
+                            : (isEnrolled &&
+                                  isLevelUnlocked &&
+                                  item.isAccessible &&
+                                  !blockedByServerList);
+                        final isUnlocked =
+                            canAccessLesson &&
+                            lockReason == null &&
+                            isAvailable;
 
-                  return CourseLessonTile(
-                    lesson: item,
-                    isUnlocked: isUnlocked,
-                    isCompleted: isLessonCompleted,
-                    assignmentLockReason: lockReason,
-                    onTap: () {
-                      if (!item.isAvailableNow) {
-                        final msg = item.isScheduled
-                            ? 'هذه المحاضرة مجدولة وستتاح تلقائياً للطلاب في موعدها المحدد (${item.scheduledPublishAt!.year}/${item.scheduledPublishAt!.month.toString().padLeft(2, '0')}/${item.scheduledPublishAt!.day.toString().padLeft(2, '0')} - ${item.scheduledPublishAt!.hour.toString().padLeft(2, '0')}:${item.scheduledPublishAt!.minute.toString().padLeft(2, '0')})'
-                            : 'هذه المحاضرة غير متاحة حالياً (قيد الإعداد والمراجعة).';
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(msg),
-                            backgroundColor: const Color(0xFF6B21A8),
-                            duration: const Duration(seconds: 4),
-                          ),
+                        return CourseLessonTile(
+                          lesson: item,
+                          isUnlocked: isUnlocked,
+                          isCompleted: isLessonCompleted,
+                          assignmentLockReason: lockReason,
+                          onTap: () {
+                            if (!item.isAvailableNow) {
+                              final msg = item.isScheduled
+                                  ? 'هذه المحاضرة مجدولة وستتاح تلقائياً للطلاب في موعدها المحدد (${item.scheduledPublishAt!.year}/${item.scheduledPublishAt!.month.toString().padLeft(2, '0')}/${item.scheduledPublishAt!.day.toString().padLeft(2, '0')} - ${item.scheduledPublishAt!.hour.toString().padLeft(2, '0')}:${item.scheduledPublishAt!.minute.toString().padLeft(2, '0')})'
+                                  : 'هذه المحاضرة غير متاحة حالياً (قيد الإعداد والمراجعة).';
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(msg),
+                                  backgroundColor: const Color(0xFF6B21A8),
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                              return;
+                            }
+                            if (lockReason != null) {
+                              if (onAssignmentLockedLessonTap != null) {
+                                onAssignmentLockedLessonTap!(lockReason);
+                              } else {
+                                onLockedLessonTap();
+                              }
+                            } else if (isUnlocked) {
+                              onPlayLesson(item);
+                            } else if (isEnrolled && !isLevelUnlocked) {
+                              const msg =
+                                  '\u0647\u0630\u0627 \u0627\u0644\u0645\u0633\u062a\u0648\u0649 \u0645\u063a\u0644\u0642 \u062d\u0627\u0644\u064a\u0627 \u0628\u0648\u0627\u0633\u0637\u0629 \u0627\u0644\u062e\u0627\u062f\u0645.';
+                              if (onSequentialLockedLessonTap != null) {
+                                onSequentialLockedLessonTap!(msg);
+                              } else {
+                                ScaffoldMessenger.of(
+                                  context,
+                                ).showSnackBar(SnackBar(content: Text(msg)));
+                              }
+                            } else {
+                              onLockedLessonTap();
+                            }
+                          },
                         );
-                        return;
-                      }
-                      if (lockReason != null) {
-                        if (onAssignmentLockedLessonTap != null) {
-                          onAssignmentLockedLessonTap!(lockReason);
-                        } else {
-                          onLockedLessonTap();
-                        }
-                      } else if (isUnlocked) {
-                        onPlayLesson(item);
-                      } else if (isEnrolled && !isLevelUnlocked) {
-                        const msg =
-                            '\u0647\u0630\u0627 \u0627\u0644\u0645\u0633\u062a\u0648\u0649 \u0645\u063a\u0644\u0642 \u062d\u0627\u0644\u064a\u0627 \u0628\u0648\u0627\u0633\u0637\u0629 \u0627\u0644\u062e\u0627\u062f\u0645.';
-                        if (onSequentialLockedLessonTap != null) {
-                          onSequentialLockedLessonTap!(msg);
-                        } else {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text(msg)));
-                        }
-                      } else {
-                        onLockedLessonTap();
-                      }
-                    },
-                  );
-                }(),
-                if (idx < level.lessons.length - 1) const Divider(height: 1),
-              ],
+                      }(),
+                      if (idx < level.lessons.length - 1)
+                        const Divider(height: 1),
+                    ],
+                ],
+              ),
+            ),
           ],
         ),
       ),

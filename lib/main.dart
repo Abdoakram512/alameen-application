@@ -44,13 +44,9 @@ void main() async {
     ),
   );
 
-  await Future.wait<void>([
-    _initFirebase(),
-    initDependencies(),
-  ]);
+  await initDependencies();
 
   unawaited(_enableScreenProtection());
-  unawaited(sl<NotificationService>().initialize());
 
   runApp(
     EasyLocalization(
@@ -64,6 +60,11 @@ void main() async {
   );
 }
 
+Future<void> _initializeNotifications() async {
+  await _initFirebase();
+  await sl<NotificationService>().initialize();
+}
+
 Future<void> _initFirebase() async {
   try {
     await Firebase.initializeApp();
@@ -75,7 +76,9 @@ Future<void> _initFirebase() async {
 Future<void> _enableScreenProtection() async {
   try {
     await ScreenProtector.preventScreenshotOn();
-    await ScreenProtector.protectDataLeakageWithColor(AppConfig.securityShieldColor);
+    await ScreenProtector.protectDataLeakageWithColor(
+      AppConfig.securityShieldColor,
+    );
   } catch (e) {
     debugPrint('ScreenProtector init: $e');
   }
@@ -96,6 +99,7 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
   late final GoRouter _router;
   StreamSubscription<AuthState>? _authSubscription;
   String? _lastSyncedUid;
+  bool _notificationsReady = false;
 
   @override
   void initState() {
@@ -109,6 +113,7 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
     void handleAuthState(AuthState state) {
       if (state is Authenticated) {
         if (_lastSyncedUid != state.user.uid) {
+          if (_lastSyncedUid != null) _coursesCubit.clearStudentSession();
           _lastSyncedUid = state.user.uid;
           unawaited(_receiptsCubit.loadReceipts(studentId: state.user.uid));
           unawaited(
@@ -118,9 +123,13 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
           );
           unawaited(_coursesCubit.syncStudentState(authCubit: _authCubit));
           if (sl.isRegistered<WatchQueue>()) {
-            unawaited(sl<WatchQueue>().flush(state.user.uid).catchError((_) {}));
+            unawaited(
+              sl<WatchQueue>().flush(state.user.uid).catchError((_) {}),
+            );
           }
-          sl<NotificationService>().syncFCMToken(state.user.uid);
+          if (_notificationsReady) {
+            unawaited(sl<NotificationService>().syncFCMToken(state.user.uid));
+          }
         }
       } else if (state is Unauthenticated ||
           state is AuthSuspended ||
@@ -132,6 +141,18 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
       }
     }
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        _initializeNotifications().then((_) {
+          _notificationsReady = true;
+          if (mounted && _authCubit.state is Authenticated) {
+            return sl<NotificationService>().syncFCMToken(
+              (_authCubit.state as Authenticated).user.uid,
+            );
+          }
+        }),
+      );
+    });
     handleAuthState(_authCubit.state);
     _authSubscription = _authCubit.stream.listen(handleAuthState);
   }
@@ -173,7 +194,9 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
               final studentId = authState is Authenticated
                   ? authState.user.uid
                   : null;
-              final apiClient = sl.isRegistered<ApiClient>() ? sl<ApiClient>() : null;
+              final apiClient = sl.isRegistered<ApiClient>()
+                  ? sl<ApiClient>()
+                  : null;
               return SecurityProtectionWatcher(
                 studentId: studentId,
                 apiClient: apiClient,

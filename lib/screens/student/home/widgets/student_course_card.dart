@@ -52,11 +52,13 @@ class StudentCourseCard extends StatelessWidget {
                     children: [
                       AppCachedImage(
                         imageUrl: course.thumbnailUrl,
+                        cacheWidth: 960,
                         fit: BoxFit.cover,
                       ),
                       Positioned(
                         top: 10,
                         right: 10,
+                        width: 120,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -70,6 +72,8 @@ class StudentCourseCard extends StatelessWidget {
                             course.category.isNotEmpty
                                 ? course.category
                                 : 'تخاطب وتأهيل',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -79,7 +83,7 @@ class StudentCourseCard extends StatelessWidget {
                         ),
                       ),
                       Positioned(
-                        top: 10,
+                        bottom: 10,
                         left: 10,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -113,13 +117,19 @@ class StudentCourseCard extends StatelessWidget {
                   children: [
                     Text(
                       course.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.heading3.copyWith(
                         fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        height: 1.5,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      course.description,
+                      course.description.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.bodyMedium,
                     ),
                     const SizedBox(height: 12),
@@ -128,14 +138,18 @@ class StudentCourseCard extends StatelessWidget {
                       runSpacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        _MetaItem(
-                          icon: PhosphorIconsRegular.chalkboardTeacher,
-                          text: course.instructor,
+                        SizedBox(
+                          width: double.infinity,
+                          child: _MetaItem(
+                            icon: PhosphorIconsRegular.chalkboardTeacher,
+                            text: course.instructor,
+                          ),
                         ),
-                        _MetaItem(
-                          icon: PhosphorIconsRegular.stack,
-                          text: '${course.levels.length} مستويات',
-                        ),
+                        if (course.levels.isNotEmpty)
+                          _MetaItem(
+                            icon: PhosphorIconsRegular.stack,
+                            text: '${course.levels.length} مستويات',
+                          ),
                         _MetaItem(
                           icon: PhosphorIconsRegular.playCircle,
                           text: '${course.totalLessonsCount} محاضرة',
@@ -147,10 +161,14 @@ class StudentCourseCard extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'نسبة الإنجاز',
-                            style: AppTextStyles.caption.copyWith(
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              'نسبة الإنجاز',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.caption.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                           Text(
@@ -166,7 +184,7 @@ class StudentCourseCard extends StatelessWidget {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(999),
                         child: LinearProgressIndicator(
-                          value: progress,
+                          value: progress.clamp(0.0, 1.0),
                           minHeight: 6,
                           backgroundColor: AppColors.primaryLight,
                           valueColor: const AlwaysStoppedAnimation<Color>(
@@ -199,15 +217,18 @@ class _MetaItem extends StatelessWidget {
       children: [
         Icon(icon, size: 15, color: AppColors.primary),
         const SizedBox(width: 4),
-        Text(
-          text,
-          style: AppTextStyles.caption.copyWith(
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w600,
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
     );
   }
 }
-

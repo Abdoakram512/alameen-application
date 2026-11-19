@@ -19,6 +19,8 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
       StreamController<List<Course>>.broadcast();
 
   List<Course> _cachedCourses = const [];
+  final Map<String, Future<List<Course>>> _catalogRequests = {};
+  final Map<String, Future<StudentCoursesData>> _enrollmentRequests = {};
 
   StudentCoursesRepositoryImpl({
     CoursesRemoteDataSource? remoteDataSource,
@@ -91,13 +93,8 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     }
 
     // 3. Trigger asynchronous background sync from Laravel REST API
-    getCourses()
-        .then((courses) {
-          if (!_coursesStreamController.isClosed && courses.isNotEmpty) {
-            _coursesStreamController.add(courses);
-          }
-        })
-        .catchError((_) {});
+    // The fetch itself publishes once; do not echo it into the stream again.
+    unawaited(getCourses().then<void>((_) {}).catchError((_) {}));
 
     return _coursesStreamController.stream;
   }
@@ -112,6 +109,21 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     String? search,
     bool forceRefresh = false,
   }) async {
+    final key = search?.trim() ?? '';
+    final pending = _catalogRequests[key];
+    if (pending != null) return pending;
+    final request = _fetchPublicCourses(search: search);
+    _catalogRequests[key] = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_catalogRequests[key], request)) {
+        _catalogRequests.remove(key);
+      }
+    }
+  }
+
+  Future<List<Course>> _fetchPublicCourses({String? search}) async {
     final remote = _remote;
     if (remote != null) {
       try {
@@ -170,7 +182,11 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     final userId = await _resolveCurrentUserId();
     try {
       final course = await remote.getStudentCourseBySlug(slugOrId);
-      await _cache.saveCourseDetails(slugOrId, course, userId: userId);
+      unawaited(
+        _cache
+            .saveCourseDetails(slugOrId, course, userId: userId)
+            .catchError((_) {}),
+      );
       return course;
     } catch (e) {
       throw FailureMapper.fromException(
@@ -189,7 +205,11 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
       try {
         // Primary: student-specific course details (includes has_enrolled, accessible_video_ids, progress)
         final course = await remote.getStudentCourseBySlug(slugOrId);
-        await _cache.saveCourseDetails(slugOrId, course, userId: userId);
+        unawaited(
+          _cache
+              .saveCourseDetails(slugOrId, course, userId: userId)
+              .catchError((_) {}),
+        );
         return course;
       } on UnauthorizedException catch (e) {
         throw FailureMapper.fromException(e);
@@ -201,7 +221,11 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
           final course = _stripAuthorizationForOfflinePreview(
             await remote.getPublicCourseBySlug(slugOrId),
           );
-          await _cache.saveCourseDetails(slugOrId, course, userId: userId);
+          unawaited(
+            _cache
+                .saveCourseDetails(slugOrId, course, userId: userId)
+                .catchError((_) {}),
+          );
           return course;
         } catch (e) {
           // Offline fallback: sanitized curriculum preview ONLY (never grants access)
@@ -255,6 +279,23 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
 
   @override
   Future<StudentCoursesData> getStudentCourses() async {
+    // Share only concurrent requests in this authenticated session, never a TTL
+    // authorization cache. A new token always starts a new request.
+    final key = await _tokens?.getToken() ?? '';
+    final pending = _enrollmentRequests[key];
+    if (pending != null) return pending;
+    final request = _fetchStudentCourses();
+    _enrollmentRequests[key] = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_enrollmentRequests[key], request)) {
+        _enrollmentRequests.remove(key);
+      }
+    }
+  }
+
+  Future<StudentCoursesData> _fetchStudentCourses() async {
     final remote = _remote;
     if (remote == null) {
       throw const NetworkFailure(
