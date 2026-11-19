@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'core/config/app_config.dart';
 import 'core/network/api_client.dart';
@@ -67,10 +66,6 @@ void main() async {
 Future<void> _initFirebase() async {
   try {
     await Firebase.initializeApp();
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
   } catch (e) {
     debugPrint('Firebase init check: $e');
   }

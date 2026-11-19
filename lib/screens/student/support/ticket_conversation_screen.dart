@@ -1,23 +1,30 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/di/injection_container.dart';
-import '../../../core/network/api_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_error_view.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/app_status_badge.dart';
+import '../../../logic/support/ticket_conversation_cubit.dart';
+import '../../../logic/support/ticket_conversation_state.dart';
 import '../../../models/support_ticket.dart';
 import '../../../repositories/student_support_repository.dart';
 
 class TicketConversationScreen extends StatefulWidget {
   final int ticketId;
+  final TicketConversationCubit? cubit;
   final StudentSupportRepository? repository;
 
   const TicketConversationScreen({
     super.key,
     required this.ticketId,
+    this.cubit,
     this.repository,
   });
 
@@ -27,19 +34,13 @@ class TicketConversationScreen extends StatefulWidget {
 
 class _TicketConversationScreenState extends State<TicketConversationScreen>
     with WidgetsBindingObserver {
-  late final StudentSupportRepository _repository;
+  late final TicketConversationCubit _cubit;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _replyController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  bool _ownsCubit = false;
 
-  SupportTicket? _ticket;
-  List<SupportMessage> _messages = [];
-  bool _isLoading = true;
-  String? _errorMessage;
-
-  bool _isSendingReply = false;
   final List<String> _replyAttachmentPaths = [];
-
   Timer? _pollingTimer;
   bool _isPollingActive = false;
 
@@ -47,8 +48,24 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _repository = widget.repository ?? sl<StudentSupportRepository>();
-    _loadTicketDetails();
+
+    if (widget.cubit != null) {
+      _cubit = widget.cubit!;
+    } else if (widget.repository != null) {
+      _cubit = TicketConversationCubit(
+        repository: widget.repository!,
+        ticketId: widget.ticketId,
+      );
+      _ownsCubit = true;
+    } else {
+      _cubit = sl<TicketConversationCubit>(param1: widget.ticketId);
+      _ownsCubit = true;
+    }
+
+    _cubit.loadTicket().then((_) {
+      _scrollToBottom();
+      _startPolling();
+    });
   }
 
   @override
@@ -57,6 +74,9 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
     _stopPolling();
     _scrollController.dispose();
     _replyController.dispose();
+    if (_ownsCubit) {
+      _cubit.close();
+    }
     super.dispose();
   }
 
@@ -73,8 +93,11 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
     if (_isPollingActive) return;
     _isPollingActive = true;
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      _pollUpdates();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 12), (_) async {
+      final hasNew = await _cubit.pollUpdates();
+      if (hasNew) {
+        _scrollToBottom();
+      }
     });
   }
 
@@ -82,89 +105,6 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
     _isPollingActive = false;
     _pollingTimer?.cancel();
     _pollingTimer = null;
-  }
-
-  int get _lastMessageId {
-    if (_messages.isEmpty) return 0;
-    return _messages.map((m) => m.id).reduce((a, b) => a > b ? a : b);
-  }
-
-  Future<void> _loadTicketDetails() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final ticket = await _repository.getTicketDetails(widget.ticketId);
-      if (!mounted) return;
-      setState(() {
-        _ticket = ticket;
-        _messages = List<SupportMessage>.from(ticket.messages);
-        _isLoading = false;
-      });
-      _scrollToBottom();
-      _startPolling();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.message;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'تعذر تحميل بيانات التذكرة: $e';
-      });
-    }
-  }
-
-  Future<void> _pollUpdates() async {
-    if (!mounted || _isLoading || _ticket == null) return;
-
-    try {
-      final pollResult = await _repository.pollTicketUpdates(
-        ticketId: widget.ticketId,
-        afterId: _lastMessageId,
-      );
-
-      if (!mounted) return;
-
-      bool shouldScroll = false;
-      setState(() {
-        if (pollResult.isClosed && _ticket!.isOpen) {
-          _ticket = _ticket!.copyWith(
-            status: pollResult.ticketStatus ?? 'closed',
-            statusLabel: pollResult.ticketStatusLabel ?? 'مغلقة',
-            isClosed: true,
-            isOpen: false,
-          );
-        } else if (pollResult.ticketStatus != null &&
-            pollResult.ticketStatus != _ticket!.status) {
-          _ticket = _ticket!.copyWith(
-            status: pollResult.ticketStatus!,
-            statusLabel: pollResult.ticketStatusLabel ?? _ticket!.statusLabel,
-          );
-        }
-
-        if (pollResult.messages.isNotEmpty) {
-          final existingIds = _messages.map((m) => m.id).toSet();
-          for (final msg in pollResult.messages) {
-            if (!existingIds.contains(msg.id)) {
-              _messages.add(msg);
-              shouldScroll = true;
-            }
-          }
-        }
-      });
-
-      if (shouldScroll) {
-        _scrollToBottom();
-      }
-    } catch (_) {
-      // Ignore polling errors silently to avoid disturbing the user
-    }
   }
 
   void _scrollToBottom() {
@@ -211,35 +151,18 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
     final text = _replyController.text.trim();
     if (text.isEmpty && _replyAttachmentPaths.isEmpty) return;
 
-    setState(() => _isSendingReply = true);
-
     try {
-      final message = await _repository.replyToTicket(
-        ticketId: widget.ticketId,
+      await _cubit.sendReply(
         message: text.isNotEmpty ? text : 'مرفق ملف توضيحي',
-        attachmentPaths: _replyAttachmentPaths.isNotEmpty ? _replyAttachmentPaths : null,
+        attachmentPaths: _replyAttachmentPaths.isNotEmpty ? List.from(_replyAttachmentPaths) : null,
       );
-
-      if (!mounted) return;
+      _replyController.clear();
       setState(() {
-        _messages.add(message);
-        _replyController.clear();
         _replyAttachmentPaths.clear();
-        _isSendingReply = false;
-        // If ticket was closed, replying might reopen or mark as awaiting response
-        if (_ticket != null && _ticket!.isClosed) {
-          _ticket = _ticket!.copyWith(
-            isOpen: true,
-            isClosed: false,
-            status: 'open',
-            statusLabel: 'مفتوحة',
-          );
-        }
       });
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSendingReply = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('تعذر إرسال الرد: $e'),
@@ -250,21 +173,11 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
     }
   }
 
-  Future<void> _toggleTicketStatus() async {
-    if (_ticket == null) return;
-
-    final shouldClose = _ticket!.isOpen;
+  Future<void> _toggleTicketStatus(SupportTicket ticket) async {
+    final shouldClose = ticket.isOpen;
     try {
       if (shouldClose) {
-        await _repository.closeTicket(_ticket!.id);
-        setState(() {
-          _ticket = _ticket!.copyWith(
-            isOpen: false,
-            isClosed: true,
-            status: 'closed',
-            statusLabel: 'مغلقة',
-          );
-        });
+        await _cubit.closeTicket();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -274,15 +187,7 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
           );
         }
       } else {
-        await _repository.reopenTicket(_ticket!.id);
-        setState(() {
-          _ticket = _ticket!.copyWith(
-            isOpen: true,
-            isClosed: false,
-            status: 'open',
-            statusLabel: 'مفتوحة',
-          );
-        });
+        await _cubit.reopenTicket();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -305,139 +210,135 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
 
   @override
   Widget build(BuildContext context) {
-    final ticket = _ticket;
+    return BlocProvider.value(
+      value: _cubit,
+      child: BlocBuilder<TicketConversationCubit, TicketConversationState>(
+        builder: (context, state) {
+          SupportTicket? ticket;
+          if (state is TicketConversationLoaded) {
+            ticket = state.ticket;
+          }
 
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              ticket != null ? ticket.ticketNumber : 'تذكرة الدعم',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          return Scaffold(
+            backgroundColor: AppColors.scaffoldBackground,
+            appBar: AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ticket != null ? ticket.ticketNumber : 'تذكرة الدعم',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  if (ticket != null)
+                    Text(
+                      ticket.subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                    ),
+                ],
+              ),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              actions: [
+                if (ticket != null)
+                  TextButton.icon(
+                    onPressed: () => _toggleTicketStatus(ticket!),
+                    icon: Icon(
+                      ticket.isOpen ? PhosphorIconsRegular.xCircle : PhosphorIconsRegular.arrowClockwise,
+                      size: 18,
+                      color: ticket.isOpen ? AppColors.textMuted : AppColors.primary,
+                    ),
+                    label: Text(
+                      ticket.isOpen ? 'إغلاق' : 'إعادة فتح',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: ticket.isOpen ? AppColors.textMuted : AppColors.primary,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+              ],
             ),
-            if (ticket != null)
-              Text(
-                ticket.subject,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
-              ),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          if (ticket != null)
-            TextButton.icon(
-              onPressed: _toggleTicketStatus,
-              icon: Icon(
-                ticket.isOpen ? PhosphorIconsRegular.xCircle : PhosphorIconsRegular.arrowClockwise,
-                size: 18,
-                color: ticket.isOpen ? AppColors.textMuted : AppColors.primary,
-              ),
-              label: Text(
-                ticket.isOpen ? 'إغلاق' : 'إعادة فتح',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: ticket.isOpen ? AppColors.textMuted : AppColors.primary,
-                ),
-              ),
-            ),
-          const SizedBox(width: 8),
-        ],
+            body: _buildBody(state),
+            bottomNavigationBar: ticket != null ? _buildReplyBar(ticket, state) : null,
+          );
+        },
       ),
-      body: _buildBody(),
-      bottomNavigationBar: _buildReplyBar(),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+  Widget _buildBody(TicketConversationState state) {
+    if (state is TicketConversationLoading || state is TicketConversationInitial) {
+      return const AppLoadingIndicator(message: 'جاري تحميل المحادثة...');
     }
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(PhosphorIconsRegular.warningCircle, size: 48, color: AppColors.error),
-              const SizedBox(height: 12),
-              Text(_errorMessage!, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadTicketDetails,
-                icon: const Icon(PhosphorIconsRegular.arrowsClockwise, size: 18),
-                label: const Text('إعادة المحاولة'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
+    if (state is TicketConversationError) {
+      return AppErrorView(
+        message: state.message,
+        onRetry: () => _cubit.loadTicket(),
       );
     }
 
-    final ticket = _ticket!;
+    if (state is TicketConversationLoaded) {
+      final ticket = state.ticket;
+      final messages = state.messages;
 
-    return Column(
-      children: [
-        // Ticket summary card
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(
-              bottom: BorderSide(color: AppColors.borderHairline),
+      return Column(
+        children: [
+          // Ticket summary card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(color: AppColors.borderHairline),
+              ),
+            ),
+            child: Row(
+              children: [
+                _buildStatusBadge(ticket.status, ticket.statusLabel),
+                const SizedBox(width: 8),
+                if (ticket.categoryLabel.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      ticket.categoryLabel,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                const Spacer(),
+                if (ticket.priorityLabel.isNotEmpty)
+                  _buildPriorityBadge(ticket.priority, ticket.priorityLabel),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              _buildStatusBadge(ticket.status, ticket.statusLabel),
-              const SizedBox(width: 8),
-              if (ticket.categoryLabel.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    ticket.categoryLabel,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              const Spacer(),
-              if (ticket.priorityLabel.isNotEmpty)
-                _buildPriorityBadge(ticket.priority, ticket.priorityLabel),
-            ],
-          ),
-        ),
 
-        // Message stream
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            itemCount: _messages.length,
-            itemBuilder: (context, index) {
-              final message = _messages[index];
-              return _buildMessageBubble(message);
-            },
+          // Message stream
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                final message = messages[index];
+                return _buildMessageBubble(message);
+              },
+            ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildMessageBubble(SupportMessage message) {
@@ -586,9 +487,9 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
     );
   }
 
-  Widget _buildReplyBar() {
-    final ticket = _ticket;
-    final isClosed = ticket != null && ticket.isClosed;
+  Widget _buildReplyBar(SupportTicket ticket, TicketConversationState state) {
+    final isClosed = ticket.isClosed;
+    final isSending = state is TicketConversationLoaded && state.isSendingReply;
 
     if (isClosed) {
       return Container(
@@ -606,7 +507,7 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
               ),
               const SizedBox(width: 12),
               ElevatedButton(
-                onPressed: _toggleTicketStatus,
+                onPressed: () => _toggleTicketStatus(ticket),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -698,8 +599,8 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: _isSendingReply ? null : _sendReply,
-                  icon: _isSendingReply
+                  onPressed: isSending ? null : _sendReply,
+                  icon: isSending
                       ? const SizedBox(
                           width: 20,
                           height: 20,
@@ -717,31 +618,19 @@ class _TicketConversationScreenState extends State<TicketConversationScreen>
   }
 
   Widget _buildStatusBadge(String status, String label) {
-    Color bg = const Color(0xFFE5E7EB);
-    Color fg = const Color(0xFF374151);
-
+    AppStatusType type = AppStatusType.neutral;
     final s = status.toLowerCase();
     if (s == 'open') {
-      bg = const Color(0xFFE0F2FE);
-      fg = const Color(0xFF0369A1);
+      type = AppStatusType.info;
     } else if (s == 'in_progress') {
-      bg = const Color(0xFFFEF3C7);
-      fg = const Color(0xFFB45309);
+      type = AppStatusType.warning;
     } else if (s == 'resolved' || s == 'closed') {
-      bg = const Color(0xFFD1FAE5);
-      fg = const Color(0xFF047857);
+      type = AppStatusType.success;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label.isNotEmpty ? label : status,
-        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w700),
-      ),
+    return AppStatusBadge(
+      label: label.isNotEmpty ? label : status,
+      statusType: type,
     );
   }
 

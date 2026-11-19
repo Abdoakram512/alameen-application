@@ -1,24 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/network/api_exceptions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_password_field.dart';
+import '../../../../logic/auth/auth_cubit.dart';
+import '../../../../logic/auth/auth_state.dart';
 import '../../../../repositories/student_profile_repository.dart';
 
 class ChangePasswordSheet extends StatefulWidget {
   final StudentProfileRepository? repository;
+  final bool isGoogleAccount;
 
   const ChangePasswordSheet({
     super.key,
     this.repository,
+    this.isGoogleAccount = false,
   });
 
   static Future<bool?> show(
     BuildContext context, {
     StudentProfileRepository? repository,
+    bool? isGoogleAccount,
   }) {
+    bool resolvedGoogle = isGoogleAccount ?? false;
+    if (isGoogleAccount == null) {
+      final auth = context.read<AuthCubit>().state;
+      if (auth is Authenticated) {
+        final photo = auth.user.photoUrl.toLowerCase();
+        resolvedGoogle = photo.contains('googleusercontent.com') ||
+            photo.contains('google') ||
+            auth.user.email.endsWith('@gmail.com');
+      }
+    }
+
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -30,7 +49,10 @@ class ChangePasswordSheet extends StatefulWidget {
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
-        child: ChangePasswordSheet(repository: repository),
+        child: ChangePasswordSheet(
+          repository: repository,
+          isGoogleAccount: resolvedGoogle,
+        ),
       ),
     );
   }
@@ -47,17 +69,15 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
-
   bool _isSubmitting = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _repository = widget.repository ?? sl<StudentProfileRepository>();
+    if (!widget.isGoogleAccount) {
+      _repository = widget.repository ?? sl<StudentProfileRepository>();
+    }
   }
 
   @override
@@ -69,6 +89,7 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
   }
 
   Future<void> _submitChangePassword() async {
+    if (widget.isGoogleAccount) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -109,6 +130,10 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isGoogleAccount) {
+      return _buildGoogleAccountNotice();
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       child: Form(
@@ -187,37 +212,10 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
             ],
 
             // كلمة المرور الحالية
-            Text('كلمة المرور الحالية', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            TextFormField(
+            AppPasswordField(
+              label: 'كلمة المرور الحالية',
+              hintText: 'أدخل كلمة المرور الحالية',
               controller: _currentPasswordController,
-              obscureText: _obscureCurrent,
-              decoration: InputDecoration(
-                hintText: 'أدخل كلمة المرور الحالية',
-                hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairline),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairline),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                ),
-                prefixIcon: const Icon(PhosphorIconsRegular.lock, color: AppColors.textMuted),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureCurrent ? PhosphorIconsRegular.eyeSlash : PhosphorIconsRegular.eye,
-                    color: AppColors.textMuted,
-                  ),
-                  onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
-                ),
-              ),
               validator: (val) {
                 if (val == null || val.isEmpty) {
                   return 'يرجى إدخال كلمة المرور الحالية';
@@ -228,37 +226,10 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
             const SizedBox(height: 16),
 
             // كلمة المرور الجديدة
-            Text('كلمة المرور الجديدة', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            TextFormField(
+            AppPasswordField(
+              label: 'كلمة المرور الجديدة',
+              hintText: '8 أحرف على الأقل',
               controller: _newPasswordController,
-              obscureText: _obscureNew,
-              decoration: InputDecoration(
-                hintText: '8 أحرف على الأقل',
-                hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairline),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairline),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                ),
-                prefixIcon: const Icon(PhosphorIconsRegular.key, color: AppColors.textMuted),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureNew ? PhosphorIconsRegular.eyeSlash : PhosphorIconsRegular.eye,
-                    color: AppColors.textMuted,
-                  ),
-                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
-                ),
-              ),
               validator: (val) {
                 if (val == null || val.length < 8) {
                   return 'يجب أن لا تقل كلمة المرور عن 8 أحرف';
@@ -269,37 +240,10 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
             const SizedBox(height: 16),
 
             // تأكيد كلمة المرور الجديدة
-            Text('تأكيد كلمة المرور الجديدة', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            TextFormField(
+            AppPasswordField(
+              label: 'تأكيد كلمة المرور الجديدة',
+              hintText: 'أعد إدخال كلمة المرور الجديدة',
               controller: _confirmPasswordController,
-              obscureText: _obscureConfirm,
-              decoration: InputDecoration(
-                hintText: 'أعد إدخال كلمة المرور الجديدة',
-                hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairline),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairline),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                ),
-                prefixIcon: const Icon(PhosphorIconsRegular.check, color: AppColors.textMuted),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureConfirm ? PhosphorIconsRegular.eyeSlash : PhosphorIconsRegular.eye,
-                    color: AppColors.textMuted,
-                  ),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                ),
-              ),
               validator: (val) {
                 if (val != _newPasswordController.text) {
                   return 'كلمتا المرور غير متطابقتين';
@@ -310,33 +254,69 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
             const SizedBox(height: 24),
 
             // زر الحفظ
-            ElevatedButton(
+            AppButton(
+              text: 'حفظ كلمة المرور الجديدة',
+              isLoading: _isSubmitting,
               onPressed: _isSubmitting ? null : _submitChangePassword,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Text(
-                      'حفظ كلمة المرور الجديدة',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                    ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildGoogleAccountNotice() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 4.5,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0F2FE),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              PhosphorIconsRegular.shieldCheck,
+              size: 36,
+              color: Color(0xFF0369A1),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'حسابك موثق عبر Google',
+            style: AppTextStyles.heading3.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'حسابك مسجل عبر تسجيل دخول Google الموحد ولا يتطلب كلمة مرور محلية في مركز الأمين.\nيمكنك إدارة أمان حسابك وكلمة المرور مباشرة عبر إعدادات حساب Google الخاص بك.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          AppButton(
+            text: 'فهمت ذلك',
+            variant: AppButtonVariant.primary,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
     );
   }

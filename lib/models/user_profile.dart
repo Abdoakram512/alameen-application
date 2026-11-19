@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 class UserModel extends Equatable {
@@ -175,7 +174,15 @@ class UserModel extends Equatable {
   factory UserModel.fromMap(Map<String, dynamic> map, {String? uid}) {
     DateTime? parseNullableDate(dynamic val) {
       if (val == null) return null;
-      if (val is Timestamp) return val.toDate();
+      if (val is DateTime) return val;
+      try {
+        final dynamic d = val;
+        final toDate = d.toDate;
+        if (toDate is Function) {
+          final res = toDate();
+          if (res is DateTime) return res;
+        }
+      } catch (_) {}
       if (val is String) return DateTime.tryParse(val);
       return null;
     }
@@ -212,9 +219,7 @@ class UserModel extends Equatable {
       totalWatchSeconds: map['totalWatchSeconds'] != null
           ? int.tryParse(map['totalWatchSeconds'].toString()) ?? 0
           : 0,
-      createdAt: map['createdAt'] != null
-          ? (map['createdAt'] is Timestamp ? (map['createdAt'] as Timestamp).toDate() : DateTime.tryParse(map['createdAt'].toString())) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseNullableDate(map['createdAt']) ?? DateTime.now(),
       lastActiveAt: parseNullableDate(map['lastActiveAt']),
       isSuspended: (map['isSuspended'] as bool? ?? false) || (map['status'] == 'suspended'),
       suspensionReason: map['suspensionReason'] as String?,

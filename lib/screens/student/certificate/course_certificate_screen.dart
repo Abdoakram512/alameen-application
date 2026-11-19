@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../../core/di/injection_container.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../logic/certificates/certificates_cubit.dart';
 import '../../../models/course_certificate.dart';
 import '../../../repositories/student_certificates_repository.dart';
 import 'widgets/certificate_verification_dialog.dart';
@@ -13,10 +14,14 @@ import 'widgets/certificate_verification_dialog.dart';
 /// شاشة عرض وتحميل ومشاركة شهادة إتمام الدورة المعتمدة رسمياً عبر خادم Laravel
 class CourseCertificateScreen extends StatefulWidget {
   final CourseCertificate certificate;
+  final CertificatesCubit? cubit;
+  final StudentCertificatesRepository? repository;
 
   const CourseCertificateScreen({
     super.key,
     required this.certificate,
+    this.cubit,
+    this.repository,
   });
 
   @override
@@ -26,11 +31,37 @@ class CourseCertificateScreen extends StatefulWidget {
 
 class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
   bool _isExporting = false;
+  late final CertificatesCubit _cubit;
+  bool _ownsCubit = false;
 
-  StudentCertificatesRepository get _repository =>
-      sl.isRegistered<StudentCertificatesRepository>()
-          ? sl<StudentCertificatesRepository>()
-          : StudentCertificatesRepositoryImpl();
+  @override
+  void initState() {
+    super.initState();
+    if (widget.cubit != null) {
+      _cubit = widget.cubit!;
+    } else if (widget.repository != null) {
+      _cubit = CertificatesCubit(repository: widget.repository!);
+      _ownsCubit = true;
+    } else if (sl.isRegistered<CertificatesCubit>()) {
+      _cubit = sl<CertificatesCubit>();
+      _ownsCubit = true;
+    } else {
+      _cubit = CertificatesCubit(
+        repository: sl.isRegistered<StudentCertificatesRepository>()
+            ? sl<StudentCertificatesRepository>()
+            : StudentCertificatesRepositoryImpl(),
+      );
+      _ownsCubit = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsCubit) {
+      _cubit.close();
+    }
+    super.dispose();
+  }
 
   Future<void> _downloadPdf() async {
     if (_isExporting) return;
@@ -51,7 +82,7 @@ class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
     setState(() => _isExporting = true);
     try {
       HapticFeedback.mediumImpact();
-      final pdfBytes = await _repository.downloadOfficialCertificatePdf(fileUrl);
+      final pdfBytes = await _cubit.downloadCertificatePdf(fileUrl);
       await Printing.layoutPdf(
         onLayout: (_) => pdfBytes,
         name: 'شهادة_مركز_الأمين_${widget.certificate.certificateCode}.pdf',
@@ -88,7 +119,7 @@ class _CourseCertificateScreenState extends State<CourseCertificateScreen> {
     setState(() => _isExporting = true);
     try {
       HapticFeedback.lightImpact();
-      final pdfBytes = await _repository.downloadOfficialCertificatePdf(fileUrl);
+      final pdfBytes = await _cubit.downloadCertificatePdf(fileUrl);
       await Printing.sharePdf(
         bytes: pdfBytes,
         filename: 'شهادة_مركز_الأمين_${widget.certificate.certificateCode}.pdf',

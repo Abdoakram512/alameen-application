@@ -8,7 +8,6 @@ import 'package:secure_screen_app/datasources/auth_remote_data_source.dart';
 import 'package:secure_screen_app/datasources/notifications_remote_data_source.dart';
 import 'package:secure_screen_app/datasources/support_tickets_remote_data_source.dart';
 import 'package:secure_screen_app/models/app_notification.dart';
-import 'package:secure_screen_app/models/support_ticket.dart';
 import 'package:secure_screen_app/repositories/impl/student_notifications_repository_impl.dart';
 import 'package:secure_screen_app/repositories/impl/student_profile_repository_impl.dart';
 import 'package:secure_screen_app/repositories/impl/student_support_repository_impl.dart';

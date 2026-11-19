@@ -8,6 +8,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/app_confirmation_dialog.dart';
 import '../../core/widgets/app_directional_icons.dart';
 import '../../logic/access/access_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
@@ -15,7 +16,6 @@ import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
 import '../../logic/courses/courses_state.dart';
 import '../../models/course.dart';
-import '../../widgets/app_dialogs.dart';
 import '../../widgets/language_switch_button.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'certificate/student_certificates_screen.dart';
@@ -32,7 +32,7 @@ class StudentProfileScreen extends StatelessWidget {
   const StudentProfileScreen({super.key, this.onBrowseCourses});
 
   Future<void> _handleSignOut(BuildContext context) async {
-    final confirm = await AppDialogs.showConfirm(
+    final confirm = await AppConfirmationDialog.show(
       context,
       title: 'تسجيل الخروج',
       message: 'هل أنت متأكد من تسجيل الخروج من حسابك في مركز الأمين للتخاطب؟',

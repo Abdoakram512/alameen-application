@@ -13,8 +13,13 @@ import '../../datasources/payment_remote_data_source.dart';
 import '../../datasources/support_tickets_remote_data_source.dart';
 import '../../datasources/watch_remote_data_source.dart';
 import '../../logic/access/access_cubit.dart';
+import '../../logic/assignments/assignments_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
+import '../../logic/certificates/certificates_cubit.dart';
 import '../../logic/courses/courses_cubit.dart';
+import '../../logic/notifications/notifications_cubit.dart';
+import '../../logic/support/support_tickets_cubit.dart';
+import '../../logic/support/ticket_conversation_cubit.dart';
 import '../../repositories/impl/student_assignments_repository_impl.dart';
 import '../../repositories/impl/student_content_repository_impl.dart';
 import '../../repositories/impl/student_courses_repository_impl.dart';
@@ -245,6 +250,47 @@ Future<void> initDependencies() async {
       () => AccessCubit(
         paymentRepository: sl<StudentPaymentRepository>(),
         coursesRepository: sl<StudentCoursesRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<NotificationsCubit>()) {
+    sl.registerFactory<NotificationsCubit>(
+      () => NotificationsCubit(
+        repository: sl<StudentNotificationsRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<SupportTicketsCubit>()) {
+    sl.registerFactory<SupportTicketsCubit>(
+      () => SupportTicketsCubit(
+        repository: sl<StudentSupportRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<TicketConversationCubit>()) {
+    sl.registerFactoryParam<TicketConversationCubit, int, void>(
+      (ticketId, _) => TicketConversationCubit(
+        repository: sl<StudentSupportRepository>(),
+        ticketId: ticketId,
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<CertificatesCubit>()) {
+    sl.registerFactory<CertificatesCubit>(
+      () => CertificatesCubit(
+        repository: sl<StudentCertificatesRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<AssignmentsCubit>()) {
+    sl.registerFactory<AssignmentsCubit>(
+      () => AssignmentsCubit(
+        repository: sl<StudentAssignmentsRepository>(),
       ),
     );
   }
