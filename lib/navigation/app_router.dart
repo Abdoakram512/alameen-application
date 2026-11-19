@@ -23,7 +23,7 @@ import '../screens/splash/splash_screen.dart';
 import '../screens/student/course_details_screen.dart';
 import '../screens/student/notifications/student_notifications_screen.dart';
 import '../screens/student/student_analytics_screen.dart';
-import '../screens/student/student_assignments_screen.dart';
+// import '../screens/student/student_assignments_screen.dart';
 import '../screens/student/student_home_screen.dart';
 import '../screens/student/student_profile_screen.dart';
 import '../screens/student/support/student_support_tickets_screen.dart';
@@ -150,7 +150,7 @@ class _StudentMainNavigationScaffoldState
     final useRail = context.useNavigationRail;
     final pages = [
       const StudentHomeScreen(),
-      const StudentAssignmentsScreen(),
+      // const StudentAssignmentsScreen(), // معطلة مؤقتاً لتعطيل الميزة في السيرفر
       const StudentAnalyticsScreen(),
       StudentProfileScreen(
         onBrowseCourses: () => setState(() => _selectedTabIndex = 0),
@@ -219,11 +219,11 @@ class _StudentMainNavigationScaffoldState
                             selectedIcon: const Icon(PhosphorIconsFill.graduationCap),
                             label: Text('nav.courses'.tr()),
                           ),
-                          NavigationRailDestination(
-                            icon: const Icon(PhosphorIconsRegular.clipboardText),
-                            selectedIcon: const Icon(PhosphorIconsFill.clipboardText),
-                            label: Text('nav.assignments'.tr()),
-                          ),
+                          // NavigationRailDestination(
+                          //   icon: const Icon(PhosphorIconsRegular.clipboardText),
+                          //   selectedIcon: const Icon(PhosphorIconsFill.clipboardText),
+                          //   label: Text('nav.assignments'.tr()),
+                          // ),
                           NavigationRailDestination(
                             icon: const Icon(PhosphorIconsRegular.chartLineUp),
                             selectedIcon: const Icon(PhosphorIconsFill.chartLineUp),
@@ -278,14 +278,14 @@ class _StudentMainNavigationScaffoldState
                         ),
                         label: 'nav.courses'.tr(),
                       ),
-                      NavigationDestination(
-                        icon: const Icon(PhosphorIconsRegular.clipboardText),
-                        selectedIcon: const Icon(
-                          PhosphorIconsFill.clipboardText,
-                          color: AppColors.primary,
-                        ),
-                        label: 'nav.assignments'.tr(),
-                      ),
+                      // NavigationDestination(
+                      //   icon: const Icon(PhosphorIconsRegular.clipboardText),
+                      //   selectedIcon: const Icon(
+                      //     PhosphorIconsFill.clipboardText,
+                      //     color: AppColors.primary,
+                      //   ),
+                      //   label: 'nav.assignments'.tr(),
+                      // ),
                       NavigationDestination(
                         icon: const Icon(PhosphorIconsRegular.chartLineUp),
                         selectedIcon: const Icon(

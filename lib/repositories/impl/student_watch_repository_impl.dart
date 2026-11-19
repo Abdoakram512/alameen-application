@@ -109,6 +109,14 @@ class StudentWatchRepositoryImpl implements StudentWatchRepository {
       }
 
       if (hlsUrl == null || hlsUrl.trim().isEmpty) {
+        if (bundle.currentVideo.muxPlaybackId.isNotEmpty) {
+          hlsUrl = 'https://stream.mux.com/${bundle.currentVideo.muxPlaybackId}.m3u8';
+        } else if (lesson.muxPlaybackId.isNotEmpty) {
+          hlsUrl = 'https://stream.mux.com/${lesson.muxPlaybackId}.m3u8';
+        }
+      }
+
+      if (hlsUrl == null || hlsUrl.trim().isEmpty) {
         final effectiveSource =
             bundle.currentVideo.videoSource ?? lesson.videoSource ?? 'unknown';
         if (!bundle.currentVideo.isAccessible && !bundle.currentVideo.isFreePreview) {

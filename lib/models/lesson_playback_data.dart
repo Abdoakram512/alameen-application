@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:equatable/equatable.dart';
 import 'course.dart';
 import 'course_level.dart';
@@ -27,7 +28,7 @@ class ResolvedLessonPlayback extends Equatable {
     this.bundle,
   });
 
-  /// يتحقق من انتهاء صلاحية الرابط الموقع أو اقترابه من الانتهاء بناءً على معامل expires/exp إن وجد.
+  /// يتحقق من انتهاء صلاحية الرابط الموقع أو اقترابه من الانتهاء بناءً على معامل expires/exp أو توكن JWT إن وجد.
   static bool isSignedUrlExpiredOrExpiring(
     String url, {
     DateTime? now,
@@ -35,9 +36,25 @@ class ResolvedLessonPlayback extends Equatable {
   }) {
     final uri = Uri.tryParse(url.trim());
     if (uri == null) return false;
+    int? epochSeconds;
     final rawExp = uri.queryParameters['expires'] ?? uri.queryParameters['exp'];
-    if (rawExp == null || rawExp.isEmpty) return false;
-    final epochSeconds = int.tryParse(rawExp);
+    if (rawExp != null && rawExp.isNotEmpty) {
+      epochSeconds = int.tryParse(rawExp);
+    } else {
+      final token = uri.queryParameters['token'];
+      if (token != null && token.isNotEmpty) {
+        try {
+          final parts = token.split('.');
+          if (parts.length >= 2) {
+            final normalized = base64Url.normalize(parts[1]);
+            final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)));
+            if (payload is Map && payload['exp'] is num) {
+              epochSeconds = (payload['exp'] as num).toInt();
+            }
+          }
+        } catch (_) {}
+      }
+    }
     if (epochSeconds == null || epochSeconds <= 0) return false;
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(epochSeconds * 1000, isUtc: true);
     final current = (now ?? DateTime.now()).toUtc();
@@ -167,11 +184,20 @@ class LessonPlaybackBundle extends Equatable {
 
     final rawEmbed = playbackMap['embed_url']?.toString().trim();
     final rawHls = playbackMap['hls_url']?.toString().trim();
-    final rawWatermark =
-        (playbackMap['watermark_text'] ?? playbackMap['watermark'])?.toString().trim();
+    final rawPlaybackToken = (playbackMap['playback_token'] ?? data['playback_token'])?.toString().trim();
+    final resolvedHls = resolveMuxHlsUrl(
+      rawHls: rawHls,
+      playbackToken: rawPlaybackToken,
+      fallbackPlaybackId: currentVideo.muxPlaybackId,
+    );
+    final rawWatermark = formatWatermark(playbackMap['watermark_text'] ?? playbackMap['watermark']);
     final expires = (playbackMap['expires_in'] is num)
         ? (playbackMap['expires_in'] as num).toInt()
-        : null;
+        : extractTokenExpiresIn(rawPlaybackToken);
+
+    final isAccessibleLesson = currentVideo.isAccessible ||
+        resolvedHls != null ||
+        (rawPlaybackToken != null && rawPlaybackToken.isNotEmpty);
 
     return LessonPlaybackBundle(
       course: parsedCourse,
@@ -179,6 +205,7 @@ class LessonPlaybackBundle extends Equatable {
         watchedSeconds: watchedSec,
         lastPositionSeconds: lastPosSec,
         isCompleted: isDone,
+        isAccessible: isAccessibleLesson,
       ),
       prevVideo: prevVideo,
       nextVideo: nextVideo,
@@ -191,11 +218,78 @@ class LessonPlaybackBundle extends Equatable {
       lastPositionSeconds: lastPosSec,
       isCompleted: isDone,
       embedUrl: (rawEmbed != null && rawEmbed.isNotEmpty) ? rawEmbed : null,
-      hlsUrl: (rawHls != null && rawHls.isNotEmpty) ? rawHls : null,
-      watermarkText:
-          (rawWatermark != null && rawWatermark.isNotEmpty) ? rawWatermark : null,
+      hlsUrl: resolvedHls,
+      watermarkText: rawWatermark,
       expiresInSeconds: expires,
     );
+  }
+
+  /// حل رابط بث Mux HLS المشفر باستخراج playbackId من claim 'sub' داخل التوكن
+  static String? resolveMuxHlsUrl({
+    String? rawHls,
+    String? playbackToken,
+    String? fallbackPlaybackId,
+  }) {
+    if (rawHls != null && rawHls.trim().isNotEmpty) {
+      return rawHls.trim();
+    }
+    if (playbackToken == null || playbackToken.trim().isEmpty) {
+      return null;
+    }
+    final token = playbackToken.trim();
+    String? playbackId = (fallbackPlaybackId != null && fallbackPlaybackId.trim().isNotEmpty)
+        ? fallbackPlaybackId.trim()
+        : null;
+
+    if (playbackId == null || playbackId.isEmpty) {
+      try {
+        final parts = token.split('.');
+        if (parts.length >= 2) {
+          final normalized = base64Url.normalize(parts[1]);
+          final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)));
+          if (payload is Map && payload['sub'] != null) {
+            playbackId = payload['sub'].toString().trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (playbackId != null && playbackId.isNotEmpty) {
+      return 'https://stream.mux.com/$playbackId.m3u8?token=$token';
+    }
+    return null;
+  }
+
+  static int? extractTokenExpiresIn(String? token) {
+    if (token == null || token.trim().isEmpty) return null;
+    try {
+      final parts = token.trim().split('.');
+      if (parts.length >= 2) {
+        final normalized = base64Url.normalize(parts[1]);
+        final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)));
+        if (payload is Map && payload['exp'] is num) {
+          final expSec = (payload['exp'] as num).toInt();
+          final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final diff = expSec - nowSec;
+          return diff > 0 ? diff : 60;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static String? formatWatermark(dynamic rawWatermark) {
+    if (rawWatermark == null) return null;
+    if (rawWatermark is Map) {
+      final name = rawWatermark['name']?.toString().trim();
+      final phone = rawWatermark['phone']?.toString().trim();
+      final email = rawWatermark['email']?.toString().trim();
+      final identifier = (phone != null && phone.isNotEmpty) ? phone : email;
+      final parts = [name, identifier].where((s) => s != null && s.isNotEmpty);
+      if (parts.isNotEmpty) return parts.join(' - ');
+    }
+    final str = rawWatermark.toString().trim();
+    return str.isNotEmpty ? str : null;
   }
 
   @override
@@ -240,16 +334,21 @@ class PlaybackTokenResponse extends Equatable {
 
     final rawEmbed = data['embed_url']?.toString().trim();
     final rawHls = data['hls_url']?.toString().trim();
-    final rawWatermark = (data['watermark'] ?? data['watermark_text'])?.toString().trim();
+    final rawPlaybackToken = (data['playback_token'] ?? rawJson['playback_token'])?.toString().trim();
+    final resolvedHls = LessonPlaybackBundle.resolveMuxHlsUrl(
+      rawHls: rawHls,
+      playbackToken: rawPlaybackToken,
+    );
+    final rawWatermark = LessonPlaybackBundle.formatWatermark(data['watermark'] ?? data['watermark_text']);
     final expires = (data['expires_in'] is num)
         ? (data['expires_in'] as num).toInt()
-        : 900;
+        : (LessonPlaybackBundle.extractTokenExpiresIn(rawPlaybackToken) ?? 900);
 
     return PlaybackTokenResponse(
       success: rawJson['success'] != false,
       embedUrl: (rawEmbed != null && rawEmbed.isNotEmpty) ? rawEmbed : null,
-      hlsUrl: (rawHls != null && rawHls.isNotEmpty) ? rawHls : null,
-      watermark: (rawWatermark != null && rawWatermark.isNotEmpty) ? rawWatermark : null,
+      hlsUrl: resolvedHls,
+      watermark: rawWatermark,
       expiresIn: expires > 0 ? expires : 900,
     );
   }

@@ -29,7 +29,7 @@ import '../../models/learning_history.dart';
 import '../../models/lesson.dart';
 import '../../models/user_profile.dart';
 import '../../repositories/student_assignments_repository.dart';
-import 'course_details/widgets/course_assignments_section.dart';
+// import 'course_details/widgets/course_assignments_section.dart';
 import 'course_details/widgets/course_certificate_card.dart';
 import 'course_details/widgets/course_curriculum_section.dart';
 import 'course_details/widgets/course_enrollment_status_card.dart';
@@ -150,7 +150,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       builder: (_) => SubmitAssignmentSheet(assignment: assignment, user: user),
     );
     if (mounted) {
-      _assignmentsCubit.loadAssignments(reset: false);
+      // _assignmentsCubit.loadAssignments(reset: false);
     }
   }
 
@@ -474,20 +474,20 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                                                   onSequentialLockedLessonTap:
                                                       handleSequentialLockedTap,
                                                 ),
-                                              CourseAssignmentsSection(
-                                                courseId: course.id,
-                                                studentId: currentUser?.uid,
-                                                isEnrolled: isEnrolled,
-                                                onSubmitTap: (assignment) async {
-                                                  if (currentUser != null) {
-                                                    await _showSubmitAssignmentModal(
-                                                      context,
-                                                      assignment,
-                                                      currentUser,
-                                                    );
-                                                  }
-                                                },
-                                              ),
+                                              // CourseAssignmentsSection(
+                                              //   courseId: course.id,
+                                              //   studentId: currentUser?.uid,
+                                              //   isEnrolled: isEnrolled,
+                                              //   onSubmitTap: (assignment) async {
+                                              //     if (currentUser != null) {
+                                              //       await _showSubmitAssignmentModal(
+                                              //         context,
+                                              //         assignment,
+                                              //         currentUser,
+                                              //       );
+                                              //     }
+                                              //   },
+                                              // ),
                                             ],
                                           ),
                                         ),
@@ -601,20 +601,20 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                                             onSequentialLockedLessonTap:
                                                 handleSequentialLockedTap,
                                           ),
-                                        CourseAssignmentsSection(
-                                          courseId: course.id,
-                                          studentId: currentUser?.uid,
-                                          isEnrolled: isEnrolled,
-                                          onSubmitTap: (assignment) async {
-                                            if (currentUser != null) {
-                                              await _showSubmitAssignmentModal(
-                                                context,
-                                                assignment,
-                                                currentUser,
-                                              );
-                                            }
-                                          },
-                                        ),
+                                        // CourseAssignmentsSection(
+                                        //   courseId: course.id,
+                                        //   studentId: currentUser?.uid,
+                                        //   isEnrolled: isEnrolled,
+                                        //   onSubmitTap: (assignment) async {
+                                        //     if (currentUser != null) {
+                                        //       await _showSubmitAssignmentModal(
+                                        //         context,
+                                        //         assignment,
+                                        //         currentUser,
+                                        //       );
+                                        //     }
+                                        //   },
+                                        // ),
                                       ],
                                     ),
                             ),

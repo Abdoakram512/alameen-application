@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/network/api_exceptions.dart';
 import '../../models/assignment_submission.dart';
+import '../../models/clinical_task_data.dart';
 import '../../repositories/student_assignments_repository.dart';
 import 'assignments_state.dart';
 
@@ -49,6 +50,10 @@ class AssignmentsCubit extends Cubit<AssignmentsState> {
       final data = await _repository.getAssignments();
       if (generation != _requestGeneration || isClosed) return;
       emit(AssignmentsLoaded(data: data));
+    } on ForbiddenException {
+      // ميزة التكليفات معطلة حالياً في إعدادات المنصة على الخادم (tasks: false)
+      if (generation != _requestGeneration || isClosed) return;
+      emit(const AssignmentsLoaded(data: StudentAssignmentsData()));
     } on ApiException catch (e) {
       if (generation != _requestGeneration || isClosed) return;
       emit(AssignmentsError(e.message));

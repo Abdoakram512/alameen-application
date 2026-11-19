@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -92,6 +93,58 @@ void main() {
       verifyNever(() => mockApiClient.post(any()));
     });
 
+    test('resolves Mux HLS stream URL from Mux signed playback_token JWT', () async {
+      // JWT with sub=mux_sub_xyz and future exp
+      const fakeToken =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJtdXhfc3ViX3h5eiIsImF1ZCI6InYiLCJleHAiOjk5OTk5OTk5OTl9.signature';
+
+      when(() => mockApiClient.get('/student/courses/course-1/lessons/lesson-intro'))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'course': {'id': 10, 'slug': 'course-1', 'title': 'دورة 1'},
+              'current_video': {
+                'id': 43,
+                'slug': 'lesson-intro',
+                'title': 'الدرس الأول',
+                'duration_seconds': 600,
+                'video_source': 'mux',
+                'is_free_preview': false,
+                'is_accessible': true,
+              },
+              'playback': {
+                'playback_token': fakeToken,
+                'watermark': {'user_id': 146, 'student_name': 'Abdo'},
+              },
+              'progress': {
+                'watched_seconds': 10,
+                'last_position_seconds': 5,
+                'is_completed': false,
+              },
+            },
+          },
+        ),
+      );
+
+      final resolved = await learningRepository.resolveLessonPlayback(
+        courseId: 'course-1',
+        lesson: baseLesson.copyWith(videoSource: 'mux'),
+      );
+
+      expect(
+        resolved.streamUrl,
+        equals('https://stream.mux.com/mux_sub_xyz.m3u8?token=$fakeToken'),
+      );
+      expect(resolved.watermarkText, contains('Abdo'));
+      expect(resolved.watermarkText, contains('146'));
+      verifyNever(() => mockApiClient.post(any()));
+    });
+
     test('automatically refreshes playback token when initial HLS URL is expired', () async {
       const expiredHls =
           'https://cdn.alameen-center.online/bunny/43/playlist.m3u8?expires=1000';
@@ -156,6 +209,76 @@ void main() {
           '/student/courses/course-1/lessons/lesson-intro/playback-token',
         ),
       ).called(1);
+    });
+
+    test('refreshes Mux playback token when initial token is expired', () async {
+      // initial expired token (exp=1000)
+      const expiredToken =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJtdXhfc3ViXzEyMyIsImF1ZCI6InYiLCJleHAiOjEwMDB9.signature';
+      // renewed token (exp in future)
+      final futureExp =
+          DateTime.now().toUtc().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000;
+      final renewedPayload = base64Url.encode(utf8.encode(jsonEncode({
+        'sub': 'mux_sub_123',
+        'aud': 'v',
+        'exp': futureExp,
+      }))).replaceAll('=', '');
+      final renewedToken =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.$renewedPayload.signature';
+
+      when(() => mockApiClient.get('/student/courses/course-1/lessons/lesson-intro'))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'current_video': {
+                'id': 43,
+                'slug': 'lesson-intro',
+                'duration_seconds': 600,
+                'video_source': 'mux',
+                'is_accessible': true,
+              },
+              'playback': {
+                'playback_token': expiredToken,
+              },
+            },
+          },
+        ),
+      );
+
+      when(
+        () => mockApiClient.post(
+          '/student/courses/course-1/lessons/lesson-intro/playback-token',
+        ),
+      ).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(
+            path: '/student/courses/course-1/lessons/lesson-intro/playback-token',
+          ),
+          statusCode: 200,
+          data: {
+            'data': {
+              'playback_token': renewedToken,
+              'watermark': 'RENEWED-WATERMARK',
+            },
+          },
+        ),
+      );
+
+      final resolved = await learningRepository.resolveLessonPlayback(
+        courseId: 'course-1',
+        lesson: baseLesson.copyWith(videoSource: 'mux'),
+      );
+
+      expect(
+        resolved.streamUrl,
+        equals('https://stream.mux.com/mux_sub_123.m3u8?token=$renewedToken'),
+      );
+      expect(resolved.watermarkText, equals('RENEWED-WATERMARK'));
     });
 
     test('throws PlaybackAuthorizationException on 403 without fallback URL fabrication', () async {
