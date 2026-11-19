@@ -11,7 +11,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:go_router/go_router.dart';
 import 'package:screen_protector/screen_protector.dart';
 
-import 'logic/access/access_cubit.dart';
+import 'features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import 'features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import 'logic/auth/auth_cubit.dart';
 import 'logic/auth/auth_state.dart';
 import 'logic/courses/courses_cubit.dart';
@@ -90,7 +91,8 @@ class SecureStudentApp extends StatefulWidget {
 class _SecureStudentAppState extends State<SecureStudentApp> {
   late final AuthCubit _authCubit;
   late final CoursesCubit _coursesCubit;
-  late final AccessCubit _accessCubit;
+  late final ReceiptsCubit _receiptsCubit;
+  late final CourseEntitlementCubit _courseEntitlementCubit;
   late final GoRouter _router;
   StreamSubscription<AuthState>? _authSubscription;
   String? _lastSyncedUid;
@@ -100,23 +102,32 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
     super.initState();
     _authCubit = sl<AuthCubit>();
     _coursesCubit = sl<CoursesCubit>();
-    _accessCubit = sl<AccessCubit>();
+    _receiptsCubit = sl<ReceiptsCubit>();
+    _courseEntitlementCubit = sl<CourseEntitlementCubit>();
     _router = createStudentRouter(_authCubit);
 
     void handleAuthState(AuthState state) {
       if (state is Authenticated) {
         if (_lastSyncedUid != state.user.uid) {
           _lastSyncedUid = state.user.uid;
-          _accessCubit.listenToStudentRequests(state.user.uid);
+          unawaited(_receiptsCubit.loadReceipts(studentId: state.user.uid));
+          unawaited(
+            _courseEntitlementCubit.syncStudentEnrollments(
+              studentId: state.user.uid,
+            ),
+          );
           unawaited(_coursesCubit.syncStudentState(authCubit: _authCubit));
           if (sl.isRegistered<WatchQueue>()) {
             unawaited(sl<WatchQueue>().flush(state.user.uid).catchError((_) {}));
           }
           sl<NotificationService>().syncFCMToken(state.user.uid);
         }
-      } else if (state is Unauthenticated || state is AuthSuspended || state is AuthPendingApproval) {
+      } else if (state is Unauthenticated ||
+          state is AuthSuspended ||
+          state is AuthPendingApproval) {
         _lastSyncedUid = null;
-        _accessCubit.reset();
+        _receiptsCubit.clear();
+        _courseEntitlementCubit.clear();
         _coursesCubit.clearStudentSession();
       }
     }
@@ -131,7 +142,8 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
     _router.dispose();
     _authCubit.close();
     _coursesCubit.close();
-    _accessCubit.close();
+    _receiptsCubit.close();
+    _courseEntitlementCubit.close();
     super.dispose();
   }
 
@@ -141,7 +153,10 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
       providers: [
         BlocProvider<AuthCubit>.value(value: _authCubit),
         BlocProvider<CoursesCubit>.value(value: _coursesCubit),
-        BlocProvider<AccessCubit>.value(value: _accessCubit),
+        BlocProvider<ReceiptsCubit>.value(value: _receiptsCubit),
+        BlocProvider<CourseEntitlementCubit>.value(
+          value: _courseEntitlementCubit,
+        ),
       ],
       child: MaterialApp.router(
         key: ValueKey(context.locale.languageCode),

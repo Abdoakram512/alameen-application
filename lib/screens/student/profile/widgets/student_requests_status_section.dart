@@ -6,35 +6,21 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_directional_icons.dart';
-import '../../../../logic/access/access_cubit.dart';
-import '../../../../logic/access/access_state.dart';
-import '../../../../models/access_request.dart';
+import '../../../../features/payments/domain/entities/payment_receipt.dart';
+import '../../../../features/payments/domain/entities/receipt_status.dart';
+import '../../../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
+import '../../../../features/payments/presentation/cubits/receipts/receipts_state.dart';
 
-/// قسم متابعة طلبات الاشتراك الخاصة بالمتدرب (يظهر تلقائياً عند وجود طلبات سابقة أو قيد المراجعة).
+/// قسم متابعة سجل الإيصالات المالية الخاصة بالمتدرب (للتدقيق المالي فقط، ولا يمنح أهلية).
 class StudentRequestsStatusSection extends StatelessWidget {
   const StudentRequestsStatusSection({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AccessCubit, AccessState>(
+    return BlocBuilder<ReceiptsCubit, ReceiptsState>(
       builder: (context, state) {
-        final List<CourseAccessRequest> requests;
-        if (state is AccessLoaded && state.allRequests.isNotEmpty) {
-          requests = state.allRequests;
-        } else if (state is AccessLoading && state.allRequests.isNotEmpty) {
-          requests = state.allRequests;
-        } else {
-          Map<String, CourseAccessRequest> map = const {};
-          if (state is AccessLoaded) {
-            map = state.requestsByCourse;
-          } else if (state is AccessLoading) {
-            map = state.requestsByCourse;
-          }
-          if (map.isEmpty) return const SizedBox.shrink();
-          requests = map.values.toList()..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
-        }
-
-        if (requests.isEmpty) return const SizedBox.shrink();
+        final receipts = state.historyOrNull?.receipts ?? const <PaymentReceipt>[];
+        if (receipts.isEmpty) return const SizedBox.shrink();
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 24),
@@ -51,16 +37,16 @@ class StudentRequestsStatusSection extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     context.locale.languageCode == 'ar'
-                        ? 'متابعة طلبات الاشتراك'
-                        : 'Enrollment Requests Status',
+                        ? 'سجل إيصالات السداد'
+                        : 'Payment Receipts History',
                     style: AppTextStyles.heading2,
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              for (var i = 0; i < requests.length; i++) ...[
-                _StudentRequestTile(request: requests[i]),
-                if (i < requests.length - 1) const SizedBox(height: 10),
+              for (var i = 0; i < receipts.length; i++) ...[
+                _ReceiptHistoryTile(receipt: receipts[i]),
+                if (i < receipts.length - 1) const SizedBox(height: 10),
               ],
             ],
           ),
@@ -70,28 +56,28 @@ class StudentRequestsStatusSection extends StatelessWidget {
   }
 }
 
-class _StudentRequestTile extends StatelessWidget {
-  final CourseAccessRequest request;
+class _ReceiptHistoryTile extends StatelessWidget {
+  final PaymentReceipt receipt;
 
-  const _StudentRequestTile({required this.request});
+  const _ReceiptHistoryTile({required this.receipt});
 
   @override
   Widget build(BuildContext context) {
     final isAr = context.locale.languageCode == 'ar';
-    final (label, bgColor, fgColor, icon) = switch (request.status) {
-      AccessStatus.approved => (
-          isAr ? 'تم التفعيل' : 'Active',
+    final (label, bgColor, fgColor, icon) = switch (receipt.status) {
+      ReceiptStatus.approved => (
+          isAr ? 'تم اعتماد الإيصال' : 'Receipt Approved',
           AppColors.successLight,
           AppColors.successDark,
           PhosphorIconsFill.checkCircle,
         ),
-      AccessStatus.rejected => (
+      ReceiptStatus.rejected => (
           isAr ? 'يحتاج مراجعة' : 'Needs Review',
           AppColors.errorLight,
           AppColors.errorDark,
           PhosphorIconsFill.warningCircle,
         ),
-      AccessStatus.pending => (
+      ReceiptStatus.pending => (
           isAr ? 'قيد المراجعة' : 'Pending',
           AppColors.warningLight,
           AppColors.warningDark,
@@ -116,16 +102,16 @@ class _StudentRequestTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      request.courseTitle,
+                      receipt.displayCourseTitle,
                       style: AppTextStyles.heading3.copyWith(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (request.id.isNotEmpty) ...[
+                    if (receipt.id > 0) ...[
                       const SizedBox(height: 2),
                       Text(
-                        'إيصال سداد #${request.id}',
+                        'إيصال سداد #${receipt.id}',
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.textMuted,
                           fontSize: 11,
@@ -146,7 +132,7 @@ class _StudentRequestTile extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    request.status == AccessStatus.approved
+                    receipt.status == ReceiptStatus.approved
                         ? AppDirectionalIcons.checkCircle(
                             size: 13,
                             color: fgColor,
@@ -171,18 +157,18 @@ class _StudentRequestTile extends StatelessWidget {
             runSpacing: 4,
             children: [
               Text(
-                'وسيلة السداد: ${request.paymentMethod}',
+                'وسيلة السداد: ${receipt.displayMethodLabel}',
                 style: AppTextStyles.caption,
               ),
-              if (request.senderNumberOrRef.trim().isNotEmpty)
+              if (receipt.displaySenderReference.trim().isNotEmpty)
                 Text(
-                  'مرجع التحويل: ${request.senderNumberOrRef}',
+                  'مرجع التحويل: ${receipt.displaySenderReference}',
                   style: AppTextStyles.caption.copyWith(
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               Text(
-                request.receiptUrl.trim().isNotEmpty
+                (receipt.receiptImageUrl ?? '').trim().isNotEmpty
                     ? 'مرفق صورة إيصال'
                     : 'بدون صورة إيصال',
                 style: AppTextStyles.caption.copyWith(
@@ -191,7 +177,7 @@ class _StudentRequestTile extends StatelessWidget {
               ),
             ],
           ),
-          if (request.adminNotes.trim().isNotEmpty) ...[
+          if ((receipt.adminNotes ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
@@ -202,7 +188,7 @@ class _StudentRequestTile extends StatelessWidget {
                 border: Border.all(color: AppColors.borderHairline),
               ),
               child: Text(
-                'ملاحظة الإدارة: ${request.adminNotes}',
+                'ملاحظة الإدارة: ${receipt.adminNotes}',
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.textPrimary,
                 ),
@@ -214,4 +200,3 @@ class _StudentRequestTile extends StatelessWidget {
     );
   }
 }
-

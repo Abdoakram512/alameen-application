@@ -1,18 +1,11 @@
-import '../models/payment_receipt_model.dart';
+import '../features/payments/domain/entities/payment_receipt.dart';
+import '../features/payments/domain/entities/receipt_submission_input.dart';
 
-/// Contract for student payments, receipt submissions, and enrollment status.
+/// عقد مستودع الإيصالات المالية وسجل الدفعات.
 abstract class StudentPaymentRepository {
-  /// Submit a manual payment receipt to enroll in a course.
-  Future<PaymentReceiptModel> submitCourseReceipt({
-    required String courseSlug,
-    required String paymentMethod,
-    required String senderName,
-    required String senderAccount,
-    required double amount,
-    required String receiptFilePath,
-    String? transactionReference,
-  });
+  /// إرسال إيصال سداد مالي عبر نموذج مدخلات محقق النوع.
+  Future<PaymentReceipt> submitCourseReceipt(ReceiptSubmissionInput input);
 
-  /// Retrieve all receipts submitted by the current authenticated student.
-  Future<List<PaymentReceiptModel>> getStudentReceipts({int? courseId});
+  /// استرجاع جميع إيصالات السداد المقدمة من الطالب الموثق.
+  Future<List<PaymentReceipt>> getStudentReceipts({int? courseId});
 }

@@ -1,14 +1,20 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:secure_screen_app/logic/access/access_cubit.dart';
-import 'package:secure_screen_app/logic/access/access_state.dart';
+import 'package:secure_screen_app/core/errors/app_failure.dart';
+import 'package:secure_screen_app/features/courses/domain/entities/course_entitlement.dart';
+import 'package:secure_screen_app/features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import 'package:secure_screen_app/features/payments/domain/entities/payment_method.dart';
+import 'package:secure_screen_app/features/payments/domain/entities/receipt_status.dart';
+import 'package:secure_screen_app/features/payments/domain/entities/receipt_submission_input.dart';
+import 'package:secure_screen_app/features/payments/presentation/cubits/receipt_submission/receipt_submission_cubit.dart';
+import 'package:secure_screen_app/features/payments/presentation/cubits/receipt_submission/receipt_submission_state.dart';
+import 'package:secure_screen_app/features/payments/presentation/cubits/receipts/receipts_cubit.dart';
+import 'package:secure_screen_app/features/payments/presentation/cubits/receipts/receipts_state.dart';
 import 'package:secure_screen_app/logic/assignments/assignments_cubit.dart';
 import 'package:secure_screen_app/logic/assignments/assignments_state.dart';
-import 'package:secure_screen_app/models/access_request.dart';
 import 'package:secure_screen_app/models/assignment.dart';
 import 'package:secure_screen_app/models/clinical_task_data.dart';
 import 'package:secure_screen_app/models/course.dart';
@@ -16,12 +22,10 @@ import 'package:secure_screen_app/models/course_level.dart';
 import 'package:secure_screen_app/models/course_progress_policy.dart';
 import 'package:secure_screen_app/models/lesson.dart';
 import 'package:secure_screen_app/models/payment_receipt_model.dart';
-import 'package:secure_screen_app/models/user_profile.dart';
 import 'package:secure_screen_app/repositories/student_assignments_repository.dart';
 import 'package:secure_screen_app/repositories/student_courses_repository.dart';
 import 'package:secure_screen_app/repositories/student_payment_repository.dart';
 
-// Mocks
 class MockStudentPaymentRepository extends Mock implements StudentPaymentRepository {}
 class MockStudentCoursesRepository extends Mock implements StudentCoursesRepository {}
 class MockStudentAssignmentsRepository extends Mock implements StudentAssignmentsRepository {}
@@ -29,19 +33,31 @@ class MockStudentAssignmentsRepository extends Mock implements StudentAssignment
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('ALAMEEN CENTER — FINAL AUTHORITY & ARCHITECTURE SPECIFICATION', () {
+  group('ALAMEEN CENTER — AUTHORITY & CLEAN ARCHITECTURE SPECIFICATION', () {
     late MockStudentPaymentRepository mockPaymentRepo;
     late MockStudentCoursesRepository mockCoursesRepo;
     late MockStudentAssignmentsRepository mockAssignmentsRepo;
     late File dummyReceiptFile;
 
+    setUpAll(() {
+      registerFallbackValue(
+        const ReceiptSubmissionInput(
+          courseSlug: 'slug',
+          courseId: '1',
+          courseTitle: 'Course',
+          paymentMethod: PaymentMethod.vodafoneCash,
+          senderName: 'Student',
+          senderAccount: '01000000000',
+          amount: 100.0,
+          receiptFilePath: 'receipt.png',
+        ),
+      );
+    });
+
     setUp(() async {
       mockPaymentRepo = MockStudentPaymentRepository();
       mockCoursesRepo = MockStudentCoursesRepository();
       mockAssignmentsRepo = MockStudentAssignmentsRepository();
-
-      registerFallbackValue(FormData());
-      registerFallbackValue(Options());
 
       dummyReceiptFile = File('${Directory.systemTemp.path}/test_receipt_sec.png');
       await dummyReceiptFile.writeAsBytes([0x89, 0x50, 0x4E, 0x47]);
@@ -57,12 +73,12 @@ void main() {
     // SCENARIO 1: Approved receipt with revoked enrollment
     // ------------------------------------------------------------------------
     test('1. Approved receipt does NOT override server-revoked course enrollment', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
+      final receiptsCubit = ReceiptsCubit(repository: mockPaymentRepo);
+      final entitlementCubit = CourseEntitlementCubit(
         coursesRepository: mockCoursesRepo,
       );
 
-      final course = const Course(
+      const course = Course(
         id: '201',
         title: 'دبلوم التخاطب المتقدم',
         description: 'وصف الدورة',
@@ -77,78 +93,72 @@ void main() {
         id: 501,
         userId: 10,
         courseId: 201,
-        paymentMethod: 'vodafone_cash',
+        paymentMethod: PaymentMethod.vodafoneCash,
         paymentMethodLabel: 'Vodafone Cash',
         senderIdentifier: '01011112222',
         amountPaid: 1500.0,
-        status: AccessStatus.approved,
+        status: ReceiptStatus.approved,
         createdAt: DateTime.now().subtract(const Duration(days: 30)),
       );
 
-      // Server indicates user is NOT enrolled (access revoked or denied)
-      when(() => mockCoursesRepo.getCourseDetails('201'))
-          .thenAnswer((_) async => course.copyWith(hasEnrolled: false));
-
       when(() => mockPaymentRepo.getStudentReceipts())
           .thenAnswer((_) async => [approvedReceipt]);
+      when(() => mockCoursesRepo.verifyStudentCourseDetails('201')).thenAnswer(
+        (_) async => course.copyWith(
+          hasEnrolled: false,
+          isDetailedFromAuthServer: true,
+        ),
+      );
 
-      final status = await cubit.verifyCourseEntitlement(uid: 'student_10', course: course);
+      await receiptsCubit.loadReceipts(studentId: 'student_10');
+      expect(receiptsCubit.state, isA<ReceiptsLoaded>());
 
-      // Must fail closed: AccessError emitted, course entitlement is notEnrolled
-      expect(status, equals(CourseEntitlementStatus.notEnrolled));
-      expect(cubit.state, isA<AccessError>());
-      final errorState = cubit.state as AccessError;
-      expect(errorState.isCourseAuthorized('201'), isFalse);
-      expect(errorState.entitlementStatus, equals(CourseEntitlementStatus.notEnrolled));
+      final entitlement = await entitlementCubit.verifyCourseEntitlement(
+        courseId: course.id,
+        courseSlug: '201',
+        studentId: 'student_10',
+      );
 
-      await cubit.close();
+      expect(entitlement.status, equals(CourseAccessState.notEnrolled));
+      expect(entitlementCubit.state.isCourseAuthorized('201'), isFalse);
+
+      await receiptsCubit.close();
+      await entitlementCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 2: Pending receipt with inaccessible course
+    // SCENARIO 2: Pending receipt never grants course entitlement
     // ------------------------------------------------------------------------
     test('2. Pending receipt does NOT unlock course lessons or grant entitlement', () {
       final pendingReceipt = PaymentReceiptModel(
         id: 701,
         userId: 10,
         courseId: 301,
-        paymentMethod: 'instapay',
+        paymentMethod: PaymentMethod.instapay,
         paymentMethodLabel: 'InstaPay',
         senderIdentifier: 'student@instapay',
         amountPaid: 1200.0,
-        status: AccessStatus.pending,
+        status: ReceiptStatus.pending,
         createdAt: DateTime.now(),
       );
 
-      expect(pendingReceipt.status, equals(AccessStatus.pending));
-
-      // Course with pending receipt has hasEnrolled == false
-      final course = const Course(
-        id: '301',
-        title: 'دورة التشخيص السريري',
-        description: 'وصف',
-        instructor: 'د. الأمين',
-        category: 'تشخيص',
-        thumbnailUrl: '',
-        levels: [],
-        price: 1200.0,
-        hasEnrolled: false,
+      expect(pendingReceipt.status, equals(ReceiptStatus.pending));
+      final entitlementCubit = CourseEntitlementCubit(
+        coursesRepository: mockCoursesRepo,
       );
-
-      // Paid course requires authoritative hasEnrolled == true
-      expect(course.hasEnrolled, isFalse);
+      expect(entitlementCubit.state.isCourseAuthorized('301'), isFalse);
+      entitlementCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 3: Missing or stale entitlement fails closed
+    // SCENARIO 3: Non-authoritative public response fails closed (never grants access)
     // ------------------------------------------------------------------------
-    test('3. Missing or null courses repository fails closed (never grants access)', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
-        coursesRepository: null, // Null repository
+    test('3. Non-authoritative server response fails closed (never grants access)', () async {
+      final entitlementCubit = CourseEntitlementCubit(
+        coursesRepository: mockCoursesRepo,
       );
 
-      final course = const Course(
+      const course = Course(
         id: '202',
         title: 'دورة التأهيل الحركي',
         description: 'وصف',
@@ -157,88 +167,77 @@ void main() {
         thumbnailUrl: '',
         levels: [],
         price: 0.0,
+        hasEnrolled: true,
+        isDetailedFromAuthServer: false,
       );
 
-      final status = await cubit.verifyCourseEntitlement(uid: 'student_10', course: course);
+      when(() => mockCoursesRepo.verifyStudentCourseDetails('202'))
+          .thenAnswer((_) async => course);
 
-      expect(status, equals(CourseEntitlementStatus.unknown));
-      expect(cubit.state, isA<AccessError>());
-      expect((cubit.state as AccessError).isCourseAuthorized('202'), isFalse);
+      final result = await entitlementCubit.verifyCourseEntitlement(
+        courseId: course.id,
+        courseSlug: '202',
+        studentId: 'student_10',
+      );
 
-      await cubit.close();
+      expect(result.status, equals(CourseAccessState.unknown));
+      expect(entitlementCubit.state.isCourseAuthorized('202'), isFalse);
+
+      await entitlementCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 4: Network error versus confirmed denial
+    // SCENARIO 4: Network error versus confirmed 403 Forbidden (without guessing revocation)
     // ------------------------------------------------------------------------
-    test('4. Network error is distinguished from confirmed denial without false subscription rejection', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
+    test('4. Network error is distinguished from generic HTTP 403 without fabricating revocation reason', () async {
+      final entitlementCubit = CourseEntitlementCubit(
         coursesRepository: mockCoursesRepo,
       );
 
-      final course = const Course(
-        id: '203',
-        title: 'دورة أمراض الكلام',
-        description: 'وصف',
-        instructor: 'د. الأمين',
-        category: 'تخاطب',
-        thumbnailUrl: '',
-        levels: [],
-        price: 0.0,
+      when(() => mockCoursesRepo.verifyStudentCourseDetails('203')).thenThrow(
+        const NetworkFailure('تعذر التحقق من حالة الاشتراك نظراً لعدم توفر اتصال بالشبكة.'),
       );
 
-      // 4A: Network timeout / connection error
-      when(() => mockCoursesRepo.getCourseDetails('203')).thenThrow(
-        DioException(
-          requestOptions: RequestOptions(path: '/student/courses/203'),
-          type: DioExceptionType.connectionTimeout,
-        ),
+      final netResult = await entitlementCubit.verifyCourseEntitlement(
+        courseId: '203',
+        courseSlug: '203',
+        studentId: 'student_1',
+      );
+      expect(netResult.status, equals(CourseAccessState.networkUnavailable));
+      expect(netResult.canAccessProtectedContent, isFalse);
+
+      when(() => mockCoursesRepo.verifyStudentCourseDetails('203')).thenThrow(
+        const ForbiddenFailure('تم رفض الوصول من الخادم.'),
       );
 
-      final netStatus = await cubit.verifyCourseEntitlement(uid: 'student_1', course: course);
-      expect(netStatus, equals(CourseEntitlementStatus.networkError));
-      expect(cubit.state, isA<AccessError>());
-      expect((cubit.state as AccessError).message, contains('عدم توفر اتصال بالشبكة'));
-
-      // 4B: Explicit 403 Forbidden (access revoked)
-      when(() => mockCoursesRepo.getCourseDetails('203')).thenThrow(
-        DioException(
-          requestOptions: RequestOptions(path: '/student/courses/203'),
-          response: Response(
-            requestOptions: RequestOptions(path: '/student/courses/203'),
-            statusCode: 403,
-          ),
-          type: DioExceptionType.badResponse,
-        ),
+      final forbiddenResult = await entitlementCubit.verifyCourseEntitlement(
+        courseId: '203',
+        courseSlug: '203',
+        studentId: 'student_1',
       );
+      expect(forbiddenResult.status, equals(CourseAccessState.forbidden));
+      expect(forbiddenResult.forbiddenReasonCode, isNull);
+      expect(forbiddenResult.canAccessProtectedContent, isFalse);
 
-      final revokedStatus = await cubit.verifyCourseEntitlement(uid: 'student_1', course: course);
-      expect(revokedStatus, equals(CourseEntitlementStatus.revoked));
-      expect(cubit.state, isA<AccessError>());
-      expect((cubit.state as AccessError).message, contains('سحب أو إلغاء صلاحية الوصول'));
-
-      await cubit.close();
+      await entitlementCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 5: Repeated receipt uploads and coherent status history
+    // SCENARIO 5: Repeated receipt uploads maintain chronological history
     // ------------------------------------------------------------------------
-    test('5. Repeated receipt uploads maintain coherent chronological audit history', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
-        coursesRepository: mockCoursesRepo,
-      );
+    test('5. Repeated receipt submissions emit success cleanly and ReceiptsCubit maintains newest-first history', () async {
+      final submissionCubit = ReceiptSubmissionCubit(repository: mockPaymentRepo);
+      final receiptsCubit = ReceiptsCubit(repository: mockPaymentRepo);
 
       final receipt1 = PaymentReceiptModel(
         id: 101,
         userId: 1,
         courseId: 50,
-        paymentMethod: 'vodafone_cash',
+        paymentMethod: PaymentMethod.vodafoneCash,
         paymentMethodLabel: 'Vodafone Cash',
         senderIdentifier: '01011112222',
         amountPaid: 500.0,
-        status: AccessStatus.pending,
+        status: ReceiptStatus.rejected,
         createdAt: DateTime.now().subtract(const Duration(hours: 2)),
       );
 
@@ -246,191 +245,151 @@ void main() {
         id: 102,
         userId: 1,
         courseId: 50,
-        paymentMethod: 'vodafone_cash',
+        paymentMethod: PaymentMethod.vodafoneCash,
         paymentMethodLabel: 'Vodafone Cash',
         senderIdentifier: '01011112222',
         amountPaid: 500.0,
-        status: AccessStatus.pending,
+        status: ReceiptStatus.pending,
         createdAt: DateTime.now(),
       );
 
-      when(() => mockPaymentRepo.submitCourseReceipt(
-            courseSlug: 'diploma-speech',
-            paymentMethod: 'vodafone_cash',
-            senderName: 'أحمد',
-            senderAccount: '01011112222',
-            amount: 500.0,
-            receiptFilePath: dummyReceiptFile.path,
-          )).thenAnswer((_) async => receipt1);
+      when(() => mockPaymentRepo.submitCourseReceipt(any()))
+          .thenAnswer((_) async => receipt2);
+      when(() => mockPaymentRepo.getStudentReceipts())
+          .thenAnswer((_) async => [receipt1, receipt2]);
 
-      await cubit.submitCourseReceipt(
-        courseSlug: 'diploma-speech',
-        courseId: '50',
-        courseTitle: 'دبلوم التخاطب',
-        paymentMethod: 'vodafone_cash',
-        senderName: 'أحمد',
-        senderAccount: '01011112222',
-        amount: 500.0,
-        receiptFilePath: dummyReceiptFile.path,
+      await submissionCubit.submit(
+        ReceiptSubmissionInput(
+          courseSlug: 'diploma-speech',
+          courseId: '50',
+          courseTitle: 'دبلوم التخاطب',
+          paymentMethod: PaymentMethod.vodafoneCash,
+          senderName: 'أحمد',
+          senderAccount: '01011112222',
+          amount: 500.0,
+          receiptFilePath: dummyReceiptFile.path,
+        ),
       );
+      expect(submissionCubit.state, isA<ReceiptSubmissionSuccess>());
 
-      expect(cubit.state, isA<AccessActionSuccess>());
-      var state = cubit.state as AccessActionSuccess;
-      expect(state.allRequests.length, equals(1));
-      expect(state.getStatus('50'), equals(AccessStatus.pending));
+      await receiptsCubit.loadReceipts(studentId: '1');
+      final loaded = receiptsCubit.state as ReceiptsLoaded;
+      expect(loaded.history.receipts.length, equals(2));
+      expect(loaded.history.receipts.first.id, equals(102));
+      expect(loaded.history.latestForCourse('50')?.id, equals(102));
 
-      when(() => mockPaymentRepo.submitCourseReceipt(
-            courseSlug: 'diploma-speech',
-            paymentMethod: 'vodafone_cash',
-            senderName: 'أحمد',
-            senderAccount: '01011112222',
-            amount: 500.0,
-            receiptFilePath: dummyReceiptFile.path,
-          )).thenAnswer((_) async => receipt2);
-
-      await cubit.submitCourseReceipt(
-        courseSlug: 'diploma-speech',
-        courseId: '50',
-        courseTitle: 'دبلوم التخاطب',
-        paymentMethod: 'vodafone_cash',
-        senderName: 'أحمد',
-        senderAccount: '01011112222',
-        amount: 500.0,
-        receiptFilePath: dummyReceiptFile.path,
-      );
-
-      state = cubit.state as AccessActionSuccess;
-      expect(state.allRequests.length, equals(2));
-      expect(state.allRequests.first.id, equals('102'));
-
-      await cubit.close();
+      await submissionCubit.close();
+      await receiptsCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 6: Invalid payment method rejected
+    // SCENARIO 6: Invalid or missing payment method rejected strictly
     // ------------------------------------------------------------------------
-    test('6. Invalid payment method rejected with Arabic error', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
-        coursesRepository: mockCoursesRepo,
+    test('6. Invalid or null payment method is rejected strictly with ValidationFailure', () async {
+      expect(PaymentMethod.tryParse('credit_card'), isNull);
+      expect(PaymentMethod.tryParse(''), isNull);
+      expect(PaymentMethod.tryParse('vodafone_cash'), equals(PaymentMethod.vodafoneCash));
+      expect(PaymentMethod.tryParse('instapay'), equals(PaymentMethod.instapay));
+
+      final submissionCubit = ReceiptSubmissionCubit(repository: mockPaymentRepo);
+
+      await submissionCubit.submit(
+        ReceiptSubmissionInput(
+          courseSlug: 'course-1',
+          courseId: '1',
+          courseTitle: 'دورة 1',
+          paymentMethod: PaymentMethod.tryParse('credit_card'),
+          senderName: 'طالب',
+          senderAccount: '01012345678',
+          amount: 500.0,
+          receiptFilePath: dummyReceiptFile.path,
+        ),
       );
 
-      await cubit.submitCourseReceipt(
-        courseSlug: 'course-1',
-        courseId: '1',
-        courseTitle: 'دورة 1',
-        paymentMethod: 'credit_card', // Invalid method
-        senderName: 'طالب',
-        senderAccount: '123456',
-        amount: 500.0,
-        receiptFilePath: dummyReceiptFile.path,
-      );
-
-      expect(cubit.state, isA<AccessError>());
-      final err = cubit.state as AccessError;
-      expect(err.message, contains('طريقة الدفع غير معتمدة'));
-
-      await cubit.close();
+      expect(submissionCubit.state, isA<ReceiptSubmissionValidationFailure>());
+      verifyNever(() => mockPaymentRepo.submitCourseReceipt(any()));
+      await submissionCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 7: Sender-account & amount input validation (no fake phone fallback)
+    // SCENARIO 7: Sender-account & amount validation (no fabricated defaults)
     // ------------------------------------------------------------------------
-    test('7. Sender-account and amount validated without falling back to user.phone or course.price', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
-        coursesRepository: mockCoursesRepo,
+    test('7. Sender-account and amount validated without falling back to phone or course price', () async {
+      final submissionCubit = ReceiptSubmissionCubit(repository: mockPaymentRepo);
+
+      await submissionCubit.submit(
+        ReceiptSubmissionInput(
+          courseSlug: 'course-601',
+          courseId: '601',
+          courseTitle: 'دورة النطق',
+          paymentMethod: PaymentMethod.vodafoneCash,
+          senderName: 'طالب',
+          senderAccount: '   ',
+          amount: 1500.0,
+          receiptFilePath: dummyReceiptFile.path,
+        ),
       );
 
-      final userWithPhone = UserModel(
-        uid: 'usr_phone',
-        email: 'phone@test.com',
-        displayName: 'طالب لديه هاتف',
-        photoUrl: '',
-        phone: '01099998888',
-        createdAt: DateTime.now(),
+      expect(submissionCubit.state, isA<ReceiptSubmissionValidationFailure>());
+      expect(
+        (submissionCubit.state as ReceiptSubmissionValidationFailure).message,
+        contains('يرجى إدخال رقم المحفظة أو الحساب'),
       );
 
-      final course = const Course(
-        id: '601',
-        title: 'دورة النطق',
-        description: 'وصف',
-        instructor: 'د. الأمين',
-        category: 'نطق',
-        thumbnailUrl: '',
-        levels: [],
-        price: 1500.0,
+      await submissionCubit.submit(
+        ReceiptSubmissionInput(
+          courseSlug: 'course-601',
+          courseId: '601',
+          courseTitle: 'دورة النطق',
+          paymentMethod: PaymentMethod.vodafoneCash,
+          senderName: 'طالب',
+          senderAccount: '01012345678',
+          amount: null,
+          receiptFilePath: dummyReceiptFile.path,
+        ),
       );
 
-      // 7A: Empty sender account must NOT fall back to user.phone!
-      await cubit.sendRequest(
-        course: course,
-        user: userWithPhone,
-        senderAccount: '  ',
-        senderNumberOrRef: '',
-        receiptFile: dummyReceiptFile,
-        amount: 1500.0,
+      expect(submissionCubit.state, isA<ReceiptSubmissionValidationFailure>());
+      expect(
+        (submissionCubit.state as ReceiptSubmissionValidationFailure).message,
+        contains('المبلغ المدفوع غير محدد أو غير صالح'),
       );
 
-      expect(cubit.state, isA<AccessError>());
-      var err = cubit.state as AccessError;
-      expect(err.message, contains('يرجى إدخال رقم المحفظة أو الحساب'));
-
-      // 7B: Missing amount must NOT silently default to course.price!
-      await cubit.sendRequest(
-        course: course,
-        user: userWithPhone,
-        senderAccount: '01012345678',
-        receiptFile: dummyReceiptFile,
-        amount: null, // Null amount
-      );
-
-      expect(cubit.state, isA<AccessError>());
-      err = cubit.state as AccessError;
-      expect(err.message, contains('المبلغ المدفوع غير محدد أو غير صالح'));
-
-      await cubit.close();
+      await submissionCubit.close();
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 8: Account switching during requests
+    // SCENARIO 8: Account switching during in-flight requests isolates session
     // ------------------------------------------------------------------------
-    test('8. Account switching during in-flight requests isolates session and clears state', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
-        coursesRepository: mockCoursesRepo,
-      );
+    test('8. Account switching during in-flight receipt requests isolates session and discards stale response', () async {
+      final cubit = ReceiptsCubit(repository: mockPaymentRepo);
 
       final completerA = Completer<List<PaymentReceiptModel>>();
       when(() => mockPaymentRepo.getStudentReceipts())
           .thenAnswer((_) => completerA.future);
 
-      // Student A initiates request
-      final futureA = cubit.loadStudentReceipts(studentId: 'student_A');
+      final futureA = cubit.loadReceipts(studentId: 'student_A');
 
-      // Switch to Student B
-      cubit.listenToStudentRequests('student_B');
-      expect(cubit.state, isA<AccessInitial>());
+      // Logout / switch away
+      cubit.clear();
+      expect(cubit.state, isA<ReceiptsInitial>());
 
-      // Response for A completes late
       completerA.complete([
         PaymentReceiptModel(
           id: 99,
           userId: 1,
           courseId: 10,
-          paymentMethod: 'vodafone_cash',
+          paymentMethod: PaymentMethod.vodafoneCash,
           paymentMethodLabel: 'Vodafone',
           senderIdentifier: '01011112222',
           amountPaid: 1000.0,
-          status: AccessStatus.approved,
+          status: ReceiptStatus.approved,
           createdAt: DateTime.now(),
         ),
       ]);
 
       await futureA;
-
-      // State is NOT overwritten by student A's data
-      expect(cubit.state, isA<AccessInitial>());
+      expect(cubit.state, isA<ReceiptsInitial>());
 
       await cubit.close();
     });
@@ -438,31 +397,52 @@ void main() {
     // ------------------------------------------------------------------------
     // SCENARIO 9: Closing a Cubit while requests are pending
     // ------------------------------------------------------------------------
-    test('9. Closing Cubit while requests are pending does not emit or throw unhandled exceptions', () async {
-      final cubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
+    test('9. Closing ReceiptsCubit & CourseEntitlementCubit while pending does not emit or throw', () async {
+      final receiptsCubit = ReceiptsCubit(repository: mockPaymentRepo);
+      final entitlementCubit = CourseEntitlementCubit(
         coursesRepository: mockCoursesRepo,
       );
 
-      final completer = Completer<List<PaymentReceiptModel>>();
+      final receiptCompleter = Completer<List<PaymentReceiptModel>>();
+      final courseCompleter = Completer<Course>();
+
       when(() => mockPaymentRepo.getStudentReceipts())
-          .thenAnswer((_) => completer.future);
+          .thenAnswer((_) => receiptCompleter.future);
+      when(() => mockCoursesRepo.verifyStudentCourseDetails('1'))
+          .thenAnswer((_) => courseCompleter.future);
 
-      final future = cubit.loadStudentReceipts();
+      final f1 = receiptsCubit.loadReceipts(studentId: '1');
+      final f2 = entitlementCubit.verifyCourseEntitlement(
+        courseId: '1',
+        courseSlug: '1',
+        studentId: '1',
+      );
 
-      // Close cubit immediately
-      await cubit.close();
+      await receiptsCubit.close();
+      await entitlementCubit.close();
 
-      // Completer finishes after close
-      completer.complete([]);
-      await future;
+      receiptCompleter.complete([]);
+      courseCompleter.complete(
+        const Course(
+          id: '1',
+          title: 'Course 1',
+          description: '',
+          instructor: '',
+          category: '',
+          thumbnailUrl: '',
+          levels: [],
+        ),
+      );
 
-      // No assertion failure / Bad State
-      expect(cubit.isClosed, isTrue);
+      await f1;
+      await f2;
+
+      expect(receiptsCubit.isClosed, isTrue);
+      expect(entitlementCubit.isClosed, isTrue);
     });
 
     // ------------------------------------------------------------------------
-    // SCENARIO 10: Server-locked levels at locally calculated 95% or 100%
+    // SCENARIO 10-15: Server level locks, previews, assignments lifecycle
     // ------------------------------------------------------------------------
     test('10. Server-locked levels remain locked at locally calculated 95% or 100% completion', () {
       final level1 = CourseLevel.fromLaravelJson({
@@ -472,7 +452,6 @@ void main() {
         'is_accessible': true,
       });
 
-      // Level 2 has is_accessible: false from server
       final level2 = CourseLevel.fromLaravelJson({
         'id': 'lvl_2',
         'title': 'المستوى الثاني: التدخل العلاجي',
@@ -482,7 +461,6 @@ void main() {
 
       expect(level2.isAccessible, isFalse);
 
-      // Local completion is 100%
       final isUnlocked = CourseProgressPolicy.isLevelUnlocked(
         levels: [level1, level2],
         levelIndex: 1,
@@ -490,12 +468,9 @@ void main() {
         completedLessonIds: {'lsn_1', 'lsn_2', 'lsn_3'},
       );
 
-      expect(isUnlocked, isFalse, reason: 'Laravel server authority supersedes local percentage completion');
+      expect(isUnlocked, isFalse);
     });
 
-    // ------------------------------------------------------------------------
-    // SCENARIO 11: First-level access without enrollment
-    // ------------------------------------------------------------------------
     test('11. First-level access is denied without server-confirmed enrollment', () {
       final level1 = CourseLevel.fromLaravelJson({
         'id': 'lvl_1',
@@ -504,7 +479,6 @@ void main() {
         'is_accessible': true,
       });
 
-      // Student is NOT enrolled
       final isUnlocked = CourseProgressPolicy.isLevelUnlocked(
         levels: [level1],
         levelIndex: 0,
@@ -512,12 +486,9 @@ void main() {
         completedLessonIds: {},
       );
 
-      expect(isUnlocked, isFalse, reason: 'Unenrolled student cannot access level 1');
+      expect(isUnlocked, isFalse);
     });
 
-    // ------------------------------------------------------------------------
-    // SCENARIO 12: Authorized free previews
-    // ------------------------------------------------------------------------
     test('12. Explicitly authorized free previews are accessible even without enrollment', () {
       final freeLesson = Lesson.fromLaravelVideoJson({
         'id': 1001,
@@ -534,16 +505,13 @@ void main() {
       final reason = CourseProgressPolicy.lessonLockReason(
         levels: [],
         lesson: freeLesson,
-        isEnrolled: false, // Not enrolled
+        isEnrolled: false,
         completedLessonIds: {},
       );
 
-      expect(reason, isNull, reason: 'Authorized free preview must be playable without enrollment');
+      expect(reason, isNull);
     });
 
-    // ------------------------------------------------------------------------
-    // SCENARIO 13: Protected playback rejection
-    // ------------------------------------------------------------------------
     test('13. Protected lesson playback is rejected without enrollment', () {
       final protectedLesson = Lesson.fromLaravelVideoJson({
         'id': 2001,
@@ -553,8 +521,6 @@ void main() {
         'duration_seconds': 900,
         'playback_id': 'mux_prot_2001',
       });
-
-      expect(protectedLesson.isFreePreview, isFalse);
 
       final reason = CourseProgressPolicy.lessonLockReason(
         levels: [],
@@ -567,9 +533,6 @@ void main() {
       expect(reason, contains('يتطلب الاشتراك في الدورة'));
     });
 
-    // ------------------------------------------------------------------------
-    // SCENARIO 14: Assignment Cubit initialization after authentication
-    // ------------------------------------------------------------------------
     test('14. Assignment Cubit initializes and loads assignments for authenticated student', () async {
       final task = Assignment(
         id: '55',
@@ -595,9 +558,6 @@ void main() {
       await cubit.close();
     });
 
-    // ------------------------------------------------------------------------
-    // SCENARIO 15: Assignment state cleanup at logout
-    // ------------------------------------------------------------------------
     test('15. Assignment state is completely cleared at logout', () async {
       final task = Assignment(
         id: '56',
@@ -616,7 +576,6 @@ void main() {
 
       expect(cubit.state, isA<AssignmentsLoaded>());
 
-      // Logout / clear
       cubit.clear();
 
       expect(cubit.state, equals(const AssignmentsInitial()));

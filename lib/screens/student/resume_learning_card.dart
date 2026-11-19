@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/painters/learning_progress_ring_painter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
 import '../../models/course.dart';
 import '../../models/course_progress_policy.dart';
 import '../../models/learning_history.dart';
@@ -74,7 +76,10 @@ class _ResumeLearningCardState extends State<ResumeLearningCard> {
     final lesson = found.first;
 
     final isExpired = widget.user.isCourseExpired(course.id);
-    final isEnrolled = !isExpired && course.hasEnrolled;
+    final isAuthorized = context.select<CourseEntitlementCubit, bool>(
+      (cubit) => cubit.state.isCourseAuthorized(course.id),
+    );
+    final isEnrolled = !isExpired && isAuthorized;
 
     final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(
       course: course,

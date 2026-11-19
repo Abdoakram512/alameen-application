@@ -8,11 +8,13 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/student_avatar.dart';
-import '../../../../logic/access/access_cubit.dart';
-import '../../../../logic/access/access_state.dart';
+import '../../../../features/payments/domain/entities/payment_receipt.dart';
+import '../../../../features/payments/domain/entities/receipt_history.dart';
+import '../../../../features/payments/domain/entities/receipt_status.dart';
+import '../../../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
+import '../../../../features/payments/presentation/cubits/receipts/receipts_state.dart';
 import '../../../../logic/auth/auth_cubit.dart';
 import '../../../../logic/auth/auth_state.dart';
-import '../../../../models/access_request.dart';
 import '../../../../repositories/student_notifications_repository.dart';
 import '../../../../widgets/language_switch_button.dart';
 
@@ -81,22 +83,14 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         const LanguageSwitchButton(compact: true),
         const SizedBox(width: 4),
-        // زر متابعة إيصالات وطلبات الاشتراك
-        BlocBuilder<AccessCubit, AccessState>(
-          builder: (context, accessState) {
-            final requests = accessState is AccessLoaded
-                ? accessState.requestsByCourse.values.toList()
-                : const <CourseAccessRequest>[];
-            final activeCount = requests
-                .where(
-                  (r) =>
-                      r.status == AccessStatus.pending ||
-                      r.status == AccessStatus.rejected,
-                )
-                .length;
+        // زر متابعة إيصالات السداد المالي
+        BlocBuilder<ReceiptsCubit, ReceiptsState>(
+          builder: (context, receiptsState) {
+            final history = receiptsState.historyOrNull ?? ReceiptHistory.empty;
+            final activeCount = history.activeActionableCount;
 
             return IconButton(
-              tooltip: 'متابعة طلبات الالتحاق',
+              tooltip: 'سجل إيصالات السداد',
               icon: Badge(
                 isLabelVisible: activeCount > 0,
                 backgroundColor: AppColors.warning,
@@ -114,7 +108,8 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   size: 22,
                 ),
               ),
-              onPressed: () => _showRequestsStatusSheet(context, requests),
+              onPressed: () =>
+                  _showReceiptsStatusSheet(context, history.receipts),
             );
           },
         ),
@@ -153,9 +148,9 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  void _showRequestsStatusSheet(
+  void _showReceiptsStatusSheet(
     BuildContext context,
-    List<CourseAccessRequest> requests,
+    List<PaymentReceipt> receipts,
   ) {
     showModalBottomSheet(
       context: context,
@@ -164,8 +159,8 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (sheetContext) {
-        final sorted = List<CourseAccessRequest>.from(requests)
-          ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+        final sorted = List<PaymentReceipt>.from(receipts)
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         return SafeArea(
           child: ConstrainedBox(
@@ -185,7 +180,7 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'حالة طلبات الالتحاق بالدورات',
+                          'سجل إيصالات السداد المالي',
                           style: AppTextStyles.heading3.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
@@ -203,7 +198,7 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Center(
                         child: Text(
-                          'لا توجد طلبات التحاق معلقة حالياً.',
+                          'لا توجد إيصالات سداد مسجلة حالياً.',
                           style: AppTextStyles.bodyMedium,
                         ),
                       ),
@@ -215,19 +210,19 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                         itemCount: sorted.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (_, index) {
-                          final req = sorted[index];
-                          final (label, color, bg) = switch (req.status) {
-                            AccessStatus.approved => (
-                              'مقبول ومفعّل',
+                          final receipt = sorted[index];
+                          final (label, color, bg) = switch (receipt.status) {
+                            ReceiptStatus.approved => (
+                              'تم اعتماد الإيصال',
                               AppColors.successDark,
                               AppColors.successLight,
                             ),
-                            AccessStatus.rejected => (
+                            ReceiptStatus.rejected => (
                               'يحتاج مراجعة الإيصال',
                               AppColors.errorDark,
                               AppColors.errorLight,
                             ),
-                            AccessStatus.pending => (
+                            ReceiptStatus.pending => (
                               'قيد المراجعة',
                               AppColors.warningDark,
                               AppColors.warningLight,
@@ -238,7 +233,7 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                             borderRadius: BorderRadius.circular(12),
                             onTap: () {
                               Navigator.pop(sheetContext);
-                              context.go('/course/${req.courseId}');
+                              context.go('/course/${receipt.courseId}');
                             },
                             child: Container(
                               padding: const EdgeInsets.all(12),
@@ -257,20 +252,20 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          req.courseTitle,
+                                          receipt.displayCourseTitle,
                                           style: AppTextStyles.bodyLarge
                                               .copyWith(
                                                 fontWeight: FontWeight.w700,
                                               ),
                                         ),
-                                        if (req.status ==
-                                                AccessStatus.rejected &&
-                                            req.adminNotes
+                                        if (receipt.status ==
+                                                ReceiptStatus.rejected &&
+                                            (receipt.adminNotes ?? '')
                                                 .trim()
                                                 .isNotEmpty) ...[
                                           const SizedBox(height: 4),
                                           Text(
-                                            'ملاحظة الإدارة: ${req.adminNotes}',
+                                            'ملاحظة الإدارة: ${receipt.adminNotes}',
                                             style: AppTextStyles.caption
                                                 .copyWith(
                                                   color: AppColors.errorDark,

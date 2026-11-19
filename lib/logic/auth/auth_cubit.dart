@@ -13,7 +13,6 @@ import '../../repositories/student_notifications_repository.dart';
 import '../../repositories/student_profile_repository.dart';
 import '../../repositories/student_support_repository.dart';
 import '../../services/watch_queue.dart';
-import '../access/access_cubit.dart';
 import '../assignments/assignments_cubit.dart';
 import 'auth_state.dart';
 
@@ -93,9 +92,6 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
-        if (sl.isRegistered<AccessCubit>()) {
-          sl<AccessCubit>().clear();
-        }
         if (sl.isRegistered<AssignmentsCubit>()) {
           sl<AssignmentsCubit>().clear();
         }
@@ -183,9 +179,6 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
-        if (sl.isRegistered<AccessCubit>()) {
-          sl<AccessCubit>().clear();
-        }
         if (sl.isRegistered<AssignmentsCubit>()) {
           sl<AssignmentsCubit>().clear();
         }
@@ -335,9 +328,6 @@ class AuthCubit extends Cubit<AuthState> {
     final outgoingUid = state is Authenticated ? (state as Authenticated).user.uid : null;
     emit(Unauthenticated());
     try {
-      if (sl.isRegistered<AccessCubit>()) {
-        sl<AccessCubit>().clear();
-      }
       if (sl.isRegistered<AssignmentsCubit>()) {
         sl<AssignmentsCubit>().clear();
       }
@@ -439,9 +429,6 @@ class AuthCubit extends Cubit<AuthState> {
         } catch (_) {}
       }
 
-      if (sl.isRegistered<AccessCubit>()) {
-        sl<AccessCubit>().clear();
-      }
       if (sl.isRegistered<AssignmentsCubit>()) {
         sl<AssignmentsCubit>().clear();
       }

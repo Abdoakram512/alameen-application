@@ -11,8 +11,8 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:secure_screen_app/core/di/injection_container.dart';
 import 'package:secure_screen_app/core/network/api_client.dart';
 import 'package:secure_screen_app/datasources/watch_remote_data_source.dart';
-import 'package:secure_screen_app/logic/access/access_cubit.dart';
-import 'package:secure_screen_app/logic/access/access_state.dart';
+import 'package:secure_screen_app/features/courses/domain/entities/course_entitlement.dart';
+import 'package:secure_screen_app/features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
 import 'package:secure_screen_app/logic/auth/auth_cubit.dart';
 import 'package:secure_screen_app/logic/auth/auth_state.dart';
 import 'package:secure_screen_app/logic/courses/courses_cubit.dart';
@@ -847,7 +847,6 @@ void main() {
     // 13. Free auto-enrolled students & free preview without payment receipts + ZERO isOpenCourse bypass
     test('13. Free auto-enrolled students confirm access without receipts; CourseAccessMode.open never bypasses enrollment', () async {
       final mockCoursesRepo = MockStudentCoursesRepository();
-      final mockPaymentRepo = MockStudentPaymentRepository();
 
       const autoEnrolledCourse = Course(
         id: '20',
@@ -865,23 +864,22 @@ void main() {
         isDetailedFromAuthServer: true,
       );
 
-      when(() => mockCoursesRepo.getCourseDetails('free-course'))
+      when(() => mockCoursesRepo.verifyStudentCourseDetails('free-course'))
           .thenAnswer((_) async => autoEnrolledCourse);
-      when(() => mockPaymentRepo.getStudentReceipts())
-          .thenAnswer((_) async => const []);
 
-      final accessCubit = AccessCubit(
-        paymentRepository: mockPaymentRepo,
+      final entitlementCubit = CourseEntitlementCubit(
         coursesRepository: mockCoursesRepo,
       );
-      addTearDown(accessCubit.close);
+      addTearDown(entitlementCubit.close);
 
-      await accessCubit.verifyCourseEntitlement(
-        uid: '101',
-        course: autoEnrolledCourse,
+      final result = await entitlementCubit.verifyCourseEntitlement(
+        courseId: autoEnrolledCourse.id,
+        courseSlug: autoEnrolledCourse.slug!,
+        studentId: '101',
       );
 
-      expect(accessCubit.state, isA<AccessActionSuccess>());
+      expect(result.status, equals(CourseAccessState.enrolled));
+      expect(entitlementCubit.state.isCourseAuthorized('20'), isTrue);
 
       // Meanwhile, CourseProgressPolicy must NOT unlock non-preview lessons merely because accessMode == open
       final nonPreviewLesson = makeLesson(id: '44', isFreePreview: false);

@@ -212,7 +212,7 @@ void main() {
       ).called(1);
     });
 
-    test('5. AuthCubit signOut() clears static AccessCubit requests cache to prevent cross-user leak', () async {
+    test('5. AuthCubit signOut() resets auth state to prevent cross-user leak', () async {
       final mockAuthRepo = MockStudentAuthRepository();
       when(() => mockAuthRepo.restoreSession()).thenAnswer((_) async => null);
       when(() => mockAuthRepo.logout()).thenAnswer((_) async {});
@@ -313,7 +313,7 @@ void main() {
       verify(() => mockCache.getPublicCourses()).called(1);
     });
 
-    test('9. AuthCubit deleteAccount() clears AccessCubit static requests cache and local caches', () async {
+    test('9. AuthCubit deleteAccount() clears session and local caches cleanly', () async {
       final mockAuthRepo = MockStudentAuthRepository();
       final mockProfileRepo = MockStudentProfileRepository();
 

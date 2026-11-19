@@ -10,7 +10,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/app_confirmation_dialog.dart';
 import '../../core/widgets/app_directional_icons.dart';
-import '../../logic/access/access_cubit.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -41,7 +42,6 @@ class StudentProfileScreen extends StatelessWidget {
       isDestructive: true,
     );
     if (confirm && context.mounted) {
-      context.read<AccessCubit>().clear();
       await context.read<AuthCubit>().signOut();
     }
   }
@@ -110,7 +110,6 @@ class StudentProfileScreen extends StatelessWidget {
     passwordController.dispose();
 
     if (confirm == true && context.mounted) {
-      context.read<AccessCubit>().clear();
       await context.read<AuthCubit>().deleteAccount(password: enteredPassword);
     }
   }
@@ -129,14 +128,18 @@ class StudentProfileScreen extends StatelessWidget {
         final displayPhone = currentUser?.phone ?? '';
         final avatarUrl = currentUser?.photoUrl ?? '';
 
-        return BlocBuilder<CoursesCubit, CoursesState>(
-          builder: (context, coursesState) {
-            final enrolledCourses = <Course>[];
-            if (coursesState is CoursesLoaded && currentUser != null) {
-              enrolledCourses.addAll(
-                coursesState.allCourses.where((c) => c.hasEnrolled),
-              );
-            }
+        return BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(
+          builder: (context, entitlementState) {
+            return BlocBuilder<CoursesCubit, CoursesState>(
+              builder: (context, coursesState) {
+                final enrolledCourses = <Course>[];
+                if (coursesState is CoursesLoaded && currentUser != null) {
+                  enrolledCourses.addAll(
+                    coursesState.allCourses.where(
+                      (c) => entitlementState.isCourseAuthorized(c.id),
+                    ),
+                  );
+                }
 
             return Scaffold(
               backgroundColor: AppColors.scaffoldBackground,
@@ -664,6 +667,8 @@ class StudentProfileScreen extends StatelessWidget {
                   ),
                 ],
               ),
+            );
+              },
             );
           },
         );

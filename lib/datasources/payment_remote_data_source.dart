@@ -1,16 +1,19 @@
 import 'dart:io';
+
 import 'package:dio/dio.dart';
+
 import '../core/network/api_client.dart';
 import '../core/network/api_exceptions.dart';
+import '../features/payments/domain/entities/payment_method.dart';
 import '../models/payment_receipt_model.dart';
 
-/// Contract for student payment and receipt operations with the Laravel REST API.
+/// عقد مصدر البيانات البعيد للعمليات المالية وإيصالات الدفع في Laravel REST API.
 abstract class PaymentRemoteDataSource {
-  /// Submit a manual payment receipt (Vodafone Cash / InstaPay) to enroll in a course.
+  /// إرسال إيصال سداد مالي لدورة:
   /// POST /student/courses/{slug}/receipt
   Future<PaymentReceiptModel> submitCourseReceipt({
     required String courseSlug,
-    required String paymentMethod,
+    required PaymentMethod paymentMethod,
     required String senderName,
     required String senderAccount,
     required double amount,
@@ -18,31 +21,21 @@ abstract class PaymentRemoteDataSource {
     String? transactionReference,
   });
 
-  /// List all payment receipts submitted by the authenticated student.
+  /// جلب جميع إيصالات السداد الخاصة بالطالب الموثق:
   /// GET /student/receipts
   Future<List<PaymentReceiptModel>> getStudentReceipts({int? courseId});
 }
 
-/// Implementation of [PaymentRemoteDataSource] using [ApiClient].
 class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
   final ApiClient _apiClient;
 
   PaymentRemoteDataSourceImpl({required ApiClient apiClient})
       : _apiClient = apiClient;
 
-  /// Helper to normalize payment method string to backend enum ('vodafone_cash' or 'instapay').
-  static String normalizePaymentMethod(String method) {
-    final lower = method.toLowerCase();
-    if (lower.contains('insta') || lower.contains('إنستا') || lower.contains('انستا')) {
-      return 'instapay';
-    }
-    return 'vodafone_cash';
-  }
-
   @override
   Future<PaymentReceiptModel> submitCourseReceipt({
     required String courseSlug,
-    required String paymentMethod,
+    required PaymentMethod paymentMethod,
     required String senderName,
     required String senderAccount,
     required double amount,
@@ -74,11 +67,10 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
         );
       }
 
-      final normalizedMethod = normalizePaymentMethod(paymentMethod);
       final fileName = receiptFilePath.split(Platform.pathSeparator).last;
 
       final formMap = <String, dynamic>{
-        'payment_method': normalizedMethod,
+        'payment_method': paymentMethod.apiValue,
         'sender_name': senderName.trim(),
         'sender_account': senderAccount.trim(),
         'amount': amount,
@@ -139,9 +131,11 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
         final list = innerData['receipts'];
         if (list is List) {
           return list
-              .map((item) => PaymentReceiptModel.fromJson(
-                    Map<String, dynamic>.from(item as Map),
-                  ))
+              .map(
+                (item) => PaymentReceiptModel.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                ),
+              )
               .toList();
         }
       }

@@ -1,12 +1,15 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../core/di/injection_container.dart';
 import '../core/responsive/responsive_layout.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
+import '../features/payments/presentation/cubits/receipt_submission/receipt_submission_cubit.dart';
 import '../logic/auth/auth_cubit.dart';
 import '../logic/auth/auth_state.dart';
 import '../screens/auth/student_login_screen.dart';
@@ -118,7 +121,10 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
             path: 'course/:id',
             builder: (context, state) {
               final courseId = state.pathParameters['id'] ?? '';
-              return CourseDetailsScreen(courseId: courseId);
+              return BlocProvider<ReceiptSubmissionCubit>(
+                create: (_) => sl<ReceiptSubmissionCubit>(),
+                child: CourseDetailsScreen(courseId: courseId),
+              );
             },
           ),
         ],

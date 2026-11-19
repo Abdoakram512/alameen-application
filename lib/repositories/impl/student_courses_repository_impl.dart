@@ -1,5 +1,8 @@
 import 'dart:async';
 import '../../core/di/injection_container.dart';
+import '../../core/errors/app_failure.dart';
+import '../../core/errors/failure_mapper.dart';
+import '../../core/network/api_exceptions.dart';
 import '../../core/storage/course_local_cache.dart';
 import '../../core/storage/secure_token_storage.dart';
 import '../../datasources/courses_remote_data_source.dart';
@@ -143,6 +146,33 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     return _cachedCourses;
   }
 
+  Course _stripAuthorizationForOfflinePreview(Course cached) {
+    return cached.copyWith(
+      hasEnrolled: false,
+      isDetailedFromAuthServer: false,
+      accessibleVideoIds: const [],
+    );
+  }
+
+  @override
+  Future<Course> verifyStudentCourseDetails(String slugOrId) async {
+    final remote = _remote;
+    if (remote == null) {
+      throw const NetworkFailure('تعذر الاتصال بخادم المنصة للتحقق من الاشتراك.');
+    }
+    final userId = await _resolveCurrentUserId();
+    try {
+      final course = await remote.getStudentCourseBySlug(slugOrId);
+      await _cache.saveCourseDetails(slugOrId, course, userId: userId);
+      return course;
+    } catch (e) {
+      throw FailureMapper.fromException(
+        e,
+        fallbackMessage: 'تعذر التحقق من حالة التسجيل في الدورة من الخادم.',
+      );
+    }
+  }
+
   @override
   Future<Course> getCourseDetails(String slugOrId) async {
     final remote = _remote;
@@ -154,29 +184,33 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
         final course = await remote.getStudentCourseBySlug(slugOrId);
         await _cache.saveCourseDetails(slugOrId, course, userId: userId);
         return course;
+      } on UnauthorizedException catch (e) {
+        throw FailureMapper.fromException(e);
+      } on ForbiddenException catch (e) {
+        throw FailureMapper.fromException(e);
       } catch (_) {
         try {
-          // Secondary: public course details
+          // Secondary: public course details (read-only preview without enrollment authority)
           final course = await remote.getPublicCourseBySlug(slugOrId);
           await _cache.saveCourseDetails(slugOrId, course, userId: userId);
           return course;
         } catch (e) {
-          // Offline fallback: user-isolated local cache only
+          // Offline fallback: sanitized curriculum preview ONLY (never grants access)
           final cached = await _cache.getCourseDetails(slugOrId, userId: userId);
-          if (cached != null) return cached;
-          rethrow;
+          if (cached != null) return _stripAuthorizationForOfflinePreview(cached);
+          throw FailureMapper.fromException(e);
         }
       }
     }
 
     final cached = await _cache.getCourseDetails(slugOrId, userId: userId);
-    if (cached != null) return cached;
+    if (cached != null) return _stripAuthorizationForOfflinePreview(cached);
 
     final found = _cachedCourses.firstWhere(
       (c) => c.id == slugOrId || c.slug == slugOrId,
-      orElse: () => throw StateError('Course not found in local cache'),
+      orElse: () => throw const NotFoundFailure('الدورة المطلوبة غير متوفرة حالياً.'),
     );
-    return found;
+    return _stripAuthorizationForOfflinePreview(found);
   }
 
   @override
@@ -195,7 +229,7 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
         if (_cachedCourses.isNotEmpty) {
           return StudentDashboardData(enrolledCourses: _cachedCourses);
         }
-        rethrow;
+        throw FailureMapper.fromException(e);
       }
     }
 
@@ -207,22 +241,17 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   @override
   Future<StudentCoursesData> getStudentCourses() async {
     final remote = _remote;
-    final userId = await _resolveCurrentUserId() ?? 'anonymous';
-
-    if (remote != null) {
-      try {
-        final studentCourses = await remote.getStudentCourses();
-        await _cache.saveStudentCourses(userId, studentCourses);
-        return studentCourses;
-      } catch (e) {
-        final cached = await _cache.getStudentCourses(userId);
-        if (cached != null) return cached;
-        rethrow;
-      }
+    if (remote == null) {
+      throw const NetworkFailure('تعذر الاتصال بخادم المنصة للتحقق من الدورات المشترك بها.');
     }
 
-    final cached = await _cache.getStudentCourses(userId);
-    if (cached != null) return cached;
-    return const StudentCoursesData();
+    try {
+      return await remote.getStudentCourses();
+    } catch (e) {
+      throw FailureMapper.fromException(
+        e,
+        fallbackMessage: 'تعذر التحقق من اشتراكات الطالب من الخادم.',
+      );
+    }
   }
 }

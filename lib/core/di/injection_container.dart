@@ -12,7 +12,9 @@ import '../../datasources/notifications_remote_data_source.dart';
 import '../../datasources/payment_remote_data_source.dart';
 import '../../datasources/support_tickets_remote_data_source.dart';
 import '../../datasources/watch_remote_data_source.dart';
-import '../../logic/access/access_cubit.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import '../../features/payments/presentation/cubits/receipt_submission/receipt_submission_cubit.dart';
+import '../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import '../../logic/assignments/assignments_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/certificates/certificates_cubit.dart';
@@ -246,10 +248,25 @@ Future<void> initDependencies() async {
     );
   }
 
-  if (!sl.isRegistered<AccessCubit>()) {
-    sl.registerFactory<AccessCubit>(
-      () => AccessCubit(
-        paymentRepository: sl<StudentPaymentRepository>(),
+  if (!sl.isRegistered<ReceiptsCubit>()) {
+    sl.registerFactory<ReceiptsCubit>(
+      () => ReceiptsCubit(
+        repository: sl<StudentPaymentRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<ReceiptSubmissionCubit>()) {
+    sl.registerFactory<ReceiptSubmissionCubit>(
+      () => ReceiptSubmissionCubit(
+        repository: sl<StudentPaymentRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<CourseEntitlementCubit>()) {
+    sl.registerFactory<CourseEntitlementCubit>(
+      () => CourseEntitlementCubit(
         coursesRepository: sl<StudentCoursesRepository>(),
       ),
     );

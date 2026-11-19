@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,17 +8,20 @@ import '../../core/di/injection_container.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/feedback/app_error_state.dart';
-import '../../logic/access/access_cubit.dart';
-import '../../logic/access/access_state.dart';
+import '../../features/courses/domain/entities/course_entitlement.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_state.dart';
+import '../../features/payments/domain/entities/receipt_status.dart';
+import '../../features/payments/presentation/cubits/receipt_submission/receipt_submission_cubit.dart';
+import '../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
+import '../../features/payments/presentation/cubits/receipts/receipts_state.dart';
 import '../../logic/assignments/assignments_cubit.dart';
 import '../../logic/assignments/assignments_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
 import '../../logic/courses/courses_state.dart';
-import '../../models/access_request.dart';
 import '../../models/assignment.dart';
-import '../../models/assignment_submission.dart';
 import '../../models/course.dart';
 import '../../models/course_access_mode.dart';
 import '../../models/course_progress_policy.dart';
@@ -69,14 +74,31 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final authCubit = context.read<AuthCubit>();
-        context.read<CoursesCubit>().loadCourseDetails(
-              widget.courseId,
-              authCubit: authCubit,
-            );
-        context.read<AccessCubit>().loadStudentReceipts(silent: true);
+        _refreshCourseDetailsAndReceipts();
       }
     });
+  }
+
+  Future<void> _refreshCourseDetailsAndReceipts() async {
+    final authCubit = context.read<AuthCubit>();
+    final coursesCubit = context.read<CoursesCubit>();
+    final entitlementCubit = context.read<CourseEntitlementCubit>();
+    final receiptsCubit = context.read<ReceiptsCubit>();
+
+    final authState = authCubit.state;
+    if (authState is Authenticated) {
+      unawaited(
+        receiptsCubit.loadReceipts(studentId: authState.user.uid, silent: true),
+      );
+    }
+
+    final detailed = await coursesCubit.loadCourseDetails(
+      widget.courseId,
+      authCubit: authCubit,
+    );
+    if (mounted && detailed != null && detailed.isDetailedFromAuthServer) {
+      entitlementCubit.applyServerCourseDetails(detailed);
+    }
   }
 
   @override
@@ -87,25 +109,36 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     super.dispose();
   }
 
-  void _showRequestAccessModal(
+  Future<void> _showRequestAccessModal(
     BuildContext context,
     Course course,
     UserModel user, {
     bool isResubmission = false,
-  }) {
-    showModalBottomSheet(
+  }) async {
+    final submissionCubit = context.read<ReceiptSubmissionCubit>();
+    submissionCubit.reset();
+
+    final submitted = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => RequestAccessSheet(
-        course: course,
-        user: user,
-        isResubmission: isResubmission,
+      builder: (_) => BlocProvider<ReceiptSubmissionCubit>.value(
+        value: submissionCubit,
+        child: RequestAccessSheet(
+          course: course,
+          user: user,
+          isResubmission: isResubmission,
+        ),
       ),
     );
+
+    if (submitted == true && context.mounted) {
+      unawaited(context.read<ReceiptsCubit>().refresh(silent: true));
+      unawaited(_refreshCourseDetailsAndReceipts());
+    }
   }
 
   void _showSubmitAssignmentModal(
@@ -137,7 +170,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     UserModel? currentUser, {
     required bool isEnrolled,
     required Set<String> completedLessonIds,
-    Map<String, String> lockedReasons = const {},
   }) async {
     if (!lesson.isAvailableNow) {
       final msg = lesson.isScheduled
@@ -153,21 +185,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       return;
     }
 
-    if (lockedReasons.containsKey(lesson.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'course_details.must_submit_assignment_for_lesson'.tr(
-              args: [lockedReasons[lesson.id] ?? ''],
-            ),
-          ),
-          backgroundColor: const Color(0xFFB45309),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      return;
-    }
-
     final policyReason = CourseProgressPolicy.lessonLockReason(
       levels: course.levels,
       lesson: lesson,
@@ -175,7 +192,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       completedLessonIds: completedLessonIds,
       accessibleVideoIds: course.accessibleVideoIds,
       enforceServerAccessibleList: course.isDetailedFromAuthServer,
-      assignmentLockReasons: lockedReasons,
     );
     if (policyReason != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -189,19 +205,31 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
 
     if (lesson.isAssignmentLesson) {
       if (currentUser != null) {
-        final taskAssignment = Assignment(
-          id: (lesson.assignmentId != null && lesson.assignmentId!.isNotEmpty)
-              ? lesson.assignmentId!
-              : 'asg_${lesson.id}',
-          courseId: course.id,
-          courseTitle: course.title,
-          lessonId: lesson.id,
-          title: lesson.title,
-          instructions: lesson.description,
-          createdAt: DateTime.now(),
-          blocksNextLesson: true,
-        );
-        _showSubmitAssignmentModal(context, taskAssignment, currentUser);
+        final loadedAssignments = _assignmentsCubit.state is AssignmentsLoaded
+            ? (_assignmentsCubit.state as AssignmentsLoaded).data.tasks
+            : const <Assignment>[];
+        Assignment? matched;
+        for (final a in loadedAssignments) {
+          if ((lesson.assignmentId != null &&
+                  lesson.assignmentId!.isNotEmpty &&
+                  a.id == lesson.assignmentId) ||
+              a.lessonId == lesson.id) {
+            matched = a;
+            break;
+          }
+        }
+        if (matched != null) {
+          _showSubmitAssignmentModal(context, matched, currentUser);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'لا يوجد تكليف معتمد من الخادم مرتبط بهذه المحاضرة حالياً.',
+              ),
+              backgroundColor: Color(0xFFB45309),
+            ),
+          );
+        }
       }
       return;
     }
@@ -221,413 +249,349 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       ),
     );
 
-    // تحديث حالة فتح المستويات والتقدم مباشرة من الخادم بعد العودة من المشغل
     if (context.mounted) {
-      final authCubit = context.read<AuthCubit>();
-      final coursesCubit = context.read<CoursesCubit>();
-      coursesCubit.loadCourseDetails(
-        course.slug ?? course.id,
-        authCubit: authCubit,
-      );
+      await _refreshCourseDetailsAndReceipts();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AccessCubit, AccessState>(
-      listener: (context, accessState) {
-        if (accessState is AccessActionSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(accessState.message),
-              backgroundColor: AppColors.success,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-          final authCubit = context.read<AuthCubit>();
-          context.read<CoursesCubit>().loadCourseDetails(
-                widget.courseId,
-                authCubit: authCubit,
-              );
-        } else if (accessState is AccessError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(accessState.message),
-              backgroundColor: AppColors.error,
+    return BlocBuilder<CoursesCubit, CoursesState>(
+      builder: (context, coursesState) {
+        if (coursesState is CoursesError) {
+          return Scaffold(
+            appBar: AppBar(title: Text('course_details.title'.tr())),
+            body: AppErrorState(
+              message: 'course_details.load_error'.tr(),
+              onRetry: () => context.read<CoursesCubit>().loadCourses(),
             ),
           );
         }
-      },
-      child: BlocBuilder<CoursesCubit, CoursesState>(
-        builder: (context, coursesState) {
-          if (coursesState is CoursesError) {
-            return Scaffold(
-              appBar: AppBar(title: Text('course_details.title'.tr())),
-              body: AppErrorState(
-                message: 'course_details.load_error'.tr(),
-                onRetry: () => context.read<CoursesCubit>().loadCourses(),
-              ),
+
+        if (coursesState is! CoursesLoaded) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final Course? course = coursesState.allCourses
+            .cast<Course?>()
+            .firstWhere(
+              (c) => c?.id == widget.courseId || c?.slug == widget.courseId,
+              orElse: () => null,
             );
-          }
 
-          if (coursesState is! CoursesLoaded) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+        if (course == null) {
+          return Scaffold(
+            appBar: AppBar(title: Text('course_details.title'.tr())),
+            body: Center(child: Text('course_details.not_found'.tr())),
+          );
+        }
+
+        return BlocBuilder<AuthCubit, AuthState>(
+          builder: (context, authState) {
+            final currentUser =
+                authState is Authenticated ? authState.user : null;
+            final isExpired =
+                currentUser != null && currentUser.isCourseExpired(course.id);
+
+            final allIds = course.allLessonIds;
+            final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(
+              course: course,
+              userCompletedLessonIds: {...?currentUser?.completedLessonIds},
             );
-          }
+            final completedInCourse = course.serverCompletedCount ??
+                allIds.where(completedSet.contains).length;
+            final progress = (course.serverProgressPercent != null)
+                ? (course.serverProgressPercent! / 100.0).clamp(0.0, 1.0)
+                : (allIds.isNotEmpty
+                    ? (completedInCourse / allIds.length).clamp(0.0, 1.0)
+                    : 0.0);
 
-          final Course? course = coursesState.allCourses
-              .cast<Course?>()
-              .firstWhere(
-                (c) => c?.id == widget.courseId || c?.slug == widget.courseId,
-                orElse: () => null,
-              );
+            return BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(
+              builder: (context, entitlementState) {
+                final entitlement = entitlementState.entitlementFor(course.id);
+                final isEnrolled =
+                    !isExpired && entitlement.canAccessProtectedContent;
+                final isVerifying =
+                    entitlement.status == CourseAccessState.loading;
 
-          if (course == null) {
-            return Scaffold(
-              appBar: AppBar(title: Text('course_details.title'.tr())),
-              body: Center(child: Text('course_details.not_found'.tr())),
-            );
-          }
+                return BlocBuilder<ReceiptsCubit, ReceiptsState>(
+                  builder: (context, receiptsState) {
+                    final latestReceipt =
+                        receiptsState.historyOrNull?.latestForCourse(course.id);
+                    final isResubmission =
+                        latestReceipt?.status == ReceiptStatus.rejected;
 
-          return BlocBuilder<AuthCubit, AuthState>(
-            builder: (context, authState) {
-              final currentUser =
-                  authState is Authenticated ? authState.user : null;
-              final isExpired =
-                  currentUser != null && currentUser.isCourseExpired(course.id);
-
-              // صلاحية الاشتراك تصدر حصرياً من خادم Laravel عبر حقل has_enrolled الموثق،
-              // ولا يُسمح لأي بيانات محلية قديمة أو إيصالات سداد بتجاوز قرار الخادم
-              final isEnrolled = !isExpired && course.hasEnrolled;
-
-              final allIds = course.allLessonIds;
-              final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(
-                course: course,
-                userCompletedLessonIds: {...?currentUser?.completedLessonIds},
-              );
-              final completedInCourse = course.serverCompletedCount ??
-                  allIds.where(completedSet.contains).length;
-              final progress = (course.serverProgressPercent != null)
-                  ? (course.serverProgressPercent! / 100.0).clamp(0.0, 1.0)
-                  : (allIds.isNotEmpty
-                      ? (completedInCourse / allIds.length).clamp(0.0, 1.0)
-                      : 0.0);
-
-              return BlocBuilder<AccessCubit, AccessState>(
-                builder: (context, accessState) {
-                  CourseAccessRequest? accessRequest;
-                  if (accessState is AccessLoaded) {
-                    accessRequest = accessState.getRequest(course.id);
-                  } else if (accessState is AccessLoading) {
-                    accessRequest = accessState.requestsByCourse[course.id];
-                  }
-                  final isSubmitting = accessState is AccessLoading;
-                  final isResubmission =
-                      accessRequest?.status == AccessStatus.rejected;
-
-                  void handleRequestTap() {
-                    if (currentUser == null) return;
-                    if (course.accessMode == CourseAccessMode.open ||
-                        course.autoEnrollStudents) {
-                      context.read<AccessCubit>().verifyCourseEntitlement(
-                            uid: currentUser.uid,
-                            course: course,
+                    Future<void> verifyEntitlement() async {
+                      if (currentUser == null) return;
+                      final result = await context
+                          .read<CourseEntitlementCubit>()
+                          .verifyCourseEntitlement(
+                            courseId: course.id,
+                            courseSlug: course.slug ?? course.id,
+                            studentId: currentUser.uid,
                           );
-                      return;
-                    }
-                    if (course.accessMode == CourseAccessMode.assignedOnly) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'course_details.assigned_only_warning'.tr(),
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-                    _showRequestAccessModal(
-                      context,
-                      course,
-                      currentUser,
-                      isResubmission: isResubmission,
-                    );
-                  }
-
-                  void handleLockedLessonTap() {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'course_details.locked_for_subscribers'.tr(),
-                        ),
-                      ),
-                    );
-                  }
-
-                  void handleSequentialLockedTap(String reason) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(reason),
-                        backgroundColor: const Color(0xFFB45309),
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                  }
-
-                  final isDesktopSplit = context.screenWidth >= 980;
-
-                  return BlocBuilder<AssignmentsCubit, AssignmentsState>(
-                    bloc: _assignmentsCubit,
-                    builder: (context, assignmentsState) {
-                      final submissions = assignmentsState is AssignmentsLoaded
-                          ? assignmentsState.data.submissions
-                          : const <AssignmentSubmission>[];
-                      final submittedAssignmentIds =
-                          submissions.map((s) => s.assignmentId).toSet();
-
-                      final ordered = orderedLessons(course);
-                      final lockedReasons = <String, String>{};
-                      String? blockingLessonTitle;
-
-                      for (int i = 0; i < ordered.length; i++) {
-                        final item = ordered[i];
-
-                        if (blockingLessonTitle != null) {
-                          lockedReasons[item.id] = blockingLessonTitle;
-                          continue;
-                        }
-
-                        final requiresSubmission = item.isAssignmentLesson ||
-                            (item.lockNextUntilSubmitted && item.hasAssignment);
-                        final assignmentKey = (item.assignmentId != null &&
-                                item.assignmentId!.isNotEmpty)
-                            ? item.assignmentId!
-                            : 'asg_${item.id}';
-                        final isSubmitted =
-                            submittedAssignmentIds.contains(assignmentKey) ||
-                                submittedAssignmentIds.contains(item.id) ||
-                                (item.assignmentId != null &&
-                                    submittedAssignmentIds
-                                        .contains(item.assignmentId));
-
-                        if (requiresSubmission && !isSubmitted) {
-                          blockingLessonTitle = item.title;
-                        }
-                      }
-
-                      void handleAssignmentLockedLessonTap(String prevTitle) {
+                      if (!context.mounted) return;
+                      if (result.canAccessProtectedContent) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'course_details.must_submit_assignment_for_lesson'.tr(
-                                args: [prevTitle],
-                              ),
+                              result.message ??
+                                  'تم تأكيد اشتراكك في دورة "${course.title}" من الخادم بنجاح.',
                             ),
-                            backgroundColor: const Color(0xFFB45309),
-                            duration: const Duration(seconds: 4),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                        await _refreshCourseDetailsAndReceipts();
+                      } else if (result.message != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result.message!),
+                            backgroundColor: AppColors.error,
                           ),
                         );
                       }
+                    }
 
-                      return Scaffold(
-                        backgroundColor: AppColors.scaffoldBackground,
-                        appBar: AppBar(
-                          title: Text(
-                            course.title,
-                          ),
-                        ),
-                        body: RefreshIndicator(
-                          color: AppColors.primary,
-                          onRefresh: () async {
-                            await context.read<CoursesCubit>().loadCourseDetails(
-                                  course.slug ?? course.id,
-                                  authCubit: context.read<AuthCubit>(),
-                                );
-                          },
-                          child: ListView(
-                            padding: EdgeInsets.fromLTRB(
-                              0,
-                              20,
-                              0,
-                              MediaQuery.paddingOf(context).bottom + 32,
+                    void handleRequestTap() {
+                      if (currentUser == null) return;
+                      if (course.accessMode == CourseAccessMode.open ||
+                          course.autoEnrollStudents) {
+                        unawaited(verifyEntitlement());
+                        return;
+                      }
+                      if (course.accessMode == CourseAccessMode.assignedOnly) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'course_details.assigned_only_warning'.tr(),
                             ),
-                            children: [
-                              ResponsiveCenter(
-                                child: isDesktopSplit
-                                    ? Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            flex: 7,
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                CourseHeaderBanner(
-                                                  course: course,
-                                                  isEnrolled: isEnrolled,
-                                                ),
-                                                const SizedBox(height: 24),
-                                                CourseCurriculumSection(
-                                                  levels: course.levels,
-                                                  isEnrolled: isEnrolled,
-                                                  completedLessonIds: completedSet,
-                                                  accessibleVideoIds:
-                                                      course.accessibleVideoIds,
-                                                  enforceServerAccessibleList:
-                                                      course.isDetailedFromAuthServer,
-                                                  lockedReasons: lockedReasons,
-                                                  onPlayLesson: (lesson) =>
-                                                      _openLesson(
-                                                        context,
-                                                        course,
-                                                        lesson,
-                                                        currentUser,
-                                                        isEnrolled: isEnrolled,
-                                                        completedLessonIds:
-                                                            completedSet,
-                                                        lockedReasons:
-                                                            lockedReasons,
-                                                      ),
-                                                  onLockedLessonTap:
-                                                      handleLockedLessonTap,
-                                                  onAssignmentLockedLessonTap:
-                                                      handleAssignmentLockedLessonTap,
-                                                  onSequentialLockedLessonTap:
-                                                      handleSequentialLockedTap,
-                                                ),
-                                                CourseAssignmentsSection(
-                                                  courseId: course.id,
-                                                  studentId: currentUser?.uid,
-                                                  isEnrolled: isEnrolled,
-                                                  onSubmitTap: (assignment) {
-                                                    if (currentUser != null) {
-                                                      _showSubmitAssignmentModal(
-                                                        context,
-                                                        assignment,
-                                                        currentUser,
-                                                      );
-                                                    }
-                                                  },
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 24),
-                                          SizedBox(
-                                            width: 360,
-                                            child: Column(
-                                              children: [
-                                                CourseEnrollmentStatusCard(
-                                                  course: course,
-                                                  isEnrolled: isEnrolled,
-                                                  isExpired: isExpired,
-                                                  progress: progress,
-                                                  completedLessonsCount:
-                                                      completedInCourse,
-                                                  accessRequest: accessRequest,
-                                                  isSubmittingRequest: isSubmitting,
-                                                  onRequestAccess: handleRequestTap,
-                                                ),
-                                                if (isEnrolled)
-                                                  CourseCertificateCard(
-                                                    course: course,
-                                                    user: currentUser,
-                                                    completedLessonsCount:
-                                                        completedInCourse,
-                                                    totalLessonsCount:
-                                                        course.totalLessonsCount,
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          CourseHeaderBanner(
-                                            course: course,
-                                            isEnrolled: isEnrolled,
-                                          ),
-                                          const SizedBox(height: 16),
-                                          CourseEnrollmentStatusCard(
-                                            course: course,
-                                            isEnrolled: isEnrolled,
-                                            isExpired: isExpired,
-                                            progress: progress,
-                                            completedLessonsCount:
-                                                completedInCourse,
-                                            accessRequest: accessRequest,
-                                            isSubmittingRequest: isSubmitting,
-                                            onRequestAccess: handleRequestTap,
-                                          ),
-                                          if (isEnrolled)
-                                            CourseCertificateCard(
-                                              course: course,
-                                              user: currentUser,
-                                              completedLessonsCount:
-                                                  completedInCourse,
-                                              totalLessonsCount:
-                                                  course.totalLessonsCount,
-                                            ),
-                                          const SizedBox(height: 22),
-                                          CourseCurriculumSection(
-                                            levels: course.levels,
-                                            isEnrolled: isEnrolled,
-                                            completedLessonIds: completedSet,
-                                            accessibleVideoIds:
-                                                course.accessibleVideoIds,
-                                            enforceServerAccessibleList:
-                                                course.isDetailedFromAuthServer,
-                                            lockedReasons: lockedReasons,
-                                            onPlayLesson: (lesson) =>
-                                                _openLesson(
-                                              context,
-                                              course,
-                                              lesson,
-                                              currentUser,
-                                              isEnrolled: isEnrolled,
-                                              completedLessonIds: completedSet,
-                                              lockedReasons: lockedReasons,
-                                            ),
-                                            onLockedLessonTap:
-                                                handleLockedLessonTap,
-                                            onAssignmentLockedLessonTap:
-                                                handleAssignmentLockedLessonTap,
-                                            onSequentialLockedLessonTap:
-                                                handleSequentialLockedTap,
-                                          ),
-                                          CourseAssignmentsSection(
-                                            courseId: course.id,
-                                            studentId: currentUser?.uid,
-                                            isEnrolled: isEnrolled,
-                                            onSubmitTap: (assignment) {
-                                              if (currentUser != null) {
-                                                _showSubmitAssignmentModal(
-                                                  context,
-                                                  assignment,
-                                                  currentUser,
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                              ),
-                            ],
+                          ),
+                        );
+                        return;
+                      }
+                      unawaited(
+                        _showRequestAccessModal(
+                          context,
+                          course,
+                          currentUser,
+                          isResubmission: isResubmission,
+                        ),
+                      );
+                    }
+
+                    void handleLockedLessonTap() {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'course_details.locked_for_subscribers'.tr(),
                           ),
                         ),
                       );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
+                    }
+
+                    void handleSequentialLockedTap(String reason) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(reason),
+                          backgroundColor: const Color(0xFFB45309),
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
+
+                    final isDesktopSplit = context.screenWidth >= 980;
+
+                    return Scaffold(
+                      backgroundColor: AppColors.scaffoldBackground,
+                      appBar: AppBar(title: Text(course.title)),
+                      body: RefreshIndicator(
+                        color: AppColors.primary,
+                        onRefresh: _refreshCourseDetailsAndReceipts,
+                        child: ListView(
+                          padding: EdgeInsets.fromLTRB(
+                            0,
+                            20,
+                            0,
+                            MediaQuery.paddingOf(context).bottom + 32,
+                          ),
+                          children: [
+                            ResponsiveCenter(
+                              child: isDesktopSplit
+                                  ? Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: 7,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              CourseHeaderBanner(
+                                                course: course,
+                                                isEnrolled: isEnrolled,
+                                              ),
+                                              const SizedBox(height: 24),
+                                              CourseCurriculumSection(
+                                                levels: course.levels,
+                                                isEnrolled: isEnrolled,
+                                                completedLessonIds:
+                                                    completedSet,
+                                                accessibleVideoIds:
+                                                    course.accessibleVideoIds,
+                                                enforceServerAccessibleList: course
+                                                    .isDetailedFromAuthServer,
+                                                onPlayLesson: (lesson) =>
+                                                    _openLesson(
+                                                  context,
+                                                  course,
+                                                  lesson,
+                                                  currentUser,
+                                                  isEnrolled: isEnrolled,
+                                                  completedLessonIds:
+                                                      completedSet,
+                                                ),
+                                                onLockedLessonTap:
+                                                    handleLockedLessonTap,
+                                                onSequentialLockedLessonTap:
+                                                    handleSequentialLockedTap,
+                                              ),
+                                              CourseAssignmentsSection(
+                                                courseId: course.id,
+                                                studentId: currentUser?.uid,
+                                                isEnrolled: isEnrolled,
+                                                onSubmitTap: (assignment) {
+                                                  if (currentUser != null) {
+                                                    _showSubmitAssignmentModal(
+                                                      context,
+                                                      assignment,
+                                                      currentUser,
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 24),
+                                        SizedBox(
+                                          width: 360,
+                                          child: Column(
+                                            children: [
+                                              CourseEnrollmentStatusCard(
+                                                course: course,
+                                                isEnrolled: isEnrolled,
+                                                isExpired: isExpired,
+                                                progress: progress,
+                                                completedLessonsCount:
+                                                    completedInCourse,
+                                                entitlement: entitlement,
+                                                latestReceipt: latestReceipt,
+                                                isVerifyingEntitlement:
+                                                    isVerifying,
+                                                onRequestAccess:
+                                                    handleRequestTap,
+                                                onRetryVerification:
+                                                    verifyEntitlement,
+                                              ),
+                                              if (isEnrolled)
+                                                CourseCertificateCard(
+                                                  course: course,
+                                                  user: currentUser,
+                                                  completedLessonsCount:
+                                                      completedInCourse,
+                                                  totalLessonsCount:
+                                                      course.totalLessonsCount,
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        CourseHeaderBanner(
+                                          course: course,
+                                          isEnrolled: isEnrolled,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        CourseEnrollmentStatusCard(
+                                          course: course,
+                                          isEnrolled: isEnrolled,
+                                          isExpired: isExpired,
+                                          progress: progress,
+                                          completedLessonsCount:
+                                              completedInCourse,
+                                          entitlement: entitlement,
+                                          latestReceipt: latestReceipt,
+                                          isVerifyingEntitlement: isVerifying,
+                                          onRequestAccess: handleRequestTap,
+                                          onRetryVerification:
+                                              verifyEntitlement,
+                                        ),
+                                        if (isEnrolled)
+                                          CourseCertificateCard(
+                                            course: course,
+                                            user: currentUser,
+                                            completedLessonsCount:
+                                                completedInCourse,
+                                            totalLessonsCount:
+                                                course.totalLessonsCount,
+                                          ),
+                                        const SizedBox(height: 22),
+                                        CourseCurriculumSection(
+                                          levels: course.levels,
+                                          isEnrolled: isEnrolled,
+                                          completedLessonIds: completedSet,
+                                          accessibleVideoIds:
+                                              course.accessibleVideoIds,
+                                          enforceServerAccessibleList:
+                                              course.isDetailedFromAuthServer,
+                                          onPlayLesson: (lesson) => _openLesson(
+                                            context,
+                                            course,
+                                            lesson,
+                                            currentUser,
+                                            isEnrolled: isEnrolled,
+                                            completedLessonIds: completedSet,
+                                          ),
+                                          onLockedLessonTap:
+                                              handleLockedLessonTap,
+                                          onSequentialLockedLessonTap:
+                                              handleSequentialLockedTap,
+                                        ),
+                                        CourseAssignmentsSection(
+                                          courseId: course.id,
+                                          studentId: currentUser?.uid,
+                                          isEnrolled: isEnrolled,
+                                          onSubmitTap: (assignment) {
+                                            if (currentUser != null) {
+                                              _showSubmitAssignmentModal(
+                                                context,
+                                                assignment,
+                                                currentUser,
+                                              );
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

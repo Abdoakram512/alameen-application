@@ -5,6 +5,8 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -37,14 +39,17 @@ class StudentAnalyticsScreen extends StatelessWidget {
             return const Center(child: Text('يرجى تسجيل الدخول أولاً'));
           }
 
-          return BlocBuilder<CoursesCubit, CoursesState>(
-            builder: (context, coursesState) {
-              final allCourses = coursesState is CoursesLoaded
-                  ? coursesState.allCourses
-                  : const <Course>[];
-              final enrolledCount = allCourses
-                  .where((c) => c.hasEnrolled)
-                  .length;
+          return BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(
+            builder: (context, entitlementState) {
+              return BlocBuilder<CoursesCubit, CoursesState>(
+                builder: (context, coursesState) {
+                  final allCourses = coursesState is CoursesLoaded
+                      ? coursesState.allCourses
+                      : const <Course>[];
+                  final authorizedCourses = allCourses
+                      .where((c) => entitlementState.isCourseAuthorized(c.id))
+                      .toList();
+                  final enrolledCount = authorizedCourses.length;
 
               return RefreshIndicator(
                 color: AppColors.primary,
@@ -137,9 +142,7 @@ class StudentAnalyticsScreen extends StatelessWidget {
                           // Analytics Chart Overview Card
                           StudentAnalyticsOverviewCard(
                             currentUser: currentUser,
-                            enrolledCourses: allCourses
-                                .where((c) => currentUser.isEnrolled(c.id))
-                                .toList(),
+                            enrolledCourses: authorizedCourses,
                           ),
                           const SizedBox(height: 24),
                         ],
@@ -147,6 +150,8 @@ class StudentAnalyticsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+              );
+                },
               );
             },
           );

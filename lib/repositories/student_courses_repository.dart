@@ -15,6 +15,9 @@ abstract class StudentCoursesRepository {
   /// Retrieve detailed course curriculum and structure by slug or id
   Future<Course> getCourseDetails(String slugOrId);
 
+  /// Retrieve strictly server-authenticated course entitlement details without public or cache fallback.
+  Future<Course> verifyStudentCourseDetails(String slugOrId);
+
   /// Retrieve student personalized learning dashboard
   Future<StudentDashboardData> getStudentDashboard();
 

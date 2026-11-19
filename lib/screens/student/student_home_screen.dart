@@ -9,6 +9,8 @@ import '../../core/widgets/app_empty_state.dart';
 import '../../core/widgets/app_error_view.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../core/widgets/app_section_header.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -25,11 +27,15 @@ import 'resume_learning_card.dart';
 class StudentHomeScreen extends StatelessWidget {
   const StudentHomeScreen({super.key});
 
-  bool _isCourseVisibleToStudent(Course c, UserModel? user) {
+  bool _isCourseVisibleToStudent(
+    Course c,
+    UserModel? user,
+    CourseEntitlementState entitlementState,
+  ) {
     if (c.accessMode == CourseAccessMode.closed) return false;
     if (c.accessMode == CourseAccessMode.assignedOnly) {
       if (user == null) return false;
-      return c.hasEnrolled;
+      return entitlementState.isCourseAuthorized(c.id);
     }
     return true;
   }
@@ -39,37 +45,41 @@ class StudentHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       appBar: const StudentHomeAppBar(),
-      body: BlocBuilder<CoursesCubit, CoursesState>(
-        builder: (context, coursesState) {
-          final currentUser = context.select<AuthCubit, UserModel?>((c) {
-            final s = c.state;
-            return s is Authenticated ? s.user : null;
-          });
-          if (coursesState is CoursesLoading) {
-            return const Center(
-              child: AppLoadingIndicator(
-                message: 'جاري تحميل البرامج التدريبية المعتمدة...',
-              ),
-            );
-          }
+      body: BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(
+        builder: (context, entitlementState) {
+          return BlocBuilder<CoursesCubit, CoursesState>(
+            builder: (context, coursesState) {
+              final currentUser = context.select<AuthCubit, UserModel?>((c) {
+                final s = c.state;
+                return s is Authenticated ? s.user : null;
+              });
+              if (coursesState is CoursesLoading) {
+                return const Center(
+                  child: AppLoadingIndicator(
+                    message: 'جاري تحميل البرامج التدريبية المعتمدة...',
+                  ),
+                );
+              }
 
-          if (coursesState is CoursesError) {
-            return AppErrorView(
-              message:
-                  'تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.',
-              onRetry: () => context.read<CoursesCubit>().loadCourses(),
-            );
-          }
+              if (coursesState is CoursesError) {
+                return AppErrorView(
+                  message:
+                      'تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.',
+                  onRetry: () => context.read<CoursesCubit>().loadCourses(),
+                );
+              }
 
-          if (coursesState is! CoursesLoaded) {
-            return const Center(child: AppLoadingIndicator());
-          }
+              if (coursesState is! CoursesLoaded) {
+                return const Center(child: AppLoadingIndicator());
+              }
 
               final allCourses = coursesState.allCourses
-                  .where((c) => _isCourseVisibleToStudent(c, currentUser))
+                  .where((c) =>
+                      _isCourseVisibleToStudent(c, currentUser, entitlementState))
                   .toList();
               final filteredCourses = coursesState.filteredCourses
-                  .where((c) => _isCourseVisibleToStudent(c, currentUser))
+                  .where((c) =>
+                      _isCourseVisibleToStudent(c, currentUser, entitlementState))
                   .toList();
               final categories = <String>{
                 'home.all_categories'.tr(),
@@ -79,7 +89,9 @@ class StudentHomeScreen extends StatelessWidget {
               }.toList();
               final enrolledCount = currentUser == null
                   ? 0
-                  : allCourses.where((c) => c.hasEnrolled).length;
+                  : allCourses
+                      .where((c) => entitlementState.isCourseAuthorized(c.id))
+                      .length;
 
               return RefreshIndicator(
                 color: AppColors.primary,
@@ -132,7 +144,9 @@ class StudentHomeScreen extends StatelessWidget {
                                 for (final course in filteredCourses)
                                   StudentCourseCard(
                                     course: course,
-                                    isEnrolled: course.hasEnrolled,
+                                    isEnrolled: currentUser != null &&
+                                        entitlementState
+                                            .isCourseAuthorized(course.id),
                                     progress: (course.serverProgressPercent != null)
                                         ? (course.serverProgressPercent! / 100.0).clamp(0.0, 1.0)
                                         : (currentUser?.calculateCourseProgress(
@@ -154,7 +168,9 @@ class StudentHomeScreen extends StatelessWidget {
                 ),
               );
             },
-          ),
-        );
+          );
+        },
+      ),
+    );
   }
 }

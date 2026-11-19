@@ -1,139 +1,86 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../models/access_request.dart';
+import '../../../../features/courses/domain/entities/course_entitlement.dart';
+import '../../../../features/payments/domain/entities/payment_receipt.dart';
+import '../../../../features/payments/domain/entities/receipt_status.dart';
 import '../../../../models/course.dart';
 import '../../../../models/course_access_mode.dart';
 
-/// بطاقة موحدة لحالة اشتراك المتدرب (مشترك مع شريط إنجاز واحد، قيد المراجعة، مرفوض مع السبب وإعادة الإرسال، أو غير مشترك).
+/// بطاقة موحدة لحالة أهلية المتدرب بالدورة وسجل أحدث إيصال مالي (للعرض فقط).
 class CourseEnrollmentStatusCard extends StatelessWidget {
   final Course course;
   final bool isEnrolled;
   final bool isExpired;
   final double progress;
   final int completedLessonsCount;
-  final CourseAccessRequest? accessRequest;
-  final bool isSubmittingRequest;
+  final CourseEntitlement? entitlement;
+  final PaymentReceipt? latestReceipt;
+  final bool isVerifyingEntitlement;
   final VoidCallback onRequestAccess;
+  final VoidCallback? onRetryVerification;
 
   const CourseEnrollmentStatusCard({
     super.key,
     required this.course,
     required this.isEnrolled,
+    this.isExpired = false,
     required this.progress,
     required this.completedLessonsCount,
-    required this.accessRequest,
-    required this.isSubmittingRequest,
+    this.entitlement,
+    this.latestReceipt,
+    this.isVerifyingEntitlement = false,
     required this.onRequestAccess,
-    this.isExpired = false,
+    this.onRetryVerification,
   });
 
   @override
   Widget build(BuildContext context) {
     if (course.isEnrollmentClosed && !isEnrolled) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.errorLight,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.errorBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.lock_clock_rounded, color: AppColors.errorDark, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'هذه الدورة مغلقة حالياً',
-                  style: AppTextStyles.heading3.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.errorDark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'تم إغلاق التسجيل والمحتوى لهذه الدورة التدريبية من قبل إدارة المركز.',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.errorDark),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF25D366),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.support_agent_rounded, size: 18),
-                label: const Text('تواصل مع إدارة المركز للاستفسار'),
-                onPressed: () {
-                  AppConstants.launchWhatsApp(
-                    customMessage: 'السلام عليكم، أود الاستفسار عن موعد فتح التسجيل في دورة "${course.title}".',
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+      return _BannerCard(
+        backgroundColor: AppColors.errorLight,
+        borderColor: AppColors.errorBorder,
+        icon: Icons.lock_clock_rounded,
+        iconColor: AppColors.errorDark,
+        title: 'هذه الدورة مغلقة حالياً',
+        titleColor: AppColors.errorDark,
+        body: 'تم إغلاق التسجيل والمحتوى لهذه الدورة التدريبية من قبل إدارة المركز.',
+        actionLabel: 'تواصل مع إدارة المركز للاستفسار',
+        actionIcon: Icons.support_agent_rounded,
+        actionColor: const Color(0xFF25D366),
+        onAction: () {
+          AppConstants.launchWhatsApp(
+            customMessage:
+                'السلام عليكم، أود الاستفسار عن موعد فتح التسجيل في دورة "${course.title}".',
+          );
+        },
       );
     }
 
     if (isExpired) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.warningLight,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.warningBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.timer_off_rounded, color: AppColors.warningDark, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'انتهت صلاحية اشتراكك في هذه الدورة',
-                  style: AppTextStyles.heading3.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.warningDark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'انتهت مدة الصلاحية المحددة للاشتراك. لتمديد صلاحيتك ومتابعة الدروس، يرجى التواصل مع إدارة المركز.',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.warningDark),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF25D366),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.schedule_rounded, size: 18),
-                label: const Text('طلب تمديد الصلاحية عبر واتساب'),
-                onPressed: () {
-                  AppConstants.launchWhatsApp(
-                    customMessage: 'السلام عليكم، أرغب في تمديد صلاحية اشتراكي في دورة "${course.title}".',
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+      return _BannerCard(
+        backgroundColor: AppColors.warningLight,
+        borderColor: AppColors.warningBorder,
+        icon: Icons.timer_off_rounded,
+        iconColor: AppColors.warningDark,
+        title: 'انتهت صلاحية اشتراكك في هذه الدورة',
+        titleColor: AppColors.warningDark,
+        body:
+            'انتهت مدة الصلاحية المحددة للاشتراك. لتمديد صلاحيتك ومتابعة الدروس، يرجى التواصل مع إدارة المركز.',
+        actionLabel: 'طلب تمديد الصلاحية عبر واتساب',
+        actionIcon: Icons.schedule_rounded,
+        actionColor: const Color(0xFF25D366),
+        onAction: () {
+          AppConstants.launchWhatsApp(
+            customMessage:
+                'السلام عليكم، أرغب في تمديد صلاحية اشتراكي في دورة "${course.title}".',
+          );
+        },
       );
     }
+
     if (isEnrolled) {
       return Container(
         padding: const EdgeInsets.all(20),
@@ -196,9 +143,88 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
       );
     }
 
-    final status = accessRequest?.status;
+    // التمييز الصارم بين فشل الشبكة المؤقت ورفض الخادم الصريح
+    final accessStatus = entitlement?.status;
+    if (accessStatus == CourseAccessState.networkUnavailable) {
+      return _BannerCard(
+        backgroundColor: AppColors.warningLight,
+        borderColor: AppColors.warningBorder,
+        icon: Icons.wifi_off_rounded,
+        iconColor: AppColors.warningDark,
+        title: 'تعذر التحقق من الاشتراك مؤقتاً',
+        titleColor: AppColors.warningDark,
+        body: entitlement?.message ??
+            'يوجد انقطاع في الاتصال بالشبكة حالياً، ولا يمكن فتح المحتوى المحمي إلا بعد تأكيد الخادم.',
+        actionLabel: 'إعادة المحاولة الآن',
+        actionIcon: Icons.refresh_rounded,
+        actionColor: AppColors.primary,
+        onAction: isVerifyingEntitlement
+            ? null
+            : (onRetryVerification ?? onRequestAccess),
+      );
+    }
 
-    if (status == AccessStatus.pending) {
+    if (accessStatus == CourseAccessState.unauthorized) {
+      return _BannerCard(
+        backgroundColor: AppColors.errorLight,
+        borderColor: AppColors.errorBorder,
+        icon: Icons.lock_outline_rounded,
+        iconColor: AppColors.errorDark,
+        title: 'يرجى إعادة تسجيل الدخول',
+        titleColor: AppColors.errorDark,
+        body: entitlement?.message ??
+            'انتهت صلاحية جلسة الطالب الحالية. سجّل الدخول مجدداً للتحقق من اشتراكك.',
+      );
+    }
+
+    if (accessStatus == CourseAccessState.forbidden) {
+      final hasExplicitReason =
+          entitlement?.forbiddenReasonCode?.trim().isNotEmpty == true;
+      return _BannerCard(
+        backgroundColor: AppColors.errorLight,
+        borderColor: AppColors.errorBorder,
+        icon: Icons.block_rounded,
+        iconColor: AppColors.errorDark,
+        title: 'الوصول غير متاح حالياً',
+        titleColor: AppColors.errorDark,
+        body: entitlement?.message ??
+            (hasExplicitReason
+                ? 'تم رفض الوصول من الخادم (${entitlement!.forbiddenReasonCode}).'
+                : 'رفض الخادم طلب الوصول لهذا المحتوى (403). يرجى مراجعة إدارة المركز.'),
+        actionLabel: 'تواصل مع الدعم / الإدارة',
+        actionIcon: Icons.support_agent_rounded,
+        actionColor: const Color(0xFF25D366),
+        onAction: () {
+          AppConstants.launchWhatsApp(
+            customMessage:
+                'السلام عليكم، أرجو مراجعة حالة الوصول الخاصة بي في دورة "${course.title}".',
+          );
+        },
+      );
+    }
+
+    if (accessStatus == CourseAccessState.failure) {
+      return _BannerCard(
+        backgroundColor: AppColors.errorLight,
+        borderColor: AppColors.errorBorder,
+        icon: Icons.error_outline_rounded,
+        iconColor: AppColors.errorDark,
+        title: 'تعذر إتمام التحقق من الخادم',
+        titleColor: AppColors.errorDark,
+        body: entitlement?.message ??
+            'حدث خطأ مؤقت أثناء التحقق من أهليتك لهذه الدورة.',
+        actionLabel: 'إعادة التحقق',
+        actionIcon: Icons.refresh_rounded,
+        actionColor: AppColors.primary,
+        onAction: isVerifyingEntitlement
+            ? null
+            : (onRetryVerification ?? onRequestAccess),
+      );
+    }
+
+    // عرض حالة أحدث إيصال مالي كسجل تاريخي فقط (دون اعتباره ترخيصاً بالدخول)
+    final receiptStatus = latestReceipt?.status;
+    if (receiptStatus == ReceiptStatus.pending) {
       return Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
@@ -220,7 +246,7 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'طلب الالتحاق قيد المراجعة',
+                    'إيصال السداد قيد المراجعة الإدارية',
                     style: AppTextStyles.heading3.copyWith(
                       color: AppColors.warningDark,
                       fontWeight: FontWeight.w800,
@@ -228,7 +254,7 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'تم استلام إيصال السداد (${accessRequest?.paymentMethod ?? ''}) وتتم مراجعته من إدارة المركز لتفعيل جميع محاضرات الدورة.',
+                    'تم استلام إيصال السداد (${latestReceipt?.displayMethodLabel ?? ''}) وتتم مراجعته من إدارة المركز لتفعيل اشتراكك على الخادم.',
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.warningDark,
                     ),
@@ -241,59 +267,42 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
       );
     }
 
-    if (status == AccessStatus.rejected) {
-      final adminNote = accessRequest?.adminNotes.trim() ?? '';
-      return Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: AppColors.errorLight,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.errorBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.info_outline_rounded,
-                  color: AppColors.errorDark,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'تعذر اعتماد الإيصال السابق',
-                    style: AppTextStyles.heading3.copyWith(
-                      color: AppColors.errorDark,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              adminNote.isNotEmpty
-                  ? 'ملاحظة الإدارة: $adminNote'
-                  : 'يرجى التأكد من وضوح صورة إيصال التحويل ورقم العملية ثم إعادة الإرسال.',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.errorDark,
-              ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                ),
-                onPressed: isSubmittingRequest ? null : onRequestAccess,
-                icon: const Icon(Icons.upload_file_rounded, size: 18),
-                label: const Text('إعادة إرسال إيصال سداد واضح'),
-              ),
-            ),
-          ],
-        ),
+    if (receiptStatus == ReceiptStatus.rejected) {
+      final adminNote = latestReceipt?.adminNotes?.trim() ?? '';
+      return _BannerCard(
+        backgroundColor: AppColors.errorLight,
+        borderColor: AppColors.errorBorder,
+        icon: Icons.info_outline_rounded,
+        iconColor: AppColors.errorDark,
+        title: 'تعذر اعتماد الإيصال السابق',
+        titleColor: AppColors.errorDark,
+        body: adminNote.isNotEmpty
+            ? 'ملاحظة الإدارة: $adminNote'
+            : 'يرجى التأكد من وضوح صورة إيصال التحويل ورقم العملية ثم إعادة الإرسال.',
+        actionLabel: 'إعادة إرسال إيصال سداد واضح',
+        actionIcon: Icons.upload_file_rounded,
+        actionColor: AppColors.primary,
+        onAction: isVerifyingEntitlement ? null : onRequestAccess,
+      );
+    }
+
+    if (receiptStatus == ReceiptStatus.approved) {
+      // إيصال مالي معتمد تاريخياً مع عدم وجود اشتراك نشط على الخادم: لا يمنح دخولاً!
+      return _BannerCard(
+        backgroundColor: AppColors.warningLight,
+        borderColor: AppColors.warningBorder,
+        icon: Icons.receipt_long_rounded,
+        iconColor: AppColors.warningDark,
+        title: 'الاشتراك غير مفعل حالياً على الخادم',
+        titleColor: AppColors.warningDark,
+        body:
+            'يوجد إيصال مالي معتمد سابقاً (#${latestReceipt!.id})، لكن تفعيل الوصول الحالي للدورة غير نشط على الخادم. يمكنك إعادة التحقق أو التواصل مع الإدارة.',
+        actionLabel: 'تحديث الحالة من الخادم',
+        actionIcon: Icons.refresh_rounded,
+        actionColor: AppColors.primary,
+        onAction: isVerifyingEntitlement
+            ? null
+            : (onRetryVerification ?? onRequestAccess),
       );
     }
 
@@ -366,7 +375,7 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
                     border: Border.all(color: AppColors.successBorder),
                   ),
                   child: const Text(
-                    'مفتوح ومجاني',
+                    'دورة مجانية',
                     style: TextStyle(
                       color: AppColors.successDark,
                       fontWeight: FontWeight.bold,
@@ -378,7 +387,7 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'هذه الدورة مفتوحة ومتاحة لجميع الطلاب مجاناً بدون الحاجة لموافقة أو إيصالات سداد.',
+              'يتحقق التطبيق من الخادم لتأكيد تسجيلك وإتاحة محاضرات هذه الدورة لحسابك.',
               style: AppTextStyles.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -389,8 +398,8 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.success,
                 ),
-                onPressed: isSubmittingRequest ? null : onRequestAccess,
-                icon: isSubmittingRequest
+                onPressed: isVerifyingEntitlement ? null : onRequestAccess,
+                icon: isVerifyingEntitlement
                     ? const SizedBox(
                         width: 18,
                         height: 18,
@@ -400,7 +409,7 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
                         ),
                       )
                     : const Icon(Icons.play_circle_fill_rounded, size: 20),
-                label: const Text('ابدأ الدورة الآن مجاناً'),
+                label: const Text('التحقق من الأهلية وبدء الدورة'),
               ),
             ),
           ],
@@ -447,8 +456,8 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
             width: double.infinity,
             height: 48,
             child: FilledButton.icon(
-              onPressed: isSubmittingRequest ? null : onRequestAccess,
-              icon: isSubmittingRequest
+              onPressed: isVerifyingEntitlement ? null : onRequestAccess,
+              icon: isVerifyingEntitlement
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -467,3 +476,85 @@ class CourseEnrollmentStatusCard extends StatelessWidget {
   }
 }
 
+class _BannerCard extends StatelessWidget {
+  final Color backgroundColor;
+  final Color borderColor;
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final Color titleColor;
+  final String body;
+  final String? actionLabel;
+  final IconData? actionIcon;
+  final Color? actionColor;
+  final VoidCallback? onAction;
+
+  const _BannerCard({
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.titleColor,
+    required this.body,
+    this.actionLabel,
+    this.actionIcon,
+    this.actionColor,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTextStyles.heading3.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: titleColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: AppTextStyles.bodyMedium.copyWith(color: titleColor),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: actionColor ?? AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: onAction,
+                icon: Icon(actionIcon ?? Icons.refresh_rounded, size: 18),
+                label: Text(actionLabel!),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
