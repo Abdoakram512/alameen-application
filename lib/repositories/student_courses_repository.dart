@@ -6,11 +6,17 @@ abstract class StudentCoursesRepository {
   /// Stream of courses for UI real-time binding
   Stream<List<Course>> streamCourses();
 
+  /// Retrieve cached public catalog courses from local storage for instant zero-latency UI
+  Future<List<Course>?> getCachedCourses();
+
   /// Retrieve all available courses
   Future<List<Course>> getCourses();
 
   /// Retrieve public catalog courses from REST API
-  Future<List<Course>> getPublicCourses({String? search, bool forceRefresh = false});
+  Future<List<Course>> getPublicCourses({
+    String? search,
+    bool forceRefresh = false,
+  });
 
   /// Retrieve detailed course curriculum and structure by slug or id
   Future<Course> getCourseDetails(String slugOrId);

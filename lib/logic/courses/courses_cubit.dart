@@ -44,13 +44,21 @@ class CoursesCubit extends Cubit<CoursesState> {
   }
 
   Future<void> loadCourses({bool forceRefresh = false}) async {
-    if (_cachedCourses.isEmpty) {
+    _coursesSubscription?.cancel();
+
+    // 1. استرجاع الكاش المحلي فوراً (Zero Latency) لمنع شاشة اللودينج المعطلة
+    if (_cachedCourses.isEmpty && !forceRefresh) {
+      final local = await _coursesRepository.getCachedCourses();
+      if (local != null && local.isNotEmpty && _cachedCourses.isEmpty) {
+        _updateCourses(local);
+      } else if (_cachedCourses.isEmpty) {
+        emit(CoursesLoading());
+      }
+    } else if (_cachedCourses.isEmpty) {
       emit(CoursesLoading());
     }
 
-    _coursesSubscription?.cancel();
-
-    // 1. Subscribe to repository stream (local cache + remote updates)
+    // 2. الاشتراك في تدفق التحديثات
     _coursesSubscription = _coursesRepository.streamCourses().listen(
       (courses) {
         if (courses.isNotEmpty) {
@@ -64,7 +72,7 @@ class CoursesCubit extends Cubit<CoursesState> {
       },
     );
 
-    // 2. Fetch catalog from Laravel REST API
+    // 3. جلب القائمة الحديثة من خادم Laravel في الخلفية وتحديث الكاش
     try {
       final courses = await _coursesRepository.getPublicCourses(
         forceRefresh: forceRefresh,

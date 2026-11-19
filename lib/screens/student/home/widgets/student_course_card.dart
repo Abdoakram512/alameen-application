@@ -22,181 +22,187 @@ class StudentCourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
+    return RepaintBoundary(
+      child: Material(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isEnrolled
-                  ? AppColors.success.withValues(alpha: 0.45)
-                  : AppColors.borderHairline,
-            ),
-            boxShadow: AppColors.cardShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(17),
-                ),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      AppCachedImage(
-                        imageUrl: course.thumbnailUrl,
-                        cacheWidth: 960,
-                        fit: BoxFit.cover,
-                      ),
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        width: 120,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.68),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            course.category.isNotEmpty
-                                ? course.category
-                                : 'تخاطب وتأهيل',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 10,
-                        left: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isEnrolled
-                                ? AppColors.success
-                                : AppColors.primary,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            isEnrolled ? 'مشترك ومفعّل' : course.priceFormatted,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isEnrolled
+                    ? AppColors.success.withValues(alpha: 0.45)
+                    : AppColors.borderHairline,
               ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      course.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.heading3.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 17,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      course.description.replaceAll(RegExp(r'\s+'), ' ').trim(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+              boxShadow: AppColors.cardShadow,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(17),
+                  ),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: _MetaItem(
-                            icon: PhosphorIconsRegular.chalkboardTeacher,
-                            text: course.instructor,
-                          ),
+                        AppCachedImage(
+                          imageUrl: course.thumbnailUrl,
+                          cacheWidth: 480,
+                          fit: BoxFit.cover,
                         ),
-                        if (course.levels.isNotEmpty)
-                          _MetaItem(
-                            icon: PhosphorIconsRegular.stack,
-                            text: '${course.levels.length} مستويات',
-                          ),
-                        _MetaItem(
-                          icon: PhosphorIconsRegular.playCircle,
-                          text: '${course.totalLessonsCount} محاضرة',
-                        ),
-                      ],
-                    ),
-                    if (isEnrolled) ...[
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          width: 120,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.68),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: Text(
-                              'نسبة الإنجاز',
+                              course.category.isNotEmpty
+                                  ? course.category
+                                  : 'تخاطب وتأهيل',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.caption.copyWith(
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
-                          Text(
-                            '${(progress * 100).toInt()}%',
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w800,
+                        ),
+                        Positioned(
+                          bottom: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
                             ),
+                            decoration: BoxDecoration(
+                              color: isEnrolled
+                                  ? AppColors.success
+                                  : AppColors.primary,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              isEnrolled
+                                  ? 'مشترك ومفعّل'
+                                  : course.priceFormatted,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        course.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.heading3.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        course.description
+                            .replaceAll(RegExp(r'\s+'), ' ')
+                            .trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: _MetaItem(
+                              icon: PhosphorIconsRegular.chalkboardTeacher,
+                              text: course.instructor,
+                            ),
+                          ),
+                          if (course.levels.isNotEmpty)
+                            _MetaItem(
+                              icon: PhosphorIconsRegular.stack,
+                              text: '${course.levels.length} مستويات',
+                            ),
+                          _MetaItem(
+                            icon: PhosphorIconsRegular.playCircle,
+                            text: '${course.totalLessonsCount} محاضرة',
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(
-                          value: progress.clamp(0.0, 1.0),
-                          minHeight: 6,
-                          backgroundColor: AppColors.primaryLight,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            AppColors.primary,
+                      if (isEnrolled) ...[
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'نسبة الإنجاز',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.caption.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${(progress * 100).toInt()}%',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: progress.clamp(0.0, 1.0),
+                            minHeight: 6,
+                            backgroundColor: AppColors.primaryLight,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              AppColors.primary,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

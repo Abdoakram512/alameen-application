@@ -69,6 +69,19 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   // ══════════════════════════════════════════════════════════════════════════
 
   @override
+  Future<List<Course>?> getCachedCourses() async {
+    if (_cachedCourses.isNotEmpty) return _cachedCourses;
+    try {
+      final cached = await _cache.getPublicCourses();
+      if (cached != null && cached.isNotEmpty) {
+        _cachedCourses = cached;
+        return cached;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  @override
   Stream<List<Course>> streamCourses() {
     // 1. Emit memory cache immediately if available
     if (_cachedCourses.isNotEmpty) {
@@ -91,10 +104,6 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
           })
           .catchError((_) {});
     }
-
-    // 3. Trigger asynchronous background sync from Laravel REST API
-    // The fetch itself publishes once; do not echo it into the stream again.
-    unawaited(getCourses().then<void>((_) {}).catchError((_) {}));
 
     return _coursesStreamController.stream;
   }

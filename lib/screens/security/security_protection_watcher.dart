@@ -103,8 +103,8 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
       // 4. فحص استباقي فوري: هل يوجد مسجل شاشة يعمل مسبقاً قبل فتح التطبيق؟
       await _checkScreenRecordingStatus();
 
-      // 5. فحص دوري خفيف للتأكد في حال عدم إطلاق النظام لحدث المستمع
-      _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      // 5. فحص دوري خفيف في الخلفية دون استهلاك الـ Main Thread (المستمع الأصلي Event-driven نشط بالفعل)
+      _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
         _checkScreenRecordingStatus();
       });
     } catch (e) {
@@ -149,10 +149,13 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
     _lastAlertSentAt = now;
 
     try {
-      final platformName = mounted ? Theme.of(context).platform.name : 'unknown';
+      final platformName = mounted
+          ? Theme.of(context).platform.name
+          : 'unknown';
       final effectiveVideoId = videoId ?? _activeVideoIdNotifier.value;
 
-      final client = widget.apiClient ??
+      final client =
+          widget.apiClient ??
           (sl.isRegistered<ApiClient>() ? sl<ApiClient>() : null);
       if (client == null) return;
 
@@ -173,8 +176,7 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
   Future<void> reportSecurityViolationForTesting(
     String alertType, {
     int? videoId,
-  }) =>
-      _reportSecurityViolation(alertType, videoId: videoId);
+  }) => _reportSecurityViolation(alertType, videoId: videoId);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -216,7 +218,9 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
                   if (!_isRecordingDetected && context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('تم التحقق بنجاح، يمكنك متابعة التعلم الآن.'),
+                        content: Text(
+                          'تم التحقق بنجاح، يمكنك متابعة التعلم الآن.',
+                        ),
                         backgroundColor: AppColors.success,
                       ),
                     );

@@ -158,76 +158,41 @@ class StudentHomeScreen extends StatelessWidget {
                         ),
                       )
                     else
-                      SliverLayoutBuilder(
-                        builder: (context, constraints) {
-                          final width = constraints.crossAxisExtent;
-                          final horizontal = context.horizontalPagePadding;
-                          final contentWidth = (width - horizontal * 2).clamp(
-                            0.0,
-                            AppBreakpoints.maxContentWidth - horizontal * 2,
-                          );
-                          final columns = (contentWidth / 320).floor().clamp(
-                            1,
-                            3,
-                          );
-                          return SliverPadding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: (width - contentWidth) / 2,
-                            ),
-                            sliver: SliverList.builder(
-                              itemCount: (filteredCourses.length / columns)
-                                  .ceil(),
-                              itemBuilder: (context, row) => Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    for (var col = 0; col < columns; col++) ...[
-                                      if (col > 0) const SizedBox(width: 16),
-                                      Expanded(
-                                        child:
-                                            row * columns + col >=
-                                                filteredCourses.length
-                                            ? const SizedBox.shrink()
-                                            : Builder(
-                                                builder: (context) {
-                                                  final course =
-                                                      filteredCourses[row *
-                                                              columns +
-                                                          col];
-                                                  return StudentCourseCard(
-                                                    course: course,
-                                                    isEnrolled:
-                                                        currentUser != null &&
-                                                        entitlementState
-                                                            .isCourseAuthorized(
-                                                              course.id,
-                                                            ),
-                                                    progress:
-                                                        (course.serverProgressPercent !=
-                                                            null)
-                                                        ? (course.serverProgressPercent! /
-                                                                  100.0)
-                                                              .clamp(0.0, 1.0)
-                                                        : (currentUser?.calculateCourseProgress(
-                                                                course
-                                                                    .allLessonIds,
-                                                              ) ??
-                                                              0.0),
-                                                    onTap: () => context.push(
-                                                      '/course/${course.id}',
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                      SliverPadding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: context.horizontalPagePadding,
+                        ),
+                        sliver: SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 440,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
+                                childAspectRatio: 0.94,
                               ),
-                            ),
-                          );
-                        },
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final course = filteredCourses[index];
+                            return StudentCourseCard(
+                              course: course,
+                              isEnrolled:
+                                  currentUser != null &&
+                                  entitlementState.isCourseAuthorized(
+                                    course.id,
+                                  ),
+                              progress: (course.serverProgressPercent != null)
+                                  ? (course.serverProgressPercent! / 100.0)
+                                        .clamp(0.0, 1.0)
+                                  : (currentUser?.calculateCourseProgress(
+                                          course.allLessonIds,
+                                        ) ??
+                                        0.0),
+                              onTap: () => context.push('/course/${course.id}'),
+                            );
+                          }, childCount: filteredCourses.length),
+                        ),
                       ),
                     const SliverToBoxAdapter(
                       child: SizedBox(height: kBottomNavigationBarHeight + 24),
