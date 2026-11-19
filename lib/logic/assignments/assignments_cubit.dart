@@ -7,23 +7,53 @@ import 'assignments_state.dart';
 
 class AssignmentsCubit extends Cubit<AssignmentsState> {
   final StudentAssignmentsRepository _repository;
+  int _requestGeneration = 0;
+  String? _activeStudentId;
 
   AssignmentsCubit({
     required StudentAssignmentsRepository repository,
   })  : _repository = repository,
         super(const AssignmentsInitial());
 
-  Future<void> loadAssignments({bool reset = true}) async {
-    if (reset) {
+  String? get activeStudentId => _activeStudentId;
+
+  /// مسح حالة التكليفات وعزل الجلسة عند تسجيل الخروج أو تبديل الحساب
+  void clear() {
+    _requestGeneration++;
+    _activeStudentId = null;
+    if (!isClosed) {
+      emit(const AssignmentsInitial());
+    }
+  }
+
+  void reset() => clear();
+
+  @override
+  Future<void> close() {
+    _requestGeneration++;
+    _activeStudentId = null;
+    return super.close();
+  }
+
+  Future<void> loadAssignments({String? studentId, bool reset = true}) async {
+    final generation = ++_requestGeneration;
+    if (studentId != null) {
+      _activeStudentId = studentId;
+    }
+
+    if (reset && !isClosed) {
       emit(const AssignmentsLoading());
     }
 
     try {
       final data = await _repository.getAssignments();
+      if (generation != _requestGeneration || isClosed) return;
       emit(AssignmentsLoaded(data: data));
     } on ApiException catch (e) {
+      if (generation != _requestGeneration || isClosed) return;
       emit(AssignmentsError(e.message));
     } catch (e) {
+      if (generation != _requestGeneration || isClosed) return;
       emit(AssignmentsError('تعذر تحميل التكليفات السريرية: $e'));
     }
   }
@@ -36,7 +66,7 @@ class AssignmentsCubit extends Cubit<AssignmentsState> {
     String? studentNotes,
   }) async {
     final currentState = state;
-    if (currentState is AssignmentsLoaded) {
+    if (currentState is AssignmentsLoaded && !isClosed) {
       emit(currentState.copyWith(isSubmitting: true));
     }
 
@@ -49,11 +79,11 @@ class AssignmentsCubit extends Cubit<AssignmentsState> {
         studentNotes: studentNotes,
       );
 
-      // Refresh list to update status
-      await loadAssignments(reset: false);
+      // تحديث قائمة التكليفات بعد التسليم
+      await loadAssignments(studentId: _activeStudentId, reset: false);
       return submission;
     } catch (e) {
-      if (state is AssignmentsLoaded) {
+      if (state is AssignmentsLoaded && !isClosed) {
         emit((state as AssignmentsLoaded).copyWith(isSubmitting: false));
       }
       if (e is ApiException) rethrow;

@@ -42,10 +42,8 @@ class CourseLevel extends Equatable {
         : ((json['order'] is num) ? (json['order'] as num).toInt() : 1);
 
     // مبدأ أمني صارم: Fail Closed
-    // إذا لم يحدد الخادم صراحةً حقل is_accessible، يُتاح المستوى الأول فقط افتراضياً، وتُقفل كافة المستويات اللاحقة
-    final accessible = json.containsKey('is_accessible')
-        ? json['is_accessible'] == true
-        : (order <= 1);
+    // المستوى لا يُتاح إلا إذا أكد خادم Laravel ذلك صراحة عبر is_accessible: true
+    final accessible = json.containsKey('is_accessible') && json['is_accessible'] == true;
 
     return CourseLevel(
       id: json['id']?.toString() ?? '',
@@ -70,9 +68,7 @@ class CourseLevel extends Equatable {
     final order = (map['order'] is num) ? (map['order'] as num).toInt() : 1;
     final accessible = map.containsKey('is_accessible')
         ? map['is_accessible'] == true
-        : (map.containsKey('isAccessible')
-            ? map['isAccessible'] == true
-            : (order <= 1));
+        : (map.containsKey('isAccessible') && map['isAccessible'] == true);
 
     return CourseLevel(
       id: map['id']?.toString() ?? '',

@@ -39,27 +39,28 @@ class CourseProgressPolicy {
     if (levelIndex < 0 || levelIndex >= levels.length) return false;
     final level = levels[levelIndex];
 
+    // الطالب غير المسجل لا يملك صلاحية فتح أي مستوى بالدورة
     if (!isEnrolled) {
       return false;
     }
 
-    // قفل الخادم له الأولوية القصوى ولا يمكن تجاوزه بحالة محلية
+    // خادم Laravel هو المصدر الحاكم: المستوى لا يفتح مطلقاً إذا كان الخادم يغلقه
     if (!level.isAccessible) {
       return false;
     }
 
-    // المستوى الأول مفتوح بمجرد تفعيل الاشتراك وموافقة الخادم
+    // المستوى الأول مفتوح بمجرد تأكيد اشتراك الطالب وسماح الخادم
     if (levelIndex == 0) {
       return true;
     }
 
-    // كل مستوى تالٍ يشترط إنجاز >= 95% من المستوى السابق
+    // كل مستوى تالٍ يتطلب إكمال 95% على الأقل من دروس المستوى السابق
     final previousLevel = levels[levelIndex - 1];
-    final prevPct = levelCompletionPercentage(
+    final prevProgress = levelCompletionPercentage(
       previousLevel,
       completedLessonIds: completedLessonIds,
     );
-    return prevPct >= strictLevelThresholdPercent;
+    return prevProgress >= strictLevelThresholdPercent;
   }
 
   /// البحث عن فهرس المستوى الذي يحتوي على [lessonId].

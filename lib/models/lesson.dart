@@ -261,10 +261,10 @@ class Lesson extends Equatable {
       order: (json['sort_order'] is num)
           ? (json['sort_order'] as num).toInt()
           : ((json['order'] is num) ? (json['order'] as num).toInt() : 1),
-      isFreePreview: json['is_free_preview'] == true,
+      isFreePreview: json['is_free_preview'] == true || json['is_free'] == true,
       isAccessible: json.containsKey('is_accessible')
           ? json['is_accessible'] == true
-          : true,
+          : (json['is_free_preview'] == true || json['is_free'] == true),
       isCompleted: isCompleted,
       completionThresholdPercentage: rawThreshold,
       isPublished: json['is_published'] != false,

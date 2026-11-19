@@ -8,7 +8,6 @@ import 'package:secure_screen_app/core/di/injection_container.dart';
 import 'package:secure_screen_app/core/storage/course_local_cache.dart';
 import 'package:secure_screen_app/core/storage/secure_token_storage.dart';
 import 'package:secure_screen_app/datasources/courses_remote_data_source.dart';
-import 'package:secure_screen_app/logic/access/access_cubit.dart';
 import 'package:secure_screen_app/logic/auth/auth_cubit.dart';
 import 'package:secure_screen_app/logic/auth/auth_state.dart';
 import 'package:secure_screen_app/logic/courses/courses_cubit.dart';
@@ -94,7 +93,6 @@ void main() {
   });
 
   tearDown(() {
-    AccessCubit.clearCache();
   });
 
   group('P3 Clean Architecture & Zero Legacy Debt Verification Tests', () {
@@ -223,12 +221,9 @@ void main() {
         authRepository: mockAuthRepo,
       );
 
-      // Verify signOut emits Unauthenticated and clears static cache
+      // Verify signOut emits Unauthenticated
       await cubit.signOut();
       expect(cubit.state, isA<Unauthenticated>());
-
-      // Attempting to clear cache again is idempotent and safe
-      AccessCubit.clearCache();
     });
 
     test('6. Stale asynchronous restoreSession response arriving after logout is safely ignored', () async {

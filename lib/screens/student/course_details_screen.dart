@@ -330,7 +330,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                     if (currentUser == null) return;
                     if (course.accessMode == CourseAccessMode.open ||
                         course.autoEnrollStudents) {
-                      context.read<AccessCubit>().enrollInOpenCourse(
+                      context.read<AccessCubit>().verifyCourseEntitlement(
                             uid: currentUser.uid,
                             course: course,
                           );

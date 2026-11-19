@@ -14,6 +14,7 @@ import '../../repositories/student_profile_repository.dart';
 import '../../repositories/student_support_repository.dart';
 import '../../services/watch_queue.dart';
 import '../access/access_cubit.dart';
+import '../assignments/assignments_cubit.dart';
 import 'auth_state.dart';
 
 class AuthCubit extends Cubit<AuthState> {
@@ -92,7 +93,12 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
-        AccessCubit.clearCache();
+        if (sl.isRegistered<AccessCubit>()) {
+          sl<AccessCubit>().clear();
+        }
+        if (sl.isRegistered<AssignmentsCubit>()) {
+          sl<AssignmentsCubit>().clear();
+        }
         emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
@@ -177,7 +183,12 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
-        AccessCubit.clearCache();
+        if (sl.isRegistered<AccessCubit>()) {
+          sl<AccessCubit>().clear();
+        }
+        if (sl.isRegistered<AssignmentsCubit>()) {
+          sl<AssignmentsCubit>().clear();
+        }
         emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
@@ -324,7 +335,12 @@ class AuthCubit extends Cubit<AuthState> {
     final outgoingUid = state is Authenticated ? (state as Authenticated).user.uid : null;
     emit(Unauthenticated());
     try {
-      AccessCubit.clearCache();
+      if (sl.isRegistered<AccessCubit>()) {
+        sl<AccessCubit>().clear();
+      }
+      if (sl.isRegistered<AssignmentsCubit>()) {
+        sl<AssignmentsCubit>().clear();
+      }
       if (outgoingUid != null && outgoingUid.isNotEmpty) {
         if (sl.isRegistered<WatchQueue>()) {
           await sl<WatchQueue>().clearUser(outgoingUid);
@@ -423,7 +439,12 @@ class AuthCubit extends Cubit<AuthState> {
         } catch (_) {}
       }
 
-      AccessCubit.clearCache();
+      if (sl.isRegistered<AccessCubit>()) {
+        sl<AccessCubit>().clear();
+      }
+      if (sl.isRegistered<AssignmentsCubit>()) {
+        sl<AssignmentsCubit>().clear();
+      }
       if (sl.isRegistered<WatchQueue>()) {
         await sl<WatchQueue>().clearUser(current.user.uid);
       } else {

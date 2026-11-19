@@ -399,7 +399,6 @@ void main() {
       if (await tempFile.exists()) {
         await tempFile.delete();
       }
-      AccessCubit.clearCache();
     });
 
     test('initial state is AccessInitial', () {
@@ -436,7 +435,7 @@ void main() {
 
       expectLater(cubit.stream, emitsInOrder(expectedStates));
 
-      await cubit.enrollInOpenCourse(
+      await cubit.verifyCourseEntitlement(
         uid: 'user_1',
         course: freeCourse,
       );
@@ -478,21 +477,22 @@ void main() {
       final expectedStates = [
         isA<AccessLoading>(),
         isA<AccessActionSuccess>().having(
-          (s) => s.getStatus('100'),
-          'status for course 100',
-          equals(AccessStatus.approved),
+          (s) => s.isCourseAuthorized('100'),
+          'isCourseAuthorized for course 100',
+          isTrue,
         ),
       ];
 
       expectLater(cubit.stream, emitsInOrder(expectedStates));
 
-      await cubit.enrollInOpenCourse(
+      await cubit.verifyCourseEntitlement(
         uid: 'user_1',
         course: freeCourse,
       );
 
       final state = cubit.state as AccessActionSuccess;
-      expect(state.getStatus('100'), equals(AccessStatus.approved));
+      expect(state.isCourseAuthorized('100'), isTrue);
+      expect(state.getEntitlement('100'), equals(CourseEntitlementStatus.enrolled));
       expect(state.message, contains('تم تأكيد اشتراكك في دورة "دورة مجانية مفتوحة" من الخادم بنجاح'));
     });
 
@@ -659,8 +659,7 @@ void main() {
       );
     });
 
-    test('7. clearCache and clear reset state and caches across account switching', () {
-      AccessCubit.clearCache();
+    test('7. clear resets state and caches across account switching', () {
       cubit.clear();
       expect(cubit.state, equals(AccessInitial()));
     });

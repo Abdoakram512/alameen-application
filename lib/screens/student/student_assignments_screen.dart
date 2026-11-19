@@ -12,20 +12,12 @@ import '../../logic/assignments/assignments_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../models/assignment.dart';
-import '../../models/clinical_task_data.dart';
 import '../../models/user_profile.dart';
-import '../../repositories/student_assignments_repository.dart';
 import 'assignments_widgets/pending_assignments_tab_view.dart';
 import 'assignments_widgets/student_assignments_kpi_header.dart';
 import 'assignments_widgets/submissions_history_tab_view.dart';
 import 'widgets/submit_assignment_sheet.dart';
 
-/// شاشة التكليفات والتقييمات السريرية للطالب.
-///
-/// قاعدة معمارية:
-/// خادم Laravel هو المصدر الأوحد للمهام والتسليمات والدرجات.
-/// الواجهة لا تُصنّع أي تكليفات محلية ولا تستدعي المستودعات مباشرة،
-/// بل تعتمد كلياً على [AssignmentsCubit] وتستعرض حالة العرض غير القابلة للتعديل.
 class StudentAssignmentsScreen extends StatefulWidget {
   final AssignmentsCubit? cubit;
 
@@ -57,13 +49,16 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
       _cubit = sl<AssignmentsCubit>();
       _ownsCubit = true;
     } else {
-      _cubit = AssignmentsCubit(
-        repository: sl<StudentAssignmentsRepository>(),
+      throw StateError(
+        'AssignmentsCubit must be provided through the composition boundary or dependency injection.',
       );
-      _ownsCubit = true;
     }
 
-    _cubit.loadAssignments();
+    final authState = context.read<AuthCubit>().state;
+    if (authState is Authenticated) {
+      _lastStudentId = authState.user.uid;
+      _cubit.loadAssignments(studentId: authState.user.uid);
+    }
   }
 
   @override
@@ -92,7 +87,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
         user: user,
       ),
     );
-    _cubit.loadAssignments(reset: false);
+    _cubit.loadAssignments(studentId: _lastStudentId, reset: false);
   }
 
   @override
@@ -101,11 +96,15 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
       value: _cubit,
       child: BlocListener<AuthCubit, AuthState>(
         listener: (context, authState) {
-          if (authState is Authenticated) {
+          if (authState is Unauthenticated) {
+            _lastStudentId = null;
+            _cubit.clear();
+          } else if (authState is Authenticated) {
             final uid = authState.user.uid;
             if (_lastStudentId != uid) {
               _lastStudentId = uid;
-              _cubit.loadAssignments(reset: false);
+              _cubit.clear();
+              _cubit.loadAssignments(studentId: uid);
             }
           }
         },
@@ -156,55 +155,45 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
                   if (asgState is AssignmentsError) {
                     return AppErrorView(
                       message: asgState.message,
-                      onRetry: () => _cubit.loadAssignments(),
+                      onRetry: () => _cubit.loadAssignments(studentId: currentUser.uid),
                     );
                   }
 
-                  final data = asgState is AssignmentsLoaded
-                      ? asgState.data
-                      : const StudentAssignmentsData();
+                  if (asgState is AssignmentsLoaded) {
+                    final data = asgState.data;
 
-                  final pendingAssignments = data.pendingTasks;
-                  final submissions = data.submissions;
-                  final avgScore = data.averageScore;
-                  final submittedCount = data.submittedCount;
-                  final pendingCount = data.pendingCount;
-
-                  return ResponsiveCenter(
-                    child: Column(
-                      children: [
-                        // KPI Summary Header
-                        StudentAssignmentsKpiHeader(
-                          submittedCount: submittedCount,
-                          pendingCount: pendingCount,
-                          avgScore: avgScore,
-                        ),
-
-                        // Tab Views
-                        Expanded(
-                          child: TabBarView(
-                            controller: _tabController,
-                            children: [
-                              // Tab 1: الواجبات والتطبيقات المطلوبة من الخادم
-                              PendingAssignmentsTabView(
-                                assignments: pendingAssignments,
-                                onOpenSubmit: (asg) => _openSubmitSheet(
-                                  context,
-                                  asg,
-                                  currentUser,
-                                ),
-                              ),
-
-                              // Tab 2: المسلّمة والتقييمات المعتمدة من الخادم
-                              SubmissionsHistoryTabView(
-                                submissions: submissions,
-                              ),
-                            ],
+                    return ResponsiveCenter(
+                      child: Column(
+                        children: [
+                          StudentAssignmentsKpiHeader(
+                            submittedCount: data.submittedCount,
+                            pendingCount: data.pendingCount,
+                            avgScore: data.averageScore,
                           ),
-                        ),
-                      ],
-                    ),
-                  );
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                PendingAssignmentsTabView(
+                                  assignments: data.pendingTasks,
+                                  onOpenSubmit: (asg) => _openSubmitSheet(
+                                    context,
+                                    asg,
+                                    currentUser,
+                                  ),
+                                ),
+                                SubmissionsHistoryTabView(
+                                  submissions: data.submissions,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return const SizedBox.shrink();
                 },
               );
             },

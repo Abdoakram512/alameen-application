@@ -96,7 +96,6 @@ void main() {
         InMemorySharedPreferencesAsync.empty();
     prefs = SharedPreferencesAsync();
     await sl.reset();
-    AccessCubit.clearCache();
   });
 
   tearDown(() async {
@@ -877,7 +876,7 @@ void main() {
       );
       addTearDown(accessCubit.close);
 
-      await accessCubit.enrollInOpenCourse(
+      await accessCubit.verifyCourseEntitlement(
         uid: '101',
         course: autoEnrolledCourse,
       );
