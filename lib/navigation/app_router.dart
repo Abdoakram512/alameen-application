@@ -18,10 +18,13 @@ import '../screens/info/privacy_policy_screen.dart';
 import '../screens/security/suspended_account_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/student/course_details_screen.dart';
+import '../screens/student/notifications/student_notifications_screen.dart';
 import '../screens/student/student_analytics_screen.dart';
 import '../screens/student/student_assignments_screen.dart';
 import '../screens/student/student_home_screen.dart';
 import '../screens/student/student_profile_screen.dart';
+import '../screens/student/support/student_support_tickets_screen.dart';
+import '../screens/student/support/ticket_conversation_screen.dart';
 import 'student_route_policy.dart';
 
 GoRouter createStudentRouter(AuthCubit authCubit) {
@@ -83,6 +86,24 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
       GoRoute(
         path: '/faqs',
         builder: (context, state) => const FaqsScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const StudentNotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/support',
+        builder: (context, state) => const StudentSupportTicketsScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final idStr = state.pathParameters['id'] ?? '0';
+              final id = int.tryParse(idStr) ?? 0;
+              return TicketConversationScreen(ticketId: id);
+            },
+          ),
+        ],
       ),
       if (kDebugMode)
         GoRoute(

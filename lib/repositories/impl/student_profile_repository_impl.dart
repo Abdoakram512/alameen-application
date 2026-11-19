@@ -67,4 +67,20 @@ class StudentProfileRepositoryImpl implements StudentProfileRepository {
       return;
     }
   }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    final remote = _remote;
+    if (remote != null) {
+      await remote.updatePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        newPasswordConfirmation: newPasswordConfirmation,
+      );
+    }
+  }
 }

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -131,8 +130,9 @@ class NotificationService {
     }
   }
 
-  /// حفظ توكن الجهاز في ملف الطالب في فايرستور
-  /// حفظ توكن الجهاز في ملف الطالب في فايرستور (فقط إذا تغير التوكن لتوفير عمليات الكتابة)
+  /// إدارة توكن FCM محلياً دون أي كتابة في فايرستور القديم.
+  /// نظراً لأن واجهة برمجة تطبيقات Laravel لا توفر حالياً نقطة تسجيل لتوكن الجهاز (/student/device-token)،
+  /// يتم الاحتفاظ بالتوكن في التخزين المحلي لاستخدامه فور توفر نقطة النهاية الرسمية في الخادم.
   Future<void> syncFCMToken(String uid) async {
     try {
       // ignore: deprecated_member_use
@@ -142,18 +142,13 @@ class NotificationService {
         final cacheKey = 'fcm_token_synced_$uid';
         final cachedToken = await prefs.getString(cacheKey);
         if (cachedToken == token) {
-          // Token has not changed; skip redundant Firestore write
+          // التوكن مطابق ومحفوظ مسبقاً
           return;
         }
 
-        await FirebaseFirestore.instance.collection('users').doc(uid).set(
-          {
-            'fcmToken': token,
-            'lastTokenUpdate': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        // حفظ التوكن محلياً للطالب النشط دون كتابة في فايرستور
         await prefs.setString(cacheKey, token);
+        debugPrint('FCM device token synchronized locally for student: $uid');
       }
     } catch (e) {
       debugPrint('syncFCMToken error: $e');
@@ -178,27 +173,16 @@ class NotificationService {
     }
   }
 
-  /// حذف توكن الإشعارات عند تسجيل خروج الطالب لحماية الخصوصية على الأجهزة المشتركة
+  /// حذف توكن الإشعارات محلياً ومن خدمة FCM عند تسجيل خروج الطالب لحماية الخصوصية
   Future<void> clearFCMToken(String? uid) async {
     try {
       if (uid != null && uid.isNotEmpty) {
         final prefs = SharedPreferencesAsync();
         await prefs.remove('fcm_token_synced_$uid');
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .set(
-              {
-                'fcmToken': FieldValue.delete(),
-                'lastTokenUpdate': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true),
-            )
-            .timeout(const Duration(seconds: 4))
-            .catchError((_) => null);
       }
       // ignore: deprecated_member_use
       await _fcm.deleteToken().timeout(const Duration(seconds: 4)).catchError((_) => null);
+      debugPrint('FCM device token cleared cleanly upon sign-out.');
     } catch (e) {
       debugPrint('clearFCMToken error: $e');
     }

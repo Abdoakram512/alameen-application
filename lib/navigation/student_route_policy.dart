@@ -3,6 +3,17 @@ String safeStudentDestination(String? value) {
   if (uri == null || uri.hasScheme || uri.hasAuthority) return '/';
   if (uri.path == '/') return '/';
   final segments = uri.pathSegments;
+  if (segments.length == 1 &&
+      (segments[0] == 'notifications' ||
+          segments[0] == 'support' ||
+          segments[0] == 'about' ||
+          segments[0] == 'privacy-policy' ||
+          segments[0] == 'faqs')) {
+    return '/${segments[0]}';
+  }
+  if (segments.length == 2 && segments[0] == 'support') {
+    return '/support/${segments[1]}';
+  }
   if (segments.length != 2 ||
       segments[0] != 'course' ||
       segments[1].isEmpty ||

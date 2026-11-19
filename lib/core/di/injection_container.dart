@@ -8,7 +8,9 @@ import '../../datasources/assignments_remote_data_source.dart';
 import '../../datasources/auth_remote_data_source.dart';
 import '../../datasources/certificates_remote_data_source.dart';
 import '../../datasources/courses_remote_data_source.dart';
+import '../../datasources/notifications_remote_data_source.dart';
 import '../../datasources/payment_remote_data_source.dart';
+import '../../datasources/support_tickets_remote_data_source.dart';
 import '../../datasources/watch_remote_data_source.dart';
 import '../../logic/access/access_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
@@ -16,8 +18,10 @@ import '../../logic/courses/courses_cubit.dart';
 import '../../repositories/impl/student_assignments_repository_impl.dart';
 import '../../repositories/impl/student_content_repository_impl.dart';
 import '../../repositories/impl/student_courses_repository_impl.dart';
+import '../../repositories/impl/student_notifications_repository_impl.dart';
 import '../../repositories/impl/student_payment_repository_impl.dart';
 import '../../repositories/impl/student_profile_repository_impl.dart';
+import '../../repositories/impl/student_support_repository_impl.dart';
 import '../../repositories/impl/student_watch_repository_impl.dart';
 import '../../repositories/student_assignments_repository.dart';
 import '../../repositories/student_auth_repository.dart';
@@ -25,8 +29,10 @@ import '../../repositories/student_certificates_repository.dart';
 import '../../repositories/student_content_repository.dart';
 import '../../repositories/student_courses_repository.dart';
 import '../../repositories/student_learning_repository.dart';
+import '../../repositories/student_notifications_repository.dart';
 import '../../repositories/student_payment_repository.dart';
 import '../../repositories/student_profile_repository.dart';
+import '../../repositories/student_support_repository.dart';
 import '../../repositories/student_watch_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
@@ -100,6 +106,20 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<CertificatesRemoteDataSource>()) {
     sl.registerLazySingleton<CertificatesRemoteDataSource>(
       () => CertificatesRemoteDataSourceImpl(
+        apiClient: sl<ApiClient>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<NotificationsRemoteDataSource>()) {
+    sl.registerLazySingleton<NotificationsRemoteDataSource>(
+      () => NotificationsRemoteDataSourceImpl(
+        apiClient: sl<ApiClient>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<SupportTicketsRemoteDataSource>()) {
+    sl.registerLazySingleton<SupportTicketsRemoteDataSource>(
+      () => SupportTicketsRemoteDataSourceImpl(
         apiClient: sl<ApiClient>(),
       ),
     );
@@ -184,6 +204,20 @@ Future<void> initDependencies() async {
     sl.registerLazySingleton<StudentPaymentRepository>(
       () => StudentPaymentRepositoryImpl(
         remoteDataSource: sl<PaymentRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<StudentNotificationsRepository>()) {
+    sl.registerLazySingleton<StudentNotificationsRepository>(
+      () => StudentNotificationsRepositoryImpl(
+        remoteDataSource: sl<NotificationsRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<StudentSupportRepository>()) {
+    sl.registerLazySingleton<StudentSupportRepository>(
+      () => StudentSupportRepositoryImpl(
+        remoteDataSource: sl<SupportTicketsRemoteDataSource>(),
       ),
     );
   }

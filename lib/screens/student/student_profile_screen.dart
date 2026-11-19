@@ -1,5 +1,4 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -20,10 +19,12 @@ import '../../widgets/app_dialogs.dart';
 import '../../widgets/language_switch_button.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'certificate/student_certificates_screen.dart';
+import 'profile/widgets/change_password_sheet.dart';
 import 'profile/widgets/edit_student_profile_sheet.dart';
 import 'profile/widgets/enrolled_courses_section.dart';
 import 'profile/widgets/student_profile_header_card.dart';
 import 'profile/widgets/student_requests_status_section.dart';
+import 'support/student_support_tickets_screen.dart';
 
 class StudentProfileScreen extends StatelessWidget {
   final VoidCallback? onBrowseCourses;
@@ -330,12 +331,13 @@ class StudentProfileScreen extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 12),
+                              // تذاكر الدعم الفني الرسمية (Laravel Tickets)
                               SizedBox(
                                 width: double.infinity,
                                 height: 46,
                                 child: ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF25D366),
+                                    backgroundColor: AppColors.primary,
                                     foregroundColor: Colors.white,
                                     elevation: 0,
                                     alignment: Alignment.center,
@@ -344,14 +346,47 @@ class StudentProfileScreen extends StatelessWidget {
                                     ),
                                   ),
                                   icon: const Icon(
-                                    PhosphorIconsRegular.whatsappLogo,
+                                    PhosphorIconsRegular.chatsCircle,
                                     size: 20,
                                   ),
-                                  label: Text(
-                                    'تواصل مع الدعم الفني (${AppConstants.supportPhone})',
-                                    style: const TextStyle(
+                                  label: const Text(
+                                    'تذاكر الدعم والاستفسارات الأكاديمية',
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13.5,
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const StudentSupportTicketsScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 44,
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF16A34A),
+                                    side: const BorderSide(color: Color(0xFF86EFAC)),
+                                    alignment: Alignment.center,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    PhosphorIconsRegular.whatsappLogo,
+                                    size: 19,
+                                  ),
+                                  label: Text(
+                                    'تواصل عبر واتساب (${AppConstants.supportPhone})',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
                                     ),
                                   ),
                                   onPressed: () {
@@ -513,45 +548,6 @@ class StudentProfileScreen extends StatelessWidget {
                                   );
                                 },
                               ),
-                              if (kDebugMode) ...[
-                                const Divider(
-                                  height: 1,
-                                  color: AppColors.divider,
-                                  indent: 56,
-                                ),
-                                ListTile(
-                                  leading: Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryLight,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      PhosphorIconsRegular.terminalWindow,
-                                      size: 18,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  title: const Text(
-                                    'أداة فحص تكامل الـ API (Debug)',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  subtitle: const Text(
-                                    'فحص مسارات Laravel API الموثقة بالجلسة الحية',
-                                    style: TextStyle(fontSize: 11),
-                                  ),
-                                  trailing: Icon(
-                                    AppDirectionalIcons.chevronDetail(context),
-                                    size: 16,
-                                    color: AppColors.primary,
-                                  ),
-                                  onTap: () => context.push('/debug-api-test'),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -571,6 +567,36 @@ class StudentProfileScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              // Change Password Button
+                              SizedBox(
+                                height: 46,
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.primary,
+                                    side: const BorderSide(
+                                      color: AppColors.primary,
+                                    ),
+                                    alignment: Alignment.center,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    PhosphorIconsRegular.lockKey,
+                                    size: 19,
+                                  ),
+                                  label: const Text(
+                                    'تغيير كلمة المرور',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  onPressed: () => ChangePasswordSheet.show(context),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
                               // Prominent Sign Out Button
                               SizedBox(
                                 height: 46,

@@ -140,10 +140,29 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
     }
 
     try {
+      final uri = Uri.tryParse(trimmed);
+      String? baseUrl;
+      try {
+        baseUrl = _apiClient.dio.options.baseUrl;
+      } catch (_) {
+        baseUrl = null;
+      }
+      final baseUri = baseUrl != null ? Uri.tryParse(baseUrl) : null;
+
+      // حماية أمنية صارمة: إذا كان الرابط خارجياً (مثل S3 أو Cloudflare أو Bunny أو CDN خارجي)
+      // يتم منع إرسال ترويسة Sanctum Authorization لمنع تسريب بيانات الاعتماد لجهات خارجية
+      final bool isExternalHost = uri != null &&
+          baseUri != null &&
+          uri.hasAuthority &&
+          uri.host.toLowerCase() != baseUri.host.toLowerCase();
+
       final response = await _apiClient.dio.get<List<int>>(
         trimmed,
         options: Options(
           responseType: ResponseType.bytes,
+          extra: {
+            if (isExternalHost) 'skipAuth': true,
+          },
           headers: {
             'Accept': 'application/pdf,application/octet-stream',
           },
@@ -151,7 +170,19 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
       );
 
       if (response.data != null && response.data!.isNotEmpty) {
-        return Uint8List.fromList(response.data!);
+        final bytes = Uint8List.fromList(response.data!);
+
+        // التحقق من صحة ترويسة الـ PDF الرسمية (%PDF)
+        if (bytes.length < 4 ||
+            bytes[0] != 0x25 ||
+            bytes[1] != 0x50 ||
+            bytes[2] != 0x44 ||
+            bytes[3] != 0x46) {
+          throw const CertificateFileNotAvailableException(
+            'الملف المستلم ليس ملف PDF معتمداً أو قد يكون الرابط الموقّع منتهياً.',
+          );
+        }
+        return bytes;
       }
       throw const CertificateFileNotAvailableException(
         'محتوى ملف الشهادة المستلم من الخادم فارغ.',
@@ -162,9 +193,14 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
           'ملف الشهادة غير موجود على خادم التخزين (404). يرجى التواصل مع الدعم الأكاديمي لإعادة توليده.',
         );
       }
-      if (e.response?.statusCode == 403) {
+      if (e.response?.statusCode == 403 || e.response?.statusCode == 401) {
         throw const CertificateFileNotAvailableException(
-          'لا تملك الصلاحية للوصول إلى ملف الشهادة (403).',
+          'انتهت صلاحية رابط التحميل الموقّع أو لا تملك الصلاحية لتحميل هذا الملف.',
+        );
+      }
+      if (e.response?.statusCode == 410) {
+        throw const CertificateFileNotAvailableException(
+          'رابط تحميل الشهادة منتهي الصلاحية (410). يرجى تحديث الصفحة للحصول على رابط جديد.',
         );
       }
       throw ApiException.fromDioException(e);

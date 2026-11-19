@@ -9,7 +9,9 @@ import '../../models/student_courses_data.dart';
 import '../../models/student_dashboard_data.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_certificates_repository.dart';
+import '../../repositories/student_notifications_repository.dart';
 import '../../repositories/student_profile_repository.dart';
+import '../../repositories/student_support_repository.dart';
 import '../../services/watch_queue.dart';
 import '../access/access_cubit.dart';
 import 'auth_state.dart';
@@ -336,6 +338,12 @@ class AuthCubit extends Cubit<AuthState> {
       if (sl.isRegistered<StudentCertificatesRepository>()) {
         sl<StudentCertificatesRepository>().clearCache();
       }
+      if (sl.isRegistered<StudentNotificationsRepository>()) {
+        sl<StudentNotificationsRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentSupportRepository>()) {
+        sl<StudentSupportRepository>().clearCache();
+      }
       await _authRepository.logout().timeout(const Duration(seconds: 4));
     } catch (_) {}
   }
@@ -426,6 +434,12 @@ class AuthCubit extends Cubit<AuthState> {
       }
       if (sl.isRegistered<StudentCertificatesRepository>()) {
         sl<StudentCertificatesRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentNotificationsRepository>()) {
+        sl<StudentNotificationsRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentSupportRepository>()) {
+        sl<StudentSupportRepository>().clearCache();
       }
 
       await _authRepository.logout();

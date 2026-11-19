@@ -88,6 +88,13 @@ abstract class AuthRemoteDataSource {
   });
 
   Future<bool> deleteAccount({required String currentPassword});
+
+  /// Update password (PUT /student/settings/password)
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  });
 }
 
 /// Implementation of [AuthRemoteDataSource] using [ApiClient] and multipart/form-data.
@@ -494,6 +501,26 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
       final data = response.data;
       return (data is Map<String, dynamic> && data['success'] == true);
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
+  }
+
+  @override
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    try {
+      await _apiClient.put(
+        '/student/settings/password',
+        data: {
+          'current_password': currentPassword,
+          'password': newPassword,
+          'password_confirmation': newPasswordConfirmation,
+        },
+      );
     } on DioException catch (e) {
       throw ApiException.fromDioException(e);
     }

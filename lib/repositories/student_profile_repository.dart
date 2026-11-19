@@ -20,4 +20,11 @@ abstract class StudentProfileRepository {
     String uid, {
     String? currentPassword,
   });
+
+  /// Update student password (PUT /student/settings/password)
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  });
 }
