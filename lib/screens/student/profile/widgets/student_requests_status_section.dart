@@ -10,16 +10,38 @@ import '../../../../features/payments/domain/entities/payment_receipt.dart';
 import '../../../../features/payments/domain/entities/receipt_status.dart';
 import '../../../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import '../../../../features/payments/presentation/cubits/receipts/receipts_state.dart';
+import '../../../../logic/auth/auth_cubit.dart';
+import '../../../../logic/auth/auth_state.dart';
 
 /// قسم متابعة سجل الإيصالات المالية الخاصة بالمتدرب (للتدقيق المالي فقط، ولا يمنح أهلية).
-class StudentRequestsStatusSection extends StatelessWidget {
+class StudentRequestsStatusSection extends StatefulWidget {
   const StudentRequestsStatusSection({super.key});
+
+  @override
+  State<StudentRequestsStatusSection> createState() =>
+      _StudentRequestsStatusSectionState();
+}
+
+class _StudentRequestsStatusSectionState
+    extends State<StudentRequestsStatusSection> {
+  @override
+  void initState() {
+    super.initState();
+    final authState = context.read<AuthCubit>().state;
+    if (authState is Authenticated) {
+      final cubit = context.read<ReceiptsCubit>();
+      if (cubit.state is ReceiptsInitial) {
+        cubit.loadReceipts(studentId: authState.user.uid, silent: true);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ReceiptsCubit, ReceiptsState>(
       builder: (context, state) {
-        final receipts = state.historyOrNull?.receipts ?? const <PaymentReceipt>[];
+        final receipts =
+            state.historyOrNull?.receipts ?? const <PaymentReceipt>[];
         if (receipts.isEmpty) return const SizedBox.shrink();
 
         return Padding(
@@ -66,23 +88,23 @@ class _ReceiptHistoryTile extends StatelessWidget {
     final isAr = context.locale.languageCode == 'ar';
     final (label, bgColor, fgColor, icon) = switch (receipt.status) {
       ReceiptStatus.approved => (
-          isAr ? 'تم اعتماد الإيصال' : 'Receipt Approved',
-          AppColors.successLight,
-          AppColors.successDark,
-          PhosphorIconsFill.checkCircle,
-        ),
+        isAr ? 'تم اعتماد الإيصال' : 'Receipt Approved',
+        AppColors.successLight,
+        AppColors.successDark,
+        PhosphorIconsFill.checkCircle,
+      ),
       ReceiptStatus.rejected => (
-          isAr ? 'يحتاج مراجعة' : 'Needs Review',
-          AppColors.errorLight,
-          AppColors.errorDark,
-          PhosphorIconsFill.warningCircle,
-        ),
+        isAr ? 'يحتاج مراجعة' : 'Needs Review',
+        AppColors.errorLight,
+        AppColors.errorDark,
+        PhosphorIconsFill.warningCircle,
+      ),
       ReceiptStatus.pending => (
-          isAr ? 'قيد المراجعة' : 'Pending',
-          AppColors.warningLight,
-          AppColors.warningDark,
-          PhosphorIconsFill.clockCountdown,
-        ),
+        isAr ? 'قيد المراجعة' : 'Pending',
+        AppColors.warningLight,
+        AppColors.warningDark,
+        PhosphorIconsFill.clockCountdown,
+      ),
     };
 
     return Container(
@@ -124,7 +146,10 @@ class _ReceiptHistoryTile extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: bgColor,
                   borderRadius: BorderRadius.circular(999),

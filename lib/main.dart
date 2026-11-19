@@ -16,8 +16,6 @@ import 'logic/courses/courses_cubit.dart';
 import 'navigation/app_router.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/security/security_protection_watcher.dart';
-import 'services/notification_service.dart';
-import 'services/watch_queue.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -73,25 +71,18 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
         if (_lastSyncedUid != null) _coursesCubit.clearStudentSession();
         _lastSyncedUid = uid;
 
-        // مزامنة غير معطلة للواجهة في الخلفية للطالب المعتمد فقط
-        unawaited(_receiptsCubit.loadReceipts(studentId: uid));
-        unawaited(_courseEntitlementCubit.syncStudentEnrollments(studentId: uid));
-        unawaited(_coursesCubit.syncStudentState(authCubit: _authCubit));
-
-        if (sl.isRegistered<WatchQueue>()) {
-          unawaited(sl<WatchQueue>().flush(uid).catchError((_) {}));
-        }
-        if (sl.isRegistered<NotificationService>()) {
-          unawaited(sl<NotificationService>().syncFCMToken(uid));
-        }
+        // الطلب الوحيد الضروري لإظهار حالة قفل الدورات والوصول في الشاشة الرئيسية
+        unawaited(
+          _courseEntitlementCubit.syncStudentEnrollments(studentId: uid),
+        );
       }
     } else if (state is Unauthenticated ||
         state is AuthSuspended ||
         state is AuthPendingApproval) {
       _lastSyncedUid = null;
-      _receiptsCubit.clear();
       _courseEntitlementCubit.clear();
       _coursesCubit.clearStudentSession();
+      _receiptsCubit.clear();
     }
   }
 
@@ -131,10 +122,12 @@ class _SecureStudentAppState extends State<SecureStudentApp> {
             return BlocBuilder<AuthCubit, AuthState>(
               bloc: _authCubit,
               builder: (context, authState) {
-                final studentId =
-                    authState is Authenticated ? authState.user.uid : null;
-                final apiClient =
-                    sl.isRegistered<ApiClient>() ? sl<ApiClient>() : null;
+                final studentId = authState is Authenticated
+                    ? authState.user.uid
+                    : null;
+                final apiClient = sl.isRegistered<ApiClient>()
+                    ? sl<ApiClient>()
+                    : null;
                 return SecurityProtectionWatcher(
                   studentId: studentId,
                   apiClient: apiClient,

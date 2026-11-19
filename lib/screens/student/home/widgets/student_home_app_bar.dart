@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -7,6 +8,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
 import '../../../../core/widgets/student_avatar.dart';
 import '../../../../features/payments/domain/entities/payment_receipt.dart';
 import '../../../../features/payments/domain/entities/receipt_history.dart';
@@ -23,18 +25,15 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? displayName;
   final String? photoUrl;
 
-  const StudentHomeAppBar({
-    super.key,
-    this.displayName,
-    this.photoUrl,
-  });
+  const StudentHomeAppBar({super.key, this.displayName, this.photoUrl});
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
 
   @override
   Widget build(BuildContext context) {
-    final effectiveName = displayName ??
+    final effectiveName =
+        displayName ??
         context.select<AuthCubit, String>((c) {
           final s = c.state;
           if (s is Authenticated) {
@@ -44,7 +43,8 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
           }
           return 'home.student_fallback'.tr();
         });
-    final effectivePhoto = photoUrl ??
+    final effectivePhoto =
+        photoUrl ??
         context.select<AuthCubit, String>((c) {
           final s = c.state;
           return s is Authenticated ? s.user.photoUrl : '';
@@ -108,15 +108,26 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   size: 22,
                 ),
               ),
-              onPressed: () =>
-                  _showReceiptsStatusSheet(context, history.receipts),
+              onPressed: () {
+                final authState = context.read<AuthCubit>().state;
+                if (authState is Authenticated) {
+                  unawaited(
+                    context.read<ReceiptsCubit>().loadReceipts(
+                      studentId: authState.user.uid,
+                      silent: history.receipts.isNotEmpty,
+                    ),
+                  );
+                }
+                _showReceiptsStatusSheet(context);
+              },
             );
           },
         ),
         // جرس الإشعارات والتنبيهات المربوط بـ Laravel Notifications REST API
         if (sl.isRegistered<StudentNotificationsRepository>())
           ValueListenableBuilder<int>(
-            valueListenable: sl<StudentNotificationsRepository>().unreadCountListenable,
+            valueListenable:
+                sl<StudentNotificationsRepository>().unreadCountListenable,
             builder: (context, unreadCount, _) {
               return IconButton(
                 tooltip: 'الإشعارات والتنبيهات',
@@ -148,10 +159,7 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  void _showReceiptsStatusSheet(
-    BuildContext context,
-    List<PaymentReceipt> receipts,
-  ) {
+  void _showReceiptsStatusSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -159,153 +167,179 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (sheetContext) {
-        final sorted = List<PaymentReceipt>.from(receipts)
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return BlocBuilder<ReceiptsCubit, ReceiptsState>(
+          bloc: context.read<ReceiptsCubit>(),
+          builder: (context, receiptsState) {
+            final receipts =
+                receiptsState.historyOrNull?.receipts ??
+                const <PaymentReceipt>[];
+            final sorted = List<PaymentReceipt>.from(receipts)
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            final isLoading =
+                receiptsState is ReceiptsLoading && sorted.isEmpty;
 
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            return SafeArea(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        PhosphorIconsRegular.receipt,
-                        color: AppColors.primary,
+                      Row(
+                        children: [
+                          const Icon(
+                            PhosphorIconsRegular.receipt,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'سجل إيصالات السداد المالي',
+                              style: AppTextStyles.heading3.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            icon: const Icon(PhosphorIconsRegular.x, size: 19),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'سجل إيصالات السداد المالي',
-                          style: AppTextStyles.heading3.copyWith(
-                            fontWeight: FontWeight.w800,
+                      const Divider(height: 20),
+                      if (isLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 32),
+                          child: Center(
+                            child: AppLoadingIndicator(
+                              message: 'جاري تحميل سجل إيصالات السداد...',
+                            ),
+                          ),
+                        )
+                      else if (sorted.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Text(
+                              'لا توجد إيصالات سداد مسجلة حالياً.',
+                              style: AppTextStyles.bodyMedium,
+                            ),
+                          ),
+                        )
+                      else
+                        Flexible(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: sorted.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (_, index) {
+                              final receipt = sorted[index];
+                              final (
+                                label,
+                                color,
+                                bg,
+                              ) = switch (receipt.status) {
+                                ReceiptStatus.approved => (
+                                  'تم اعتماد الإيصال',
+                                  AppColors.successDark,
+                                  AppColors.successLight,
+                                ),
+                                ReceiptStatus.rejected => (
+                                  'يحتاج مراجعة الإيصال',
+                                  AppColors.errorDark,
+                                  AppColors.errorLight,
+                                ),
+                                ReceiptStatus.pending => (
+                                  'قيد المراجعة',
+                                  AppColors.warningDark,
+                                  AppColors.warningLight,
+                                ),
+                              };
+
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  context.go('/course/${receipt.courseId}');
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.scaffoldBackground,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppColors.borderHairline,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              receipt.displayCourseTitle,
+                                              style: AppTextStyles.bodyLarge
+                                                  .copyWith(
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                            ),
+                                            if (receipt.status ==
+                                                    ReceiptStatus.rejected &&
+                                                (receipt.adminNotes ?? '')
+                                                    .trim()
+                                                    .isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'ملاحظة الإدارة: ${receipt.adminNotes}',
+                                                style: AppTextStyles.caption
+                                                    .copyWith(
+                                                      color:
+                                                          AppColors.errorDark,
+                                                    ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: bg,
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          label,
+                                          style: AppTextStyles.label.copyWith(
+                                            color: color,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(sheetContext),
-                        icon: const Icon(PhosphorIconsRegular.x, size: 19),
-                      ),
                     ],
                   ),
-                  const Divider(height: 20),
-                  if (sorted.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: Text(
-                          'لا توجد إيصالات سداد مسجلة حالياً.',
-                          style: AppTextStyles.bodyMedium,
-                        ),
-                      ),
-                    )
-                  else
-                    Flexible(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: sorted.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (_, index) {
-                          final receipt = sorted[index];
-                          final (label, color, bg) = switch (receipt.status) {
-                            ReceiptStatus.approved => (
-                              'تم اعتماد الإيصال',
-                              AppColors.successDark,
-                              AppColors.successLight,
-                            ),
-                            ReceiptStatus.rejected => (
-                              'يحتاج مراجعة الإيصال',
-                              AppColors.errorDark,
-                              AppColors.errorLight,
-                            ),
-                            ReceiptStatus.pending => (
-                              'قيد المراجعة',
-                              AppColors.warningDark,
-                              AppColors.warningLight,
-                            ),
-                          };
-
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              context.go('/course/${receipt.courseId}');
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.scaffoldBackground,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.borderHairline,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          receipt.displayCourseTitle,
-                                          style: AppTextStyles.bodyLarge
-                                              .copyWith(
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                        if (receipt.status ==
-                                                ReceiptStatus.rejected &&
-                                            (receipt.adminNotes ?? '')
-                                                .trim()
-                                                .isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'ملاحظة الإدارة: ${receipt.adminNotes}',
-                                            style: AppTextStyles.caption
-                                                .copyWith(
-                                                  color: AppColors.errorDark,
-                                                ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: bg,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      label,
-                                      style: AppTextStyles.label.copyWith(
-                                        color: color,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
   }
 }
-
