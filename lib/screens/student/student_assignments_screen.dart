@@ -43,7 +43,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final AssignmentsCubit _cubit;
-  late final StudentLearningRepository _learningRepo;
+  StudentLearningRepository? _learningRepo;
   bool _ownsCubit = false;
 
   Stream<List<AssignmentSubmission>>? _submissionsStream;
@@ -69,10 +69,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
       _ownsCubit = true;
     }
 
-    _learningRepo = widget.learningRepository ??
-        (sl.isRegistered<StudentLearningRepository>()
-            ? sl<StudentLearningRepository>()
-            : StudentLearningRepositoryImpl());
+    _learningRepo = widget.learningRepository;
 
     _cubit.loadAssignments();
   }
@@ -89,7 +86,9 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
   void _checkStream(String? uid) {
     if (uid != _lastStudentId && uid != null && uid.isNotEmpty) {
       _lastStudentId = uid;
-      _submissionsStream = _learningRepo.streamStudentSubmissions(uid);
+      if (_learningRepo != null) {
+        _submissionsStream = _learningRepo!.streamStudentSubmissions(uid);
+      }
       _cubit.loadAssignments(reset: false);
     }
   }
@@ -172,8 +171,12 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen>
                     return StreamBuilder<List<AssignmentSubmission>>(
                       stream: _submissionsStream,
                       builder: (context, subSnap) {
-                        final submissions =
-                            subSnap.data ?? const <AssignmentSubmission>[];
+                        final serverSubs = asgState is AssignmentsLoaded
+                            ? asgState.data.submissions
+                            : const <AssignmentSubmission>[];
+                        final submissions = serverSubs.isNotEmpty
+                            ? serverSubs
+                            : (subSnap.data ?? const <AssignmentSubmission>[]);
                         final gradedSubs = submissions
                             .where((s) => s.isGraded && s.score != null)
                             .toList();

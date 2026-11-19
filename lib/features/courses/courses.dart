@@ -1,0 +1,21 @@
+// Clean Feature Barrel for Courses & Catalog
+export '../../datasources/courses_remote_data_source.dart';
+export '../../datasources/watch_remote_data_source.dart';
+export '../../logic/courses/courses_cubit.dart';
+export '../../logic/courses/courses_state.dart';
+export '../../models/course.dart';
+export '../../models/course_access_mode.dart';
+export '../../models/course_level.dart';
+export '../../models/course_progress_policy.dart';
+export '../../models/learning_history.dart';
+export '../../models/lesson.dart';
+export '../../models/student_courses_data.dart';
+export '../../repositories/student_courses_repository.dart';
+export '../../repositories/student_learning_repository.dart';
+export '../../repositories/student_watch_repository.dart';
+export '../../screens/student/course_details/widgets/course_certificate_card.dart';
+export '../../screens/student/course_details/widgets/course_curriculum_section.dart';
+export '../../screens/student/course_details/widgets/course_enrollment_status_card.dart';
+export '../../screens/student/course_details/widgets/course_header_banner.dart';
+export '../../screens/student/course_details_screen.dart';
+export '../../screens/student/lesson_playlist.dart';

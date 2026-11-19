@@ -11,6 +11,7 @@ import '../../../core/painters/dashed_border_painter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/app_validators.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../logic/access/access_cubit.dart';
 import '../../../logic/access/access_state.dart';
 import '../../../models/course.dart';
@@ -642,42 +643,24 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                       const SizedBox(height: 24),
 
                       // Submit Button
-                      SizedBox(
-                        width: double.infinity,
+                      AppButton(
+                        text: widget.isResubmission
+                            ? (context.locale.languageCode == 'ar'
+                                ? 'إعادة إرسال الإيصال للمراجعة'
+                                : 'Resubmit Receipt for Review')
+                            : (_isCashAtCenter
+                                ? 'تواصل لتأكيد السداد بالمقر'
+                                : 'requests.submit_btn'.tr()),
+                        isLoading: _isSubmitting,
                         height: 50,
-                        child: FilledButton(
-                          onPressed: _isSubmitting ? null : _submit,
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      _isCashAtCenter
-                                          ? PhosphorIconsRegular.whatsappLogo
-                                          : PhosphorIconsRegular.paperPlaneTilt,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      widget.isResubmission
-                                          ? (context.locale.languageCode == 'ar'
-                                              ? 'إعادة إرسال الإيصال للمراجعة'
-                                              : 'Resubmit Receipt for Review')
-                                          : (_isCashAtCenter
-                                              ? 'تواصل لتأكيد السداد بالمقر'
-                                              : 'requests.submit_btn'.tr()),
-                                    ),
-                                  ],
-                                ),
+                        icon: Icon(
+                          _isCashAtCenter
+                              ? PhosphorIconsRegular.whatsappLogo
+                              : PhosphorIconsRegular.paperPlaneTilt,
+                          size: 18,
+                          color: Colors.white,
                         ),
+                        onPressed: _isSubmitting ? null : _submit,
                       ),
                     ],
                   ),

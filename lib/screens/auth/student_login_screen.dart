@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/app_button.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../navigation/student_route_policy.dart';
@@ -189,33 +190,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    SizedBox(
+                    AppButton(
+                      text: 'auth.login_btn'.tr(),
+                      isLoading: isLoading,
                       height: 50,
-                      child: FilledButton(
-                        onPressed: isLoading ? null : _submitEmailLogin,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.4,
-                                ),
-                              )
-                            : Text(
-                                'auth.login_btn'.tr(),
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
+                      onPressed: isLoading ? null : _submitEmailLogin,
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 18),

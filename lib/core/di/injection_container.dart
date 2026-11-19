@@ -16,6 +16,7 @@ import '../../logic/access/access_cubit.dart';
 import '../../logic/assignments/assignments_cubit.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/certificates/certificates_cubit.dart';
+import '../../logic/content/content_cubit.dart';
 import '../../logic/courses/courses_cubit.dart';
 import '../../logic/notifications/notifications_cubit.dart';
 import '../../logic/support/support_tickets_cubit.dart';
@@ -291,6 +292,14 @@ Future<void> initDependencies() async {
     sl.registerFactory<AssignmentsCubit>(
       () => AssignmentsCubit(
         repository: sl<StudentAssignmentsRepository>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<ContentCubit>()) {
+    sl.registerFactory<ContentCubit>(
+      () => ContentCubit(
+        repository: sl<StudentContentRepository>(),
       ),
     );
   }

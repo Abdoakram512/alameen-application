@@ -8,6 +8,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/feedback/app_error_state.dart';
 import '../../logic/access/access_cubit.dart';
 import '../../logic/access/access_state.dart';
+import '../../logic/assignments/assignments_cubit.dart';
+import '../../logic/assignments/assignments_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -21,7 +23,7 @@ import '../../models/course_progress_policy.dart';
 import '../../models/learning_history.dart';
 import '../../models/lesson.dart';
 import '../../models/user_profile.dart';
-import '../../repositories/student_learning_repository.dart';
+import '../../repositories/student_assignments_repository.dart';
 import 'course_details/widgets/course_assignments_section.dart';
 import 'course_details/widgets/course_certificate_card.dart';
 import 'course_details/widgets/course_curriculum_section.dart';
@@ -33,20 +35,38 @@ import 'widgets/submit_assignment_sheet.dart';
 
 class CourseDetailsScreen extends StatefulWidget {
   final String courseId;
+  final AssignmentsCubit? assignmentsCubit;
 
-  const CourseDetailsScreen({super.key, required this.courseId});
+  const CourseDetailsScreen({
+    super.key,
+    required this.courseId,
+    this.assignmentsCubit,
+  });
 
   @override
   State<CourseDetailsScreen> createState() => _CourseDetailsScreenState();
 }
 
 class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
-  Stream<List<AssignmentSubmission>>? _submissionsStream;
-  String? _lastUid;
+  late final AssignmentsCubit _assignmentsCubit;
+  bool _ownsAssignmentsCubit = false;
 
   @override
   void initState() {
     super.initState();
+    if (widget.assignmentsCubit != null) {
+      _assignmentsCubit = widget.assignmentsCubit!;
+    } else if (sl.isRegistered<AssignmentsCubit>()) {
+      _assignmentsCubit = sl<AssignmentsCubit>();
+      _ownsAssignmentsCubit = true;
+    } else {
+      _assignmentsCubit = AssignmentsCubit(
+        repository: sl<StudentAssignmentsRepository>(),
+      );
+      _ownsAssignmentsCubit = true;
+    }
+    _assignmentsCubit.loadAssignments(reset: false);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final authCubit = context.read<AuthCubit>();
@@ -59,16 +79,12 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     });
   }
 
-  Stream<List<AssignmentSubmission>> _getSubmissionsStream(String? uid) {
-    if (uid == null) return Stream.value(const <AssignmentSubmission>[]);
-    if (_submissionsStream == null || _lastUid != uid) {
-      _lastUid = uid;
-      final repo = sl.isRegistered<StudentLearningRepository>()
-          ? sl<StudentLearningRepository>()
-          : StudentLearningRepositoryImpl();
-      _submissionsStream = repo.streamStudentSubmissions(uid);
+  @override
+  void dispose() {
+    if (_ownsAssignmentsCubit) {
+      _assignmentsCubit.close();
     }
-    return _submissionsStream!;
+    super.dispose();
   }
 
   void _showRequestAccessModal(
@@ -96,8 +112,8 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     BuildContext context,
     Assignment assignment,
     UserModel user,
-  ) {
-    showModalBottomSheet(
+  ) async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -109,6 +125,9 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
         user: user,
       ),
     );
+    if (mounted) {
+      _assignmentsCubit.loadAssignments(reset: false);
+    }
   }
 
   Future<void> _openLesson(
@@ -361,11 +380,12 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
 
                   final isDesktopSplit = context.screenWidth >= 980;
 
-                  return StreamBuilder<List<AssignmentSubmission>>(
-                    stream: _getSubmissionsStream(currentUser?.uid),
-                    builder: (context, submissionsSnap) {
-                      final submissions =
-                          submissionsSnap.data ?? const <AssignmentSubmission>[];
+                  return BlocBuilder<AssignmentsCubit, AssignmentsState>(
+                    bloc: _assignmentsCubit,
+                    builder: (context, assignmentsState) {
+                      final submissions = assignmentsState is AssignmentsLoaded
+                          ? assignmentsState.data.submissions
+                          : const <AssignmentSubmission>[];
                       final submittedAssignmentIds =
                           submissions.map((s) => s.assignmentId).toSet();
 

@@ -5,10 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/widgets/app_lottie_box.dart';
-import '../../core/widgets/app_lottie_loading.dart';
-import '../../core/widgets/feedback/app_error_state.dart';
+import '../../core/widgets/app_empty_state.dart';
+import '../../core/widgets/app_error_view.dart';
+import '../../core/widgets/app_loading_indicator.dart';
+import '../../core/widgets/app_section_header.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
@@ -46,13 +46,15 @@ class StudentHomeScreen extends StatelessWidget {
             return s is Authenticated ? s.user : null;
           });
           if (coursesState is CoursesLoading) {
-            return const AppLottieLoading(
-              message: 'جاري تحميل البرامج التدريبية المعتمدة...',
+            return const Center(
+              child: AppLoadingIndicator(
+                message: 'جاري تحميل البرامج التدريبية المعتمدة...',
+              ),
             );
           }
 
           if (coursesState is CoursesError) {
-            return AppErrorState(
+            return AppErrorView(
               message:
                   'تعذر تحميل البرامج التدريبية حالياً، تحقق من اتصالك بالإنترنت.',
               onRetry: () => context.read<CoursesCubit>().loadCourses(),
@@ -60,7 +62,7 @@ class StudentHomeScreen extends StatelessWidget {
           }
 
           if (coursesState is! CoursesLoaded) {
-            return const AppLottieLoading();
+            return const Center(child: AppLoadingIndicator());
           }
 
               final allCourses = coursesState.allCourses
@@ -116,58 +118,17 @@ class StudentHomeScreen extends StatelessWidget {
                                 context.read<CoursesCubit>().filterByCategory,
                           ),
                           const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'home.available_courses'.tr(),
-                                style: AppTextStyles.heading2,
-                              ),
-                              Text(
-                                'home.courses_count'.tr(args: [
-                                  '${filteredCourses.length}',
-                                ]),
-                                style: AppTextStyles.caption.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
+                          AppSectionHeader(
+                            title: 'home.available_courses'.tr(),
+                            subtitle: 'home.courses_count'.tr(args: [
+                              '${filteredCourses.length}',
+                            ]),
                           ),
                           const SizedBox(height: 14),
                           if (filteredCourses.isEmpty)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(28),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: AppColors.borderHairline,
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  const AppLottieBox(
-                                    assetPath: 'assets/lottie/empty_state.json',
-                                    width: 84,
-                                    height: 84,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'home.no_matching_courses'.tr(),
-                                    style: AppTextStyles.heading3.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'home.try_different_search'.tr(),
-                                    style: AppTextStyles.bodyMedium,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
+                            AppEmptyState(
+                              title: 'home.no_matching_courses'.tr(),
+                              description: 'home.try_different_search'.tr(),
                             )
                           else
                             ResponsiveCardGrid(

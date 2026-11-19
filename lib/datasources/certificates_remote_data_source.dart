@@ -31,7 +31,7 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
   final ApiClient _apiClient;
 
   CertificatesRemoteDataSourceImpl({required ApiClient apiClient})
-      : _apiClient = apiClient;
+    : _apiClient = apiClient;
 
   @override
   Future<List<CourseCertificate>> getStudentCertificates() async {
@@ -44,9 +44,11 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
           final list = data['certificates'] as List;
           return list
               .whereType<Map>()
-              .map((item) => CourseCertificate.fromLaravelJson(
-                    Map<String, dynamic>.from(item),
-                  ))
+              .map(
+                (item) => CourseCertificate.fromLaravelJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
               .toList();
         }
       }
@@ -60,7 +62,10 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
   Future<CourseCertificate> getCertificateDetails(String code) async {
     final cleanCode = code.trim();
     if (cleanCode.isEmpty) {
-      throw const ApiException('رمز الشهادة غير صالح أو فارغ.', statusCode: 400);
+      throw const ApiException(
+        'رمز الشهادة غير صالح أو فارغ.',
+        statusCode: 400,
+      );
     }
 
     try {
@@ -84,7 +89,9 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
   }
 
   @override
-  Future<CertificateVerificationResult> verifyCertificatePublic(String code) async {
+  Future<CertificateVerificationResult> verifyCertificatePublic(
+    String code,
+  ) async {
     final cleanCode = code.trim();
     if (cleanCode.isEmpty) {
       return const CertificateVerificationResult(
@@ -151,7 +158,8 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
 
       // حماية أمنية صارمة: إذا كان الرابط خارجياً (مثل S3 أو Cloudflare أو Bunny أو CDN خارجي)
       // يتم منع إرسال ترويسة Sanctum Authorization لمنع تسريب بيانات الاعتماد لجهات خارجية
-      final bool isExternalHost = uri != null &&
+      final bool isExternalHost =
+          uri != null &&
           baseUri != null &&
           uri.hasAuthority &&
           uri.host.toLowerCase() != baseUri.host.toLowerCase();
@@ -160,12 +168,8 @@ class CertificatesRemoteDataSourceImpl implements CertificatesRemoteDataSource {
         trimmed,
         options: Options(
           responseType: ResponseType.bytes,
-          extra: {
-            if (isExternalHost) 'skipAuth': true,
-          },
-          headers: {
-            'Accept': 'application/pdf,application/octet-stream',
-          },
+          extra: {if (isExternalHost) 'skipAuth': true},
+          headers: {'Accept': 'application/pdf,application/octet-stream'},
         ),
       );
 

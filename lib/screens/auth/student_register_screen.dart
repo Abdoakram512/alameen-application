@@ -8,6 +8,7 @@ import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/app_validators.dart';
+import '../../core/widgets/app_button.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../navigation/student_route_policy.dart';
@@ -225,33 +226,11 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
                       },
                     ),
                     const SizedBox(height: 20),
-                    SizedBox(
+                    AppButton(
+                      text: 'auth.register_btn'.tr(),
+                      isLoading: isLoading,
                       height: 50,
-                      child: FilledButton(
-                        onPressed: isLoading ? null : _submitRegister,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.4,
-                                ),
-                              )
-                            : Text(
-                                'auth.register_btn'.tr(),
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
+                      onPressed: isLoading ? null : _submitRegister,
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16),
