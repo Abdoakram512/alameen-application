@@ -88,18 +88,31 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
   Future<void> _pickImage() async {
     HapticFeedback.lightImpact();
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 65,
-      maxWidth: 1200,
-      maxHeight: 1600,
-    );
-    if (image != null && mounted) {
-      setState(() => _pickedReceiptFile = File(image.path));
+    try {
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 65,
+        maxWidth: 1200,
+        maxHeight: 1600,
+      );
+      if (image != null && mounted) {
+        setState(() => _pickedReceiptFile = File(image.path));
+      }
+    } on PlatformException {
+      if (mounted) {
+        _showErrorSnackBar(
+          context,
+          '\u062a\u0639\u0630\u0631 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0635\u0648\u0631\u0629. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0635\u0644\u0627\u062d\u064a\u0627\u062a \u0627\u0644\u0635\u0648\u0631 \u0648\u062d\u0627\u0648\u0644 \u0645\u062c\u062f\u062f\u0627.',
+        );
+      }
     }
   }
 
   void _submit() {
+    if (context.read<ReceiptSubmissionCubit>().state
+        is ReceiptSubmissionInProgress) {
+      return;
+    }
     if (_isCashAtCenter) {
       AppConstants.launchWhatsApp(
         customMessage:
@@ -118,21 +131,25 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
 
     final courseSlug =
         (widget.course.slug != null && widget.course.slug!.trim().isNotEmpty)
-            ? widget.course.slug!.trim()
-            : widget.course.id;
+        ? widget.course.slug!.trim()
+        : widget.course.id;
 
     final input = ReceiptSubmissionInput(
       courseSlug: courseSlug,
       courseId: widget.course.id,
       courseTitle: widget.course.title,
-      paymentMethod:
-          _isInstaPay ? PaymentMethod.instapay : PaymentMethod.vodafoneCash,
+      paymentMethod: _isInstaPay
+          ? PaymentMethod.instapay
+          : PaymentMethod.vodafoneCash,
       senderName: _nameController.text.trim(),
-      senderAccount: AppValidators.normalizeDigits(_accountController.text.trim()),
+      senderAccount: AppValidators.normalizeDigits(
+        _accountController.text.trim(),
+      ),
       amount: parsedAmount,
       receiptFilePath: _pickedReceiptFile?.path ?? '',
-      transactionReference:
-          _refController.text.trim().isNotEmpty ? _refController.text.trim() : null,
+      transactionReference: _refController.text.trim().isNotEmpty
+          ? _refController.text.trim()
+          : null,
     );
 
     HapticFeedback.mediumImpact();
@@ -216,8 +233,8 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                               child: Text(
                                 widget.isResubmission
                                     ? (context.locale.languageCode == 'ar'
-                                        ? 'إعادة إرسال إيصال السداد'
-                                        : 'Resubmit Payment Receipt')
+                                          ? 'إعادة إرسال إيصال السداد'
+                                          : 'Resubmit Payment Receipt')
                                     : 'requests.sheet_title'.tr(),
                                 style: AppTextStyles.heading3.copyWith(
                                   fontWeight: FontWeight.w800,
@@ -226,7 +243,10 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                             ),
                             IconButton(
                               tooltip: 'dialogs.cancel'.tr(),
-                              icon: const Icon(PhosphorIconsRegular.x, size: 20),
+                              icon: const Icon(
+                                PhosphorIconsRegular.x,
+                                size: 20,
+                              ),
                               onPressed: isSubmitting
                                   ? null
                                   : () => Navigator.pop(context),
@@ -238,7 +258,9 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryLight.withValues(alpha: 0.65),
+                            color: AppColors.primaryLight.withValues(
+                              alpha: 0.65,
+                            ),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: AppColors.borderHairline),
                           ),
@@ -329,11 +351,13 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color:
-                                  AppColors.warningLight.withValues(alpha: 0.5),
+                              color: AppColors.warningLight.withValues(
+                                alpha: 0.5,
+                              ),
                               borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: AppColors.warningBorder),
+                              border: Border.all(
+                                color: AppColors.warningBorder,
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,10 +431,11 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                             controller: _nameController,
                             enabled: !isSubmitting,
                             keyboardType: TextInputType.name,
-                            validator: (value) => AppValidators.validateRequired(
-                              value,
-                              'اسم صاحب الحساب المحول منه',
-                            ),
+                            validator: (value) =>
+                                AppValidators.validateRequired(
+                                  value,
+                                  'اسم صاحب الحساب المحول منه',
+                                ),
                             decoration: const InputDecoration(
                               hintText: 'مثال: أحمد محمد علي',
                               prefixIcon: Icon(
@@ -474,14 +499,14 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                       enabled: !isSubmitting,
                                       keyboardType:
                                           const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
+                                            decimal: true,
+                                          ),
                                       validator: (value) =>
                                           AppValidators.validateNumber(
-                                        value,
-                                        'المبلغ المدفوع',
-                                        1,
-                                      ),
+                                            value,
+                                            'المبلغ المدفوع',
+                                            1,
+                                          ),
                                       decoration: const InputDecoration(
                                         hintText: 'أدخل المبلغ الفعلي',
                                         prefixIcon: Icon(
@@ -584,8 +609,8 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                       onPressed: isSubmitting
                                           ? null
                                           : () => setState(
-                                                () => _pickedReceiptFile = null,
-                                              ),
+                                              () => _pickedReceiptFile = null,
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -616,8 +641,9 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                         height: 44,
                                         decoration: BoxDecoration(
                                           color: AppColors.primaryLight,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                         child: const Icon(
                                           PhosphorIconsRegular.cloudArrowUp,
@@ -635,17 +661,15 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                                               'اضغط لإرفاق صورة إيصال التحويل',
                                               style: AppTextStyles.bodyMedium
                                                   .copyWith(
-                                                color: AppColors.primary,
-                                                fontWeight: FontWeight.w700,
-                                              ),
+                                                    color: AppColors.primary,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
                                             ),
                                             const SizedBox(height: 3),
                                             Text(
                                               'لقطة شاشة للتحويل من تطبيق إنستاباي أو رسالة المحفظة (JPG, PNG, WEBP حتى 5 ميجابايت)',
-                                              style:
-                                                  AppTextStyles.caption.copyWith(
-                                                fontSize: 11.5,
-                                              ),
+                                              style: AppTextStyles.caption
+                                                  .copyWith(fontSize: 11.5),
                                             ),
                                           ],
                                         ),
@@ -656,15 +680,29 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                               ),
                             ),
                         ],
+                        if (state is ReceiptSubmissionValidationFailure ||
+                            state is ReceiptSubmissionNetworkFailure ||
+                            state is ReceiptSubmissionFailure)
+                          Text(switch (state) {
+                            ReceiptSubmissionValidationFailure(
+                              :final message,
+                            ) =>
+                              message,
+                            ReceiptSubmissionNetworkFailure(:final message) =>
+                              message,
+                            ReceiptSubmissionFailure(:final failure) =>
+                              failure.message,
+                            _ => '',
+                          }, style: const TextStyle(color: AppColors.error)),
                         const SizedBox(height: 24),
                         AppButton(
                           text: widget.isResubmission
                               ? (context.locale.languageCode == 'ar'
-                                  ? 'إعادة إرسال الإيصال للمراجعة'
-                                  : 'Resubmit Receipt for Review')
+                                    ? 'إعادة إرسال الإيصال للمراجعة'
+                                    : 'Resubmit Receipt for Review')
                               : (_isCashAtCenter
-                                  ? 'تواصل لتأكيد السداد بالمقر'
-                                  : 'requests.submit_btn'.tr()),
+                                    ? 'تواصل لتأكيد السداد بالمقر'
+                                    : 'requests.submit_btn'.tr()),
                           isLoading: isSubmitting,
                           height: 50,
                           icon: Icon(

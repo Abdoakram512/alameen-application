@@ -7,10 +7,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/app_validators.dart';
 import '../../../core/utils/network_error_mapper.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../../../models/assignment.dart';
 import '../../../models/assignment_submission.dart';
 import '../../../models/user_profile.dart';
-import '../../../repositories/student_learning_repository.dart';
+import '../../../repositories/student_assignments_repository.dart';
 
 class SubmitAssignmentSheet extends StatefulWidget {
   final Assignment assignment;
@@ -34,10 +35,8 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
   bool _isSubmitting = false;
   String _statusMessage = 'جاري إرسال تسليم التكليف...';
 
-  StudentLearningRepository get _repository =>
-      sl.isRegistered<StudentLearningRepository>()
-          ? sl<StudentLearningRepository>()
-          : StudentLearningRepositoryImpl();
+  StudentAssignmentsRepository get _repository =>
+      sl<StudentAssignmentsRepository>();
 
   @override
   void dispose() {
@@ -74,6 +73,7 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) return;
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
 
@@ -114,7 +114,7 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
       parentMessenger.showSnackBar(
         const SnackBar(
           content: Text(
-            'تم تسليم المهمة التطبيقية بنجاح، ويمكنك الآن متابعة الدرس التالي فوراً.',
+            'تم تسليم التكليف بنجاح. يتم تحديد الوصول للدرس التالي بواسطة الخادم.',
           ),
           backgroundColor: AppColors.success,
         ),
@@ -122,15 +122,15 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
-        final arabicMsg = NetworkErrorMapper.toArabicMessage(
-          e,
-          defaultMessage: 'تعذر إرسال التكليف حالياً، يرجى المحاولة مرة أخرى.',
-        );
+        final arabicMsg = e is ApiException
+            ? e.message
+            : NetworkErrorMapper.toArabicMessage(
+                e,
+                defaultMessage:
+                    'تعذر إرسال التكليف حالياً، يرجى المحاولة مرة أخرى.',
+              );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(arabicMsg),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text(arabicMsg), backgroundColor: AppColors.error),
         );
       }
     }
@@ -174,7 +174,9 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close_rounded),
-                          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => Navigator.pop(context),
                         ),
                       ],
                     ),
@@ -197,7 +199,10 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                     if (widget.assignment.hasAttachment) ...[
                       const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFEF2F2),
                           borderRadius: BorderRadius.circular(12),
@@ -216,7 +221,8 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    widget.assignment.pdfAttachmentName ?? 'ملف ورقة عمل التكليف (PDF)',
+                                    widget.assignment.pdfAttachmentName ??
+                                        'ملف ورقة عمل التكليف (PDF)',
                                     style: AppTextStyles.bodyMedium.copyWith(
                                       fontWeight: FontWeight.bold,
                                       color: const Color(0xFF991B1B),
@@ -235,16 +241,29 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFFDC2626),
-                                side: const BorderSide(color: Color(0xFFDC2626)),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                side: const BorderSide(
+                                  color: Color(0xFFDC2626),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
                                 alignment: Alignment.center,
                               ),
-                              icon: const Icon(Icons.download_rounded, size: 16),
+                              icon: const Icon(
+                                Icons.download_rounded,
+                                size: 16,
+                              ),
                               label: const Text('فتح / تنزيل'),
                               onPressed: () {
-                                final uri = Uri.tryParse(widget.assignment.attachmentUrl);
+                                final uri = Uri.tryParse(
+                                  widget.assignment.attachmentUrl,
+                                );
                                 if (uri != null) {
-                                  launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  launchUrl(
+                                    uri,
+                                    mode: LaunchMode.externalApplication,
+                                  );
                                 }
                               },
                             ),
@@ -265,7 +284,10 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                       controller: _solutionController,
                       enabled: !_isSubmitting,
                       maxLines: 4,
-                      validator: (v) => AppValidators.validateRequired(v, 'إجابتك على التكليف'),
+                      validator: (v) => AppValidators.validateRequired(
+                        v,
+                        'إجابتك على التكليف',
+                      ),
                       decoration: const InputDecoration(
                         hintText:
                             'اكتب خطوات التدريب التطبيقي أو ملاحظات الحالة بالتفصيل...',
@@ -279,7 +301,9 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                             style: OutlinedButton.styleFrom(
                               alignment: Alignment.center,
                             ),
-                            onPressed: _isSubmitting ? null : _pickAttachmentImage,
+                            onPressed: _isSubmitting
+                                ? null
+                                : _pickAttachmentImage,
                             icon: const Icon(
                               Icons.info_outline_rounded,
                               size: 18,
@@ -297,7 +321,9 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
                             tooltip: 'إزالة المرفق',
                             onPressed: _isSubmitting
                                 ? null
-                                : () => setState(() => _pickedImageAttachment = null),
+                                : () => setState(
+                                    () => _pickedImageAttachment = null,
+                                  ),
                             icon: const Icon(
                               Icons.delete_outline_rounded,
                               color: AppColors.error,

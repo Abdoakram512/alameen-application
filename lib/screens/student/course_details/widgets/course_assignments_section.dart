@@ -5,14 +5,15 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../models/assignment.dart';
 import '../../../../models/assignment_submission.dart';
-import '../../../../repositories/student_learning_repository.dart';
+import '../../../../repositories/student_assignments_repository.dart';
+import '../../../../models/clinical_task_data.dart';
 
 /// قسم التكليفات العملية للدورة مع عرض حالة التسليم ودرجة التقييم وملاحظات المحاضر.
 class CourseAssignmentsSection extends StatefulWidget {
   final String courseId;
   final String? studentId;
   final bool isEnrolled;
-  final ValueChanged<Assignment> onSubmitTap;
+  final Future<void> Function(Assignment) onSubmitTap;
 
   const CourseAssignmentsSection({
     super.key,
@@ -28,73 +29,62 @@ class CourseAssignmentsSection extends StatefulWidget {
 }
 
 class _CourseAssignmentsSectionState extends State<CourseAssignmentsSection> {
-  late Stream<List<Assignment>> _assignmentsStream;
-  Stream<List<AssignmentSubmission>>? _submissionsStream;
-
-  StudentLearningRepository get _repository =>
-      sl.isRegistered<StudentLearningRepository>()
-          ? sl<StudentLearningRepository>()
-          : StudentLearningRepositoryImpl();
+  late Future<StudentAssignmentsData> _data;
 
   @override
   void initState() {
     super.initState();
-    _bindStreams();
+    _load();
   }
 
   @override
   void didUpdateWidget(CourseAssignmentsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.courseId != widget.courseId ||
-        oldWidget.studentId != widget.studentId) {
-      _bindStreams();
+        oldWidget.studentId != widget.studentId ||
+        oldWidget.isEnrolled != widget.isEnrolled) {
+      _load();
     }
   }
 
-  void _bindStreams() {
-    _assignmentsStream = _repository.streamCourseAssignments(widget.courseId);
-    _submissionsStream = widget.studentId != null
-        ? _repository.streamStudentSubmissions(widget.studentId!)
-        : null;
+  void _load() {
+    _data = widget.studentId == null || !widget.isEnrolled
+        ? Future.value(const StudentAssignmentsData())
+        : sl<StudentAssignmentsRepository>().getAssignments();
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<Assignment>>(
-      stream: _assignmentsStream,
+    return FutureBuilder<StudentAssignmentsData>(
+      future: _data,
       builder: (context, snapshot) {
-        final assignments = snapshot.data ?? const <Assignment>[];
-        if (assignments.isEmpty) return const SizedBox.shrink();
-
-        return StreamBuilder<List<AssignmentSubmission>>(
-          stream: _submissionsStream,
-          builder: (context, subSnap) {
-            final submissions = subSnap.data ?? const <AssignmentSubmission>[];
-            final byAssignment = <String, AssignmentSubmission>{
-              for (final s in submissions) s.assignmentId: s,
-            };
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 24),
-                Text(
-                  'التكليفات والتطبيقات العملية',
-                  style: AppTextStyles.heading2,
-                ),
-                const SizedBox(height: 12),
-                for (int i = 0; i < assignments.length; i++) ...[
-                  _AssignmentItemCard(
-                    assignment: assignments[i],
-                    submission: byAssignment[assignments[i].id],
-                    isEnrolled: widget.isEnrolled,
-                    onSubmitTap: () => widget.onSubmitTap(assignments[i]),
-                  ),
-                  if (i < assignments.length - 1) const SizedBox(height: 12),
-                ],
-              ],
-            );
-          },
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return TextButton(
+            onPressed: () => setState(_load),
+            child: const Text('تعذر تحميل التكليفات. اضغط لإعادة المحاولة'),
+          );
+        }
+        final data = snapshot.data ?? const StudentAssignmentsData();
+        final tasks = data.tasks.where((t) => t.courseId == widget.courseId);
+        final submissions = {
+          for (final s in data.submissions) s.assignmentId: s,
+        };
+        return Column(
+          children: [
+            for (final task in tasks)
+              _AssignmentItemCard(
+                assignment: task,
+                submission: submissions[task.id],
+                isEnrolled: widget.isEnrolled,
+                onSubmitTap: () async {
+                  await widget.onSubmitTap(task);
+                  if (mounted) setState(_load);
+                },
+              ),
+          ],
         );
       },
     );
@@ -154,22 +144,22 @@ class _AssignmentItemCard extends StatelessWidget {
                   color: isGraded
                       ? AppColors.successLight
                       : hasSubmitted
-                          ? AppColors.warningLight
-                          : AppColors.primaryLight,
+                      ? AppColors.warningLight
+                      : AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   isGraded
                       ? '${submission!.score ?? 0} / ${assignment.maxScore}'
                       : hasSubmitted
-                          ? 'قيد التقييم'
-                          : '${assignment.maxScore} درجة',
+                      ? 'قيد التقييم'
+                      : '${assignment.maxScore} درجة',
                   style: AppTextStyles.label.copyWith(
                     color: isGraded
                         ? AppColors.successDark
                         : hasSubmitted
-                            ? AppColors.warningDark
-                            : AppColors.primary,
+                        ? AppColors.warningDark
+                        : AppColors.primary,
                   ),
                 ),
               ),
@@ -198,7 +188,8 @@ class _AssignmentItemCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      assignment.pdfAttachmentName ?? 'ملف ورقة عمل التكليف (PDF)',
+                      assignment.pdfAttachmentName ??
+                          'ملف ورقة عمل التكليف (PDF)',
                       style: AppTextStyles.bodySmall.copyWith(
                         fontWeight: FontWeight.bold,
                         color: const Color(0xFF991B1B),
@@ -252,9 +243,7 @@ class _AssignmentItemCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onSubmitTap,
                 icon: const Icon(Icons.upload_outlined, size: 18),
-                label: Text(
-                  hasSubmitted ? 'تحديث التسليم' : 'تسليم التكليف',
-                ),
+                label: Text(hasSubmitted ? 'تحديث التسليم' : 'تسليم التكليف'),
               ),
             ),
           ],
@@ -263,4 +252,3 @@ class _AssignmentItemCard extends StatelessWidget {
     );
   }
 }
-

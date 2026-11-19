@@ -24,9 +24,9 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
     CoursesRemoteDataSource? remoteDataSource,
     CourseLocalCache? localCache,
     SecureTokenStorage? tokenStorage,
-  })  : _remoteDataSource = remoteDataSource,
-        _localCache = localCache,
-        _tokenStorage = tokenStorage;
+  }) : _remoteDataSource = remoteDataSource,
+       _localCache = localCache,
+       _tokenStorage = tokenStorage;
 
   CoursesRemoteDataSource? get _remote {
     if (_remoteDataSource != null) return _remoteDataSource;
@@ -77,22 +77,27 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
       });
     } else {
       // 2. Read from persistent local cache if memory is empty
-      _cache.getPublicCourses().then((cached) {
-        if (cached != null && cached.isNotEmpty && _cachedCourses.isEmpty) {
-          _cachedCourses = cached;
-          if (!_coursesStreamController.isClosed) {
-            _coursesStreamController.add(cached);
-          }
-        }
-      }).catchError((_) {});
+      _cache
+          .getPublicCourses()
+          .then((cached) {
+            if (cached != null && cached.isNotEmpty && _cachedCourses.isEmpty) {
+              _cachedCourses = cached;
+              if (!_coursesStreamController.isClosed) {
+                _coursesStreamController.add(cached);
+              }
+            }
+          })
+          .catchError((_) {});
     }
 
     // 3. Trigger asynchronous background sync from Laravel REST API
-    getCourses().then((courses) {
-      if (!_coursesStreamController.isClosed && courses.isNotEmpty) {
-        _coursesStreamController.add(courses);
-      }
-    }).catchError((_) {});
+    getCourses()
+        .then((courses) {
+          if (!_coursesStreamController.isClosed && courses.isNotEmpty) {
+            _coursesStreamController.add(courses);
+          }
+        })
+        .catchError((_) {});
 
     return _coursesStreamController.stream;
   }
@@ -158,7 +163,9 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   Future<Course> verifyStudentCourseDetails(String slugOrId) async {
     final remote = _remote;
     if (remote == null) {
-      throw const NetworkFailure('تعذر الاتصال بخادم المنصة للتحقق من الاشتراك.');
+      throw const NetworkFailure(
+        'تعذر الاتصال بخادم المنصة للتحقق من الاشتراك.',
+      );
     }
     final userId = await _resolveCurrentUserId();
     try {
@@ -191,13 +198,20 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
       } catch (_) {
         try {
           // Secondary: public course details (read-only preview without enrollment authority)
-          final course = await remote.getPublicCourseBySlug(slugOrId);
+          final course = _stripAuthorizationForOfflinePreview(
+            await remote.getPublicCourseBySlug(slugOrId),
+          );
           await _cache.saveCourseDetails(slugOrId, course, userId: userId);
           return course;
         } catch (e) {
           // Offline fallback: sanitized curriculum preview ONLY (never grants access)
-          final cached = await _cache.getCourseDetails(slugOrId, userId: userId);
-          if (cached != null) return _stripAuthorizationForOfflinePreview(cached);
+          final cached = await _cache.getCourseDetails(
+            slugOrId,
+            userId: userId,
+          );
+          if (cached != null) {
+            return _stripAuthorizationForOfflinePreview(cached);
+          }
           throw FailureMapper.fromException(e);
         }
       }
@@ -208,7 +222,8 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
 
     final found = _cachedCourses.firstWhere(
       (c) => c.id == slugOrId || c.slug == slugOrId,
-      orElse: () => throw const NotFoundFailure('الدورة المطلوبة غير متوفرة حالياً.'),
+      orElse: () =>
+          throw const NotFoundFailure('الدورة المطلوبة غير متوفرة حالياً.'),
     );
     return _stripAuthorizationForOfflinePreview(found);
   }
@@ -242,7 +257,9 @@ class StudentCoursesRepositoryImpl implements StudentCoursesRepository {
   Future<StudentCoursesData> getStudentCourses() async {
     final remote = _remote;
     if (remote == null) {
-      throw const NetworkFailure('تعذر الاتصال بخادم المنصة للتحقق من الدورات المشترك بها.');
+      throw const NetworkFailure(
+        'تعذر الاتصال بخادم المنصة للتحقق من الدورات المشترك بها.',
+      );
     }
 
     try {

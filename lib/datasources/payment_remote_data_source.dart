@@ -30,7 +30,7 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
   final ApiClient _apiClient;
 
   PaymentRemoteDataSourceImpl({required ApiClient apiClient})
-      : _apiClient = apiClient;
+    : _apiClient = apiClient;
 
   @override
   Future<PaymentReceiptModel> submitCourseReceipt({
@@ -74,11 +74,13 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
         'sender_name': senderName.trim(),
         'sender_account': senderAccount.trim(),
         'amount': amount,
-        if (transactionReference != null && transactionReference.trim().isNotEmpty)
+        if (transactionReference != null &&
+            transactionReference.trim().isNotEmpty)
           'transaction_reference': transactionReference.trim(),
         'receipt_image': await MultipartFile.fromFile(
           receiptFilePath,
           filename: fileName,
+          contentType: DioMediaType('image', ext == 'jpg' ? 'jpeg' : ext),
         ),
       };
 
@@ -106,7 +108,9 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
         }
       }
 
-      throw const ApiException('تعذر معالجة بيانات الإيصال المستلمة من الخادم.');
+      throw const ApiException(
+        'تعذر معالجة بيانات الإيصال المستلمة من الخادم.',
+      );
     } on DioException catch (e) {
       throw ApiException.fromDioException(e);
     }

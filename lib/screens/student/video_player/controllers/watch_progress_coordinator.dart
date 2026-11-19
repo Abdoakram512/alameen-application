@@ -16,7 +16,7 @@ import '../../../../services/watch_queue.dart';
 
 /// منسق تقدم المشاهدة وحساب وقت التعلم عبر Laravel REST API:
 /// 1. دورة المزامنة الدورية كل 300 ثانية (5 دقائق).
-/// 2. احتساب الإكمال التلقائي عند بلوغ 95% من النطاقات الفريدة غير المتكررة (بدون احتساب القفز أو الإعادة أو التخزين المؤقت).
+/// 2. Unique 95% coverage is reported to Laravel; only the server confirms completion.
 /// 3. عدم إسقاط حدث نهاية الجلسة (Session-End) عند تداخل المزامنة أو عندما تكون الثواني المعلقة صفراً.
 /// 4. حفظ الموضع والتغطية محلياً بصورة معزولة لكل حساب طالب مع طابور عدم اتصال آمن.
 /// 5. احترام إلغاء الاشتراك أو انتهاء صلاحية الجلسة (401 / 403).
@@ -68,14 +68,16 @@ class WatchProgressCoordinator {
     String? customSessionId,
     SharedPreferencesAsync? preferences,
     WatchQueue? watchQueue,
-  })  : watchRepository = watchRepository ??
-            (sl.isRegistered<StudentWatchRepository>()
-                ? sl<StudentWatchRepository>()
-                : null),
-        sessionStartTime = DateTime.now(),
-        _preferences = preferences ?? SharedPreferencesAsync(),
-        _watchQueue = watchQueue ?? _buildDefaultQueue(watchRepository) {
-    sessionId = customSessionId ??
+  }) : watchRepository =
+           watchRepository ??
+           (sl.isRegistered<StudentWatchRepository>()
+               ? sl<StudentWatchRepository>()
+               : null),
+       sessionStartTime = DateTime.now(),
+       _preferences = preferences ?? SharedPreferencesAsync(),
+       _watchQueue = watchQueue ?? _buildDefaultQueue(watchRepository) {
+    sessionId =
+        customSessionId ??
         'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
     _isCompleted =
         lesson.isCompleted || currentUser.isLessonCompleted(lesson.id);
@@ -115,13 +117,13 @@ class WatchProgressCoordinator {
 
   String get _effectiveCourseSlug =>
       (courseSlug != null && courseSlug!.trim().isNotEmpty)
-          ? courseSlug!.trim()
-          : courseId;
+      ? courseSlug!.trim()
+      : courseId;
 
   String get _effectiveLessonSlug =>
       (lesson.slug != null && lesson.slug!.trim().isNotEmpty)
-          ? lesson.slug!.trim()
-          : lesson.id;
+      ? lesson.slug!.trim()
+      : lesson.id;
 
   String get positionKey =>
       'position.${currentUser.uid}.$courseId.${lesson.id}';
@@ -215,7 +217,10 @@ class WatchProgressCoordinator {
     _currentPlayheadSeconds = safeMs ~/ 1000;
     try {
       await _preferences.setInt(positionKey, safeMs);
-      await _preferences.setString(coverageKey, _coverageTracker.encodeRanges());
+      await _preferences.setString(
+        coverageKey,
+        _coverageTracker.encodeRanges(),
+      );
       await _preferences.setString(
         'learning.recent.${currentUser.uid}',
         RecentLesson(
@@ -259,9 +264,13 @@ class WatchProgressCoordinator {
     );
     final actualCoveragePct = _coverageTracker.coveragePercentage(totalDur);
 
-    final newlyCompleted = _coverageTracker.isComplete(totalDur, requiredThreshold);
+    final newlyCompleted = _coverageTracker.isComplete(
+      totalDur,
+      requiredThreshold,
+    );
     final completionFlag = newlyCompleted || _isCompleted;
-    final positionToSend = currentPositionSeconds ??
+    final positionToSend =
+        currentPositionSeconds ??
         (_currentPlayheadSeconds > 0
             ? _currentPlayheadSeconds
             : _maxPlayheadSeconds);
@@ -302,10 +311,8 @@ class WatchProgressCoordinator {
         _serverBaselineWatchedSeconds = totalWatchedToSend;
       }
 
-      if (newlyCompleted && !_isCompleted) {
-        _isCompleted = true;
-        onLessonAutoCompleted?.call();
-      }
+      // A flushed queue may retain offline events; it cannot confirm completion.
+      // Completion/access must come from a refreshed authenticated Laravel model.
       onProgressSynced?.call();
     } on UnauthorizedException catch (e) {
       onAuthorizationLost?.call(401, e.message);
@@ -361,8 +368,9 @@ class WatchProgressCoordinator {
             lessonTitle: lesson.title,
             totalDurationSeconds: lesson.durationInSeconds,
             maxPlayheadSeconds: _maxPlayheadSeconds,
-            completionPercentage:
-                _coverageTracker.coveragePercentage(lesson.durationInSeconds),
+            completionPercentage: _coverageTracker.coveragePercentage(
+              lesson.durationInSeconds,
+            ),
             isCompleted: _isCompleted,
             isSessionEnd: true,
             ipAddress: _clientIpInfo?.ip ?? '',

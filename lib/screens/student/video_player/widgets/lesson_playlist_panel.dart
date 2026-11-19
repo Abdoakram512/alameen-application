@@ -8,7 +8,7 @@ import '../../../../models/course_level.dart';
 import '../../../../models/lesson.dart';
 import '../../lesson_playlist.dart';
 
-/// لوحة قائمة دروس الدورة التدريبية مع إدارة قيود الفتح المتسلسل (95%) واشتراطات تسليم الواجبات.
+/// لوحة قائمة دروس الدورة التدريبية مع إدارة قيود الفتح المتسلسل (Laravel) واشتراطات تسليم الواجبات.
 class LessonPlaylistPanel extends StatelessWidget {
   final List<Lesson> playlist;
   final List<CourseLevel> levels;
@@ -42,13 +42,15 @@ class LessonPlaylistPanel extends StatelessWidget {
         continue;
       }
 
-      final requiresSubmission = item.isAssignmentLesson ||
+      final requiresSubmission =
+          item.isAssignmentLesson ||
           (item.lockNextUntilSubmitted && item.hasAssignment);
-      final assignmentKey = (item.assignmentId != null &&
-              item.assignmentId!.isNotEmpty)
+      final assignmentKey =
+          (item.assignmentId != null && item.assignmentId!.isNotEmpty)
           ? item.assignmentId!
           : 'asg_${item.id}';
-      final isSubmitted = submittedAssignmentIds.contains(assignmentKey) ||
+      final isSubmitted =
+          submittedAssignmentIds.contains(assignmentKey) ||
           submittedAssignmentIds.contains(item.id) ||
           (item.assignmentId != null &&
               submittedAssignmentIds.contains(item.assignmentId));

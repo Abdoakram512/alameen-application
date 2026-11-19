@@ -400,6 +400,13 @@ void main() {
       expect(submissions.length, equals(1));
       expect(submissions.first.id, equals('88'));
 
+      when(() => mockApiClient.get('/student/assignments/1')).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: '/student/assignments/1'),
+          data: {'data': {'task': {'id': 1, 'course_id': 10,
+            'title': '\u062a\u0643\u0644\u064a\u0641 1'}}},
+        ),
+      );
       final task = await learningRepository.getAssignment('1');
       expect(task, isNotNull);
       expect(task!.title, equals('تكليف 1'));

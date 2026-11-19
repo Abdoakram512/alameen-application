@@ -141,7 +141,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     }
   }
 
-  void _showSubmitAssignmentModal(
+  Future<void> _showSubmitAssignmentModal(
     BuildContext context,
     Assignment assignment,
     UserModel user,
@@ -462,9 +462,9 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                                                 courseId: course.id,
                                                 studentId: currentUser?.uid,
                                                 isEnrolled: isEnrolled,
-                                                onSubmitTap: (assignment) {
+                                                onSubmitTap: (assignment) async {
                                                   if (currentUser != null) {
-                                                    _showSubmitAssignmentModal(
+                                                    await _showSubmitAssignmentModal(
                                                       context,
                                                       assignment,
                                                       currentUser,
@@ -568,9 +568,9 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                                           courseId: course.id,
                                           studentId: currentUser?.uid,
                                           isEnrolled: isEnrolled,
-                                          onSubmitTap: (assignment) {
+                                          onSubmitTap: (assignment) async {
                                             if (currentUser != null) {
-                                              _showSubmitAssignmentModal(
+                                              await _showSubmitAssignmentModal(
                                                 context,
                                                 assignment,
                                                 currentUser,

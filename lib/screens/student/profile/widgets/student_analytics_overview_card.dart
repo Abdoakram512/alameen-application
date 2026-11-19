@@ -8,7 +8,7 @@ import '../../../../models/assignment_submission.dart';
 import '../../../../models/course.dart';
 import '../../../../models/user_profile.dart';
 import '../../../../models/watch_log_entry.dart';
-import '../../../../repositories/student_learning_repository.dart';
+import '../../../../repositories/student_assignments_repository.dart';
 import 'course_time_breakdown_card.dart';
 import 'learning_mastery_gauge_card.dart';
 import 'student_weekly_activity_card.dart';
@@ -32,33 +32,30 @@ class StudentAnalyticsOverviewCard extends StatefulWidget {
 
 class _StudentAnalyticsOverviewCardState
     extends State<StudentAnalyticsOverviewCard> {
-  Stream<List<AssignmentSubmission>>? _submissionsStream;
-
-  StudentLearningRepository get _repository =>
-      sl.isRegistered<StudentLearningRepository>()
-          ? sl<StudentLearningRepository>()
-          : StudentLearningRepositoryImpl();
+  Future<List<AssignmentSubmission>>? _submissionsFuture;
 
   @override
   void initState() {
     super.initState();
-    _bindStreams();
+    _loadSubmissions();
   }
 
   @override
   void didUpdateWidget(covariant StudentAnalyticsOverviewCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentUser?.uid != widget.currentUser?.uid) {
-      _bindStreams();
+      _loadSubmissions();
     }
   }
 
-  void _bindStreams() {
+  void _loadSubmissions() {
     final uid = widget.currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
-      _submissionsStream = _repository.streamStudentSubmissions(uid);
+      _submissionsFuture = sl<StudentAssignmentsRepository>()
+          .getAssignments()
+          .then((data) => data.submissions);
     } else {
-      _submissionsStream = null;
+      _submissionsFuture = null;
     }
   }
 
@@ -96,8 +93,9 @@ class _StudentAnalyticsOverviewCardState
 
     final logs = _deriveLaravelWatchEntries(user);
 
-    return StreamBuilder<List<AssignmentSubmission>>(
-      stream: _submissionsStream,
+    return FutureBuilder<List<AssignmentSubmission>>(
+      key: ValueKey(user.uid),
+      future: _submissionsFuture,
       builder: (context, subSnap) {
         final submissions = subSnap.data ?? const <AssignmentSubmission>[];
 
@@ -139,7 +137,9 @@ class _StudentAnalyticsOverviewCardState
       avgGradeRatio = sumRatio / gradedSubmissions.length;
     }
 
-    final weeklyBuckets = StudentAnalyticsCalculator.buildLast7DaysBuckets(logs);
+    final weeklyBuckets = StudentAnalyticsCalculator.buildLast7DaysBuckets(
+      logs,
+    );
     final activeDaysCount = weeklyBuckets.where((b) => b.minutes > 0).length;
     final weeklyTotalMinutes = weeklyBuckets
         .fold<double>(0.0, (sum, b) => sum + b.minutes)
@@ -171,8 +171,10 @@ class _StudentAnalyticsOverviewCardState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('تحليل الأداء والتقدم الشخصي',
-                      style: AppTextStyles.heading2),
+                  Text(
+                    'تحليل الأداء والتقدم الشخصي',
+                    style: AppTextStyles.heading2,
+                  ),
                   Text(
                     'قراءة لمعدل إنجازك ونشاطك وتقييماتك العملية المعتمدة من المنصة',
                     style: AppTextStyles.caption,
@@ -212,11 +214,7 @@ class _StudentAnalyticsOverviewCardState
               );
             }
             return Column(
-              children: [
-                masteryCard,
-                const SizedBox(height: 12),
-                weeklyCard,
-              ],
+              children: [masteryCard, const SizedBox(height: 12), weeklyCard],
             );
           },
         ),

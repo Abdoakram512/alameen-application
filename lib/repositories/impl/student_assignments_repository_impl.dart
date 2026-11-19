@@ -24,7 +24,8 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
   // عقب إتمام استدعاءات REST والتحديث المحلي في الذاكرة، وليست بثاً خادمياً لحظياً (Server Push).
   final StreamController<List<Assignment>> _assignmentsStreamController =
       StreamController<List<Assignment>>.broadcast();
-  final StreamController<List<AssignmentSubmission>> _submissionsStreamController =
+  final StreamController<List<AssignmentSubmission>>
+  _submissionsStreamController =
       StreamController<List<AssignmentSubmission>>.broadcast();
 
   List<Assignment> _cachedTasks = const [];
@@ -45,12 +46,11 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
   int _parseTaskId(String rawId) {
     final direct = int.tryParse(rawId.trim());
     if (direct != null && direct > 0) return direct;
-    final match = RegExp(r'(\d+)').firstMatch(rawId);
-    if (match != null) {
-      final parsed = int.tryParse(match.group(1)!);
-      if (parsed != null && parsed > 0) return parsed;
-    }
-    return 1;
+    throw ArgumentError.value(
+      rawId,
+      'taskId',
+      'Expected a positive Laravel task ID',
+    );
   }
 
   @override
@@ -69,6 +69,7 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
 
   @override
   Future<ClinicalTaskDetails> getAssignmentDetails(int taskId) async {
+    if (taskId <= 0) throw ArgumentError.value(taskId, 'taskId');
     return await _remote.getAssignmentDetails(taskId);
   }
 
@@ -80,6 +81,7 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
     int? durationSeconds,
     String? studentNotes,
   }) async {
+    if (taskId <= 0) throw ArgumentError.value(taskId, 'taskId');
     final submission = await _remote.submitAssignment(
       taskId: taskId,
       audioFile: audioFile,
@@ -141,21 +143,14 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
   @override
   Future<Assignment?> getAssignment(String assignmentId) async {
     final taskId = _parseTaskId(assignmentId);
-    try {
-      final details = await getAssignmentDetails(taskId);
-      return details.task;
-    } catch (_) {
-      for (final t in _cachedTasks) {
-        if (t.id == assignmentId || t.id == taskId.toString()) {
-          return t;
-        }
-      }
-      return null;
-    }
+    final details = await getAssignmentDetails(taskId);
+    return details.task;
   }
 
   @override
-  Stream<List<AssignmentSubmission>> streamStudentSubmissions(String studentId) {
+  Stream<List<AssignmentSubmission>> streamStudentSubmissions(
+    String studentId,
+  ) {
     if (_cachedSubmissions.isEmpty) {
       getAssignments().catchError((_) => const StudentAssignmentsData());
     }
@@ -163,7 +158,9 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
   }
 
   @override
-  Future<List<AssignmentSubmission>> getStudentSubmissions(String studentId) async {
+  Future<List<AssignmentSubmission>> getStudentSubmissions(
+    String studentId,
+  ) async {
     if (_cachedSubmissions.isNotEmpty) {
       return _cachedSubmissions;
     }
@@ -202,7 +199,9 @@ class StudentAssignmentsRepositoryImpl implements StudentAssignmentsRepository {
     }
     if (submission.attachmentUrl.trim().isNotEmpty) {
       if (notesBuffer.isNotEmpty) notesBuffer.write('\n\n');
-      notesBuffer.write('رابط المرفق الخارجي: ${submission.attachmentUrl.trim()}');
+      notesBuffer.write(
+        'رابط المرفق الخارجي: ${submission.attachmentUrl.trim()}',
+      );
     }
 
     return await submitClinicalTask(

@@ -247,8 +247,9 @@ void main() {
 
       await coordinator.flushWatchTime(isSessionEnd: false);
 
-      expect(coordinator.isCompleted, isTrue);
-      expect(autoCompletedCalled, isTrue);
+      // Queuing coverage, even at 95%, is not an authoritative completion reply.
+      expect(coordinator.isCompleted, isFalse);
+      expect(autoCompletedCalled, isFalse);
     });
 
     test('Fix 5: PlaybackAuthorizationException refuses unprotected fallback', () async {

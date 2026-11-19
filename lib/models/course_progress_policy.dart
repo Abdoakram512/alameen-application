@@ -4,7 +4,7 @@ import 'lesson.dart';
 
 /// سياسة التقدم والفتح المتسلسل للمستويات والدروس:
 /// 1. اشتراك الدورة يُفتح المستوى الأول فقط وفق صلاحيات الخادم.
-/// 2. كل مستوى لاحق يُفتح فقط بعد إكمال 95% على الأقل من المستوى السابق + موافقة الخادم (`is_accessible`).
+/// 2. فتح المستويات يخضع لقرار Laravel الموثق فقط.
 /// 3. المعاينة المجانية (`isFreePreview`) تظل متاحة للمعاينة (ويظل التحقق النهائي بالخادم عند الفتح).
 /// 4. لا يُسمح مطلقاً بتجاوز أقفال الخادم عبر تعديل الحالة المحلية.
 class CourseProgressPolicy {
@@ -26,7 +26,10 @@ class CourseProgressPolicy {
         completedCount++;
       }
     }
-    return ((completedCount / videoOrTaskLessons.length) * 100.0).clamp(0.0, 100.0);
+    return ((completedCount / videoOrTaskLessons.length) * 100.0).clamp(
+      0.0,
+      100.0,
+    );
   }
 
   /// يتحقق مما إذا كان المستوى عند الفهرس [levelIndex] مفتوحاً أم لا.
@@ -49,18 +52,7 @@ class CourseProgressPolicy {
       return false;
     }
 
-    // المستوى الأول مفتوح بمجرد تأكيد اشتراك الطالب وسماح الخادم
-    if (levelIndex == 0) {
-      return true;
-    }
-
-    // كل مستوى تالٍ يتطلب إكمال 95% على الأقل من دروس المستوى السابق
-    final previousLevel = levels[levelIndex - 1];
-    final prevProgress = levelCompletionPercentage(
-      previousLevel,
-      completedLessonIds: completedLessonIds,
-    );
-    return prevProgress >= strictLevelThresholdPercent;
+    return true; // Authenticated Laravel access is authoritative.
   }
 
   /// البحث عن فهرس المستوى الذي يحتوي على [lessonId].
@@ -106,13 +98,13 @@ class CourseProgressPolicy {
     // احترام قائمة المعرفات المسموحة من الخادم عند توفرها صراحةً من الخادم
     if (enforceServerAccessibleList) {
       final numericId = int.tryParse(lesson.id);
-      if (numericId != null && !accessibleVideoIds.contains(numericId) && !lesson.isAccessible) {
+      if (numericId != null && !accessibleVideoIds.contains(numericId)) {
         return 'هذه المحاضرة مقفلة حالياً على الخادم.';
       }
     }
 
     // احترام قفل الدرس على الخادم
-    if (!lesson.isAccessible && !lesson.isFreePreview) {
+    if (!lesson.isAccessible) {
       return 'هذه المحاضرة مقفلة حتى اعتماد التقدم من الخادم.';
     }
 
@@ -125,9 +117,6 @@ class CourseProgressPolicy {
         completedLessonIds: completedLessonIds,
       );
       if (!levelUnlocked) {
-        if (lvlIdx > 0) {
-          return 'يجب إتمام 95% على الأقل من "${levels[lvlIdx - 1].title}" لفتح هذا المستوى.';
-        }
         return 'هذا المستوى مغلق حالياً.';
       }
     }

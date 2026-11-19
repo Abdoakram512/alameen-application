@@ -11,10 +11,9 @@ class ReceiptSubmissionCubit extends Cubit<ReceiptSubmissionState> {
   final StudentPaymentRepository _repository;
   int _submissionGeneration = 0;
 
-  ReceiptSubmissionCubit({
-    required StudentPaymentRepository repository,
-  })  : _repository = repository,
-        super(const ReceiptSubmissionInitial());
+  ReceiptSubmissionCubit({required StudentPaymentRepository repository})
+    : _repository = repository,
+      super(const ReceiptSubmissionInitial());
 
   Future<void> submit(
     ReceiptSubmissionInput input, {
@@ -22,25 +21,17 @@ class ReceiptSubmissionCubit extends Cubit<ReceiptSubmissionState> {
   }) async {
     if (state is ReceiptSubmissionInProgress) return;
 
-    final localValidationError = input.validate(checkFileOnDisk: checkFileOnDisk);
-    if (localValidationError != null) {
-      if (!isClosed) {
-        emit(
-          ReceiptSubmissionValidationFailure(
-            message: localValidationError.firstErrorMessage,
-            fieldErrors: localValidationError.fieldErrors,
-          ),
-        );
-      }
-      return;
-    }
-
     final generation = ++_submissionGeneration;
-    if (!isClosed) {
-      emit(const ReceiptSubmissionInProgress());
-    }
-
+    if (isClosed) return;
+    emit(const ReceiptSubmissionInProgress());
     try {
+      final localValidationError = input.validate(
+        checkFileOnDisk: checkFileOnDisk,
+      );
+      if (localValidationError != null) {
+        _emitFailure(localValidationError);
+        return;
+      }
       final receipt = await _repository.submitCourseReceipt(input);
       if (isClosed || generation != _submissionGeneration) return;
 

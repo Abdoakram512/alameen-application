@@ -59,7 +59,7 @@ class ReceiptSubmissionInput extends Equatable {
     }
 
     final parsedAmount = amount;
-    if (parsedAmount == null || parsedAmount <= 0) {
+    if (parsedAmount == null || !parsedAmount.isFinite || parsedAmount <= 0) {
       return ValidationFailure(
         'المبلغ المدفوع غير محدد أو غير صالح لدورة "$courseTitle".',
       );
@@ -98,14 +98,14 @@ class ReceiptSubmissionInput extends Equatable {
 
   @override
   List<Object?> get props => [
-        courseSlug,
-        courseId,
-        courseTitle,
-        paymentMethod,
-        senderName,
-        senderAccount,
-        amount,
-        receiptFilePath,
-        transactionReference,
-      ];
+    courseSlug,
+    courseId,
+    courseTitle,
+    paymentMethod,
+    senderName,
+    senderAccount,
+    amount,
+    receiptFilePath,
+    transactionReference,
+  ];
 }

@@ -23,6 +23,7 @@ import '../../../../models/lesson.dart';
 import '../../../../models/user_profile.dart';
 import '../../../../models/video_quality.dart';
 import '../../../../repositories/student_learning_repository.dart';
+import '../../../../repositories/student_assignments_repository.dart';
 import '../../security/security_protection_watcher.dart';
 import '../widgets/submit_assignment_sheet.dart';
 import 'controllers/watch_progress_coordinator.dart';
@@ -111,18 +112,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   StudentLearningRepository get _learningRepository =>
       sl.isRegistered<StudentLearningRepository>()
-          ? sl<StudentLearningRepository>()
-          : StudentLearningRepositoryImpl();
+      ? sl<StudentLearningRepository>()
+      : StudentLearningRepositoryImpl();
 
   String get _effectiveCourseSlug =>
       (widget.courseSlug != null && widget.courseSlug!.trim().isNotEmpty)
-          ? widget.courseSlug!.trim()
-          : widget.courseId;
+      ? widget.courseSlug!.trim()
+      : widget.courseId;
 
   String get _effectiveLessonSlug =>
       (widget.lesson.slug != null && widget.lesson.slug!.trim().isNotEmpty)
-          ? widget.lesson.slug!.trim()
-          : widget.lesson.id;
+      ? widget.lesson.slug!.trim()
+      : widget.lesson.id;
 
   Map<String, String> get _lockedReasons {
     final panel = LessonPlaylistPanel(
@@ -142,7 +143,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _isCompleted = widget.lesson.isCompleted ||
+    _isCompleted =
+        widget.lesson.isCompleted ||
         (widget.currentUser?.isLessonCompleted(widget.lesson.id) ?? false);
 
     if (widget.currentUser != null) {
@@ -181,8 +183,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _errorMessage = statusCode == 401
           ? 'انتهت صلاحية الجلسة (401). يرجى إعادة تسجيل الدخول لمتابعة المشاهدة.'
           : (message.isNotEmpty
-              ? message
-              : 'تم رفض الوصول للمحاضرة (403): تم سحب صلاحية الاشتراك أو انتهت مدته.');
+                ? message
+                : 'تم رفض الوصول للمحاضرة (403): تم سحب صلاحية الاشتراك أو انتهت مدته.');
     });
   }
 
@@ -205,7 +207,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _listenToAuthAccess() {
     _accessSubscription = context.read<AuthCubit>().stream.listen((state) {
       // لا يُمنح الوصول لمجرد كون الدورة open؛ المصدر المعتمد هو اشتراك الطالب أو معاينة معتمدة من الخادم
-      final revoked = state is Unauthenticated ||
+      final revoked =
+          state is Unauthenticated ||
           state is AuthSuspended ||
           state is AuthPendingApproval ||
           state is AuthError ||
@@ -226,11 +229,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final uid = widget.currentUser?.uid;
     if (uid == null) return;
     try {
-      final subs = await _learningRepository.getStudentSubmissions(uid);
+      final subs = await sl<StudentAssignmentsRepository>()
+          .getAssignments()
+          .then((data) => data.submissions);
       if (mounted) {
         setState(() {
-          _submittedAssignmentIds =
-              subs.map((s) => s.assignmentId).toSet();
+          _submittedAssignmentIds = subs.map((s) => s.assignmentId).toSet();
         });
       }
     } catch (_) {}
@@ -239,8 +243,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final scope =
-        context.getInheritedWidgetOfExactType<ScreenProtectionScope>();
+    final scope = context
+        .getInheritedWidgetOfExactType<ScreenProtectionScope>();
     final notifier = scope?.notifier;
     if (_screenCaptureNotifier != notifier) {
       _screenCaptureNotifier?.removeListener(_handleScreenCaptureChanged);
@@ -285,9 +289,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     try {
       if (enable) {
-        await SystemChrome.setEnabledSystemUIMode(
-          SystemUiMode.immersiveSticky,
-        );
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         if (mounted && context.screenWidth < 900) {
           await SystemChrome.setPreferredOrientations(const [
             DeviceOrientation.landscapeLeft,
@@ -337,11 +339,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return explicitExpiresIn;
     }
     final uri = Uri.tryParse(url.trim());
-    final rawExp = uri?.queryParameters['expires'] ?? uri?.queryParameters['exp'];
+    final rawExp =
+        uri?.queryParameters['expires'] ?? uri?.queryParameters['exp'];
     final epoch = rawExp != null ? int.tryParse(rawExp) : null;
     if (epoch != null && epoch > 0) {
-      final expiresAt =
-          DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
+      final expiresAt = DateTime.fromMillisecondsSinceEpoch(
+        epoch * 1000,
+        isUtc: true,
+      );
       final diff = expiresAt.difference(DateTime.now().toUtc()).inSeconds;
       return diff > 0 ? diff : 1;
     }
@@ -503,8 +508,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await ctrl.initialize();
       if (!mounted) return;
 
-      final localSavedMs =
-          await _preferences.getInt(_progressCoordinator?.positionKey ?? '');
+      final localSavedMs = await _preferences.getInt(
+        _progressCoordinator?.positionKey ?? '',
+      );
       final serverSavedMs = serverLastPosSec * 1000;
       final resumeMs = (localSavedMs != null && localSavedMs > 0)
           ? localSavedMs
@@ -573,11 +579,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final oldCtrl = _controller;
     if (oldCtrl == null) return false;
 
-    final currentPosition =
-        oldCtrl.value.isInitialized ? oldCtrl.value.position : Duration.zero;
+    final currentPosition = oldCtrl.value.isInitialized
+        ? oldCtrl.value.position
+        : Duration.zero;
     final wasPlaying = oldCtrl.value.isInitialized && oldCtrl.value.isPlaying;
-    final currentSpeed =
-        oldCtrl.value.isInitialized ? oldCtrl.value.playbackSpeed : 1.0;
+    final currentSpeed = oldCtrl.value.isInitialized
+        ? oldCtrl.value.playbackSpeed
+        : 1.0;
 
     oldCtrl.setVolume(0.0);
 
@@ -664,7 +672,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         const SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.error,
-          content: Text('تعذر تغيير جودة الفيديو، تم الإبقاء على الجودة الحالية.'),
+          content: Text(
+            'تعذر تغيير جودة الفيديو، تم الإبقاء على الجودة الحالية.',
+          ),
         ),
       );
     }
@@ -676,7 +686,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _controller?.pause();
       final ctrl = _controller;
       if (ctrl != null) {
-        _progressCoordinator?.prepareToLeave(ctrl.value.position.inMilliseconds);
+        _progressCoordinator?.prepareToLeave(
+          ctrl.value.position.inMilliseconds,
+        );
       }
     } else if (state == AppLifecycleState.resumed &&
         _baseStreamUrl.isNotEmpty &&
@@ -739,7 +751,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _hideControlsTimer?.cancel();
       } else {
         if (_baseStreamUrl.isNotEmpty &&
-            ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(_baseStreamUrl)) {
+            ResolvedLessonPlayback.isSignedUrlExpiredOrExpiring(
+              _baseStreamUrl,
+            )) {
           unawaited(_renewPlaybackToken(fromPlaybackError: false));
         }
         ctrl.play();
@@ -762,7 +776,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final assignmentId = widget.lesson.assignmentId;
     if (user == null || assignmentId == null || assignmentId.isEmpty) return;
     try {
-      final assignment = await _learningRepository.getAssignment(assignmentId);
+      final assignment = await sl<StudentAssignmentsRepository>().getAssignment(
+        assignmentId,
+      );
       if (assignment == null || !mounted) return;
       await showModalBottomSheet(
         context: context,
@@ -771,15 +787,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
-        builder: (_) => SubmitAssignmentSheet(
-          assignment: assignment,
-          user: user,
-        ),
+        builder: (_) =>
+            SubmitAssignmentSheet(assignment: assignment, user: user),
       );
       if (mounted) {
         _loadStudentSubmissions();
       }
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiException
+                ? error.message
+                : '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u062a\u0643\u0644\u064a\u0641. \u062d\u0627\u0648\u0644 \u0645\u062c\u062f\u062f\u0627.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   Future<void> _openLesson(Lesson lesson) async {
@@ -819,9 +845,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (state is! Authenticated || policyReason != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(policyReason ?? 'player.no_permission'.tr()),
-        ),
+        SnackBar(content: Text(policyReason ?? 'player.no_permission'.tr())),
       );
       return;
     }
@@ -852,9 +876,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {
       _changingLesson = false;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('player.open_error'.tr())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('player.open_error'.tr())));
       }
     }
   }
@@ -1047,8 +1071,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _progressCoordinator?.prepareToLeave(pos);
       },
       child: Scaffold(
-        backgroundColor:
-            useImmersiveStage ? Colors.black : AppColors.scaffoldBackground,
+        backgroundColor: useImmersiveStage
+            ? Colors.black
+            : AppColors.scaffoldBackground,
         appBar: useImmersiveStage
             ? null
             : AppBar(
@@ -1069,59 +1094,61 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           child: useImmersiveStage
               ? SizedBox.expand(child: _buildStage(showTopBar: true))
               : useDesktopTwoColumn
-                  ? DesktopTwoColumnPlayerView(
-                      stageWidget: _buildStage(showTopBar: false),
-                      stageMaxHeight: size.height * 0.62,
-                      detailsPanel: LessonDetailsPanel(
-                        lesson: widget.lesson,
-                        courseId: widget.courseId,
-                        isCompleted: _isCompleted,
-                        savingCompletion: _savingCompletion,
-                        canComplete: widget.currentUser != null,
-                        playlist: widget.playlist,
-                        levels: widget.levels,
-                        showInlinePlaylist: false,
-                        lockedReasons: _lockedReasons,
-                        isAssignmentSubmitted: _submittedAssignmentIds
-                            .contains(widget.lesson.assignmentId),
-                        onOpenAssignmentSheet: widget.lesson.hasAssignment
-                            ? _showAssignmentModal
-                            : null,
-                        onToggleCompletion: _toggleCompletion,
-                        onSelectLesson: _openLesson,
-                      ),
-                      playlistPanel: LessonPlaylistPanel(
-                        playlist: widget.playlist,
-                        levels: widget.levels,
-                        currentLessonId: widget.lesson.id,
-                        courseId: widget.courseId,
-                        courseAccessMode: widget.courseAccessMode,
-                        submittedAssignmentIds: _submittedAssignmentIds,
-                        onSelectLesson: _openLesson,
-                      ),
-                    )
-                  : MobileSingleColumnPlayerView(
-                      stageWidget: _buildStage(showTopBar: false),
-                      stageMaxHeight: (size.height * 0.40).clamp(190.0, 380.0),
-                      detailsPanel: LessonDetailsPanel(
-                        lesson: widget.lesson,
-                        courseId: widget.courseId,
-                        isCompleted: _isCompleted,
-                        savingCompletion: _savingCompletion,
-                        canComplete: widget.currentUser != null,
-                        playlist: widget.playlist,
-                        levels: widget.levels,
-                        showInlinePlaylist: true,
-                        lockedReasons: _lockedReasons,
-                        isAssignmentSubmitted: _submittedAssignmentIds
-                            .contains(widget.lesson.assignmentId),
-                        onOpenAssignmentSheet: widget.lesson.hasAssignment
-                            ? _showAssignmentModal
-                            : null,
-                        onToggleCompletion: _toggleCompletion,
-                        onSelectLesson: _openLesson,
-                      ),
+              ? DesktopTwoColumnPlayerView(
+                  stageWidget: _buildStage(showTopBar: false),
+                  stageMaxHeight: size.height * 0.62,
+                  detailsPanel: LessonDetailsPanel(
+                    lesson: widget.lesson,
+                    courseId: widget.courseId,
+                    isCompleted: _isCompleted,
+                    savingCompletion: _savingCompletion,
+                    canComplete: widget.currentUser != null,
+                    playlist: widget.playlist,
+                    levels: widget.levels,
+                    showInlinePlaylist: false,
+                    lockedReasons: _lockedReasons,
+                    isAssignmentSubmitted: _submittedAssignmentIds.contains(
+                      widget.lesson.assignmentId,
                     ),
+                    onOpenAssignmentSheet: widget.lesson.hasAssignment
+                        ? _showAssignmentModal
+                        : null,
+                    onToggleCompletion: _toggleCompletion,
+                    onSelectLesson: _openLesson,
+                  ),
+                  playlistPanel: LessonPlaylistPanel(
+                    playlist: widget.playlist,
+                    levels: widget.levels,
+                    currentLessonId: widget.lesson.id,
+                    courseId: widget.courseId,
+                    courseAccessMode: widget.courseAccessMode,
+                    submittedAssignmentIds: _submittedAssignmentIds,
+                    onSelectLesson: _openLesson,
+                  ),
+                )
+              : MobileSingleColumnPlayerView(
+                  stageWidget: _buildStage(showTopBar: false),
+                  stageMaxHeight: (size.height * 0.40).clamp(190.0, 380.0),
+                  detailsPanel: LessonDetailsPanel(
+                    lesson: widget.lesson,
+                    courseId: widget.courseId,
+                    isCompleted: _isCompleted,
+                    savingCompletion: _savingCompletion,
+                    canComplete: widget.currentUser != null,
+                    playlist: widget.playlist,
+                    levels: widget.levels,
+                    showInlinePlaylist: true,
+                    lockedReasons: _lockedReasons,
+                    isAssignmentSubmitted: _submittedAssignmentIds.contains(
+                      widget.lesson.assignmentId,
+                    ),
+                    onOpenAssignmentSheet: widget.lesson.hasAssignment
+                        ? _showAssignmentModal
+                        : null,
+                    onToggleCompletion: _toggleCompletion,
+                    onSelectLesson: _openLesson,
+                  ),
+                ),
         ),
       ),
     );

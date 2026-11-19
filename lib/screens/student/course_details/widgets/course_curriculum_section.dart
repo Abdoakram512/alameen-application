@@ -5,7 +5,7 @@ import '../../../../models/course_level.dart';
 import '../../../../models/course_progress_policy.dart';
 import '../../../../models/lesson.dart';
 
-/// قسم المنهج الدراسي المقسم إلى مستويات ومحاضرات مع تطبيق الفتح المتسلسل (95%) وقفل الخادم.
+/// قسم المنهج الدراسي المقسم إلى مستويات ومحاضرات مع تطبيق الفتح المتسلسل (Laravel) وقفل الخادم.
 class CourseCurriculumSection extends StatelessWidget {
   final List<CourseLevel> levels;
   final bool isEnrolled;
@@ -175,7 +175,7 @@ class CourseLevelCard extends StatelessWidget {
           ),
           subtitle: Text(
             sequentialLockActive
-                ? '${level.lessons.length} محاضرات • مغلق (أكمل 95% من المستوى السابق)'
+                ? '${level.lessons.length} محاضرات • مغلق بواسطة الخادم'
                 : '${level.lessons.length} محاضرات • تم إكمال $completedInLevel',
             style: AppTextStyles.caption,
           ),
@@ -198,17 +198,16 @@ class CourseLevelCard extends StatelessWidget {
                   final isLessonCompleted =
                       item.isCompleted || completedLessonIds.contains(item.id);
                   final numericId = int.tryParse(item.id);
-                  final blockedByServerList = enforceServerAccessibleList &&
+                  final blockedByServerList =
+                      enforceServerAccessibleList &&
                       numericId != null &&
-                      accessibleVideoIds.isNotEmpty &&
-                      !accessibleVideoIds.contains(numericId) &&
-                      !item.isAccessible;
+                      !accessibleVideoIds.contains(numericId);
                   final canAccessLesson = item.isFreePreview
                       ? item.isAccessible
                       : (isEnrolled &&
-                          isLevelUnlocked &&
-                          item.isAccessible &&
-                          !blockedByServerList);
+                            isLevelUnlocked &&
+                            item.isAccessible &&
+                            !blockedByServerList);
                   final isUnlocked =
                       canAccessLesson && lockReason == null && isAvailable;
 
@@ -240,15 +239,14 @@ class CourseLevelCard extends StatelessWidget {
                       } else if (isUnlocked) {
                         onPlayLesson(item);
                       } else if (isEnrolled && !isLevelUnlocked) {
-                        final msg = previousLevelTitle != null
-                            ? 'يجب إتمام 95% على الأقل من "$previousLevelTitle" لفتح هذا المستوى.'
-                            : 'هذا المستوى مغلق حالياً وفق قواعد التقدم المتسلسل.';
+                        const msg =
+                            '\u0647\u0630\u0627 \u0627\u0644\u0645\u0633\u062a\u0648\u0649 \u0645\u063a\u0644\u0642 \u062d\u0627\u0644\u064a\u0627 \u0628\u0648\u0627\u0633\u0637\u0629 \u0627\u0644\u062e\u0627\u062f\u0645.';
                         if (onSequentialLockedLessonTap != null) {
                           onSequentialLockedLessonTap!(msg);
                         } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(msg)),
-                          );
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(msg)));
                         }
                       } else {
                         onLockedLessonTap();
@@ -299,46 +297,46 @@ class CourseLessonTile extends StatelessWidget {
                 color: isCompleted
                     ? AppColors.successLight
                     : isUnavailable
-                        ? (lesson.isScheduled
-                            ? const Color(0xFFF3E8FF)
-                            : AppColors.surfaceLevel2)
-                        : isAssignmentLocked
-                            ? const Color(0xFFFEF3C7)
-                            : lesson.isAssignmentLesson
-                                ? const Color(0xFFEFF6FF)
-                                : isUnlocked
-                                    ? AppColors.primaryLight
-                                    : AppColors.surfaceLevel2,
+                    ? (lesson.isScheduled
+                          ? const Color(0xFFF3E8FF)
+                          : AppColors.surfaceLevel2)
+                    : isAssignmentLocked
+                    ? const Color(0xFFFEF3C7)
+                    : lesson.isAssignmentLesson
+                    ? const Color(0xFFEFF6FF)
+                    : isUnlocked
+                    ? AppColors.primaryLight
+                    : AppColors.surfaceLevel2,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 isCompleted
                     ? Icons.check_rounded
                     : isUnavailable
-                        ? (lesson.isScheduled
-                            ? Icons.access_time_rounded
-                            : Icons.lock_outline_rounded)
-                        : isAssignmentLocked
-                            ? Icons.lock_clock_rounded
-                            : lesson.isAssignmentLesson
-                                ? Icons.assignment_outlined
-                                : isUnlocked
-                                    ? Icons.play_arrow_rounded
-                                    : Icons.lock_outline_rounded,
+                    ? (lesson.isScheduled
+                          ? Icons.access_time_rounded
+                          : Icons.lock_outline_rounded)
+                    : isAssignmentLocked
+                    ? Icons.lock_clock_rounded
+                    : lesson.isAssignmentLesson
+                    ? Icons.assignment_outlined
+                    : isUnlocked
+                    ? Icons.play_arrow_rounded
+                    : Icons.lock_outline_rounded,
                 size: 19,
                 color: isCompleted
                     ? AppColors.success
                     : isUnavailable
-                        ? (lesson.isScheduled
-                            ? const Color(0xFF6B21A8)
-                            : AppColors.textMuted)
-                        : isAssignmentLocked
-                            ? const Color(0xFFB45309)
-                            : lesson.isAssignmentLesson
-                                ? const Color(0xFF1D4ED8)
-                                : isUnlocked
-                                    ? AppColors.primary
-                                    : AppColors.textMuted,
+                    ? (lesson.isScheduled
+                          ? const Color(0xFF6B21A8)
+                          : AppColors.textMuted)
+                    : isAssignmentLocked
+                    ? const Color(0xFFB45309)
+                    : lesson.isAssignmentLesson
+                    ? const Color(0xFF1D4ED8)
+                    : isUnlocked
+                    ? AppColors.primary
+                    : AppColors.textMuted,
               ),
             ),
             const SizedBox(width: 12),
@@ -376,9 +374,7 @@ class CourseLessonTile extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: const Color(0xFFEFF6FF),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: const Color(0xFFBFDBFE),
-                            ),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -400,7 +396,9 @@ class CourseLessonTile extends StatelessWidget {
                             ],
                           ),
                         ),
-                      if (!lesson.isAssignmentLesson && lesson.isFreePreview && !isCompleted)
+                      if (!lesson.isAssignmentLesson &&
+                          lesson.isFreePreview &&
+                          !isCompleted)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,

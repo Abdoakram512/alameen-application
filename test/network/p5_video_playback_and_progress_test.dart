@@ -535,7 +535,7 @@ void main() {
     });
 
     // 10. Sequential level unlocking enforcement
-    test('10. CourseProgressPolicy locks level 2 until level 1 reaches >=95% AND server marks isAccessible true', () {
+    test('10. CourseProgressPolicy follows server access regardless of local percentage', () {
       final lvl1 = CourseLevel(
         id: '1',
         title: 'المستوى الأول',
@@ -559,7 +559,7 @@ void main() {
       );
       final lvl2ServerLocked = lvl2ServerAccessible.copyWith(isAccessible: false);
 
-      // Level 1 only 50% complete -> Level 2 locked
+      // Laravel allows Level 2 even with only 50% local completion
       expect(
         CourseProgressPolicy.isLevelUnlocked(
           levels: [lvl1, lvl2ServerAccessible],
@@ -567,7 +567,7 @@ void main() {
           isEnrolled: true,
           completedLessonIds: const {'101'},
         ),
-        isFalse,
+        isTrue,
       );
 
       // Level 1 100% complete, server level.isAccessible == false -> STILL locked
@@ -594,7 +594,7 @@ void main() {
     });
 
     // 11. Exact 95% threshold boundary testing (94.9% vs 95.0%)
-    test('11. Strict 95% boundary: 94.9% stays incomplete/locked while 95.0% completes & unlocks next level', () async {
+    test('11. Coverage thresholds never grant local completion or override server access', () async {
       // A) Course-level boundary: 18/19 = 94.73%, 19/20 = 95.0%
       final twentyLessons = List.generate(
         20,
@@ -625,7 +625,7 @@ void main() {
           isEnrolled: true,
           completedLessonIds: eighteenCompleted, // 90%
         ),
-        isFalse,
+        isTrue,
       );
 
       final nineteenCompleted = {for (int i = 0; i < 19; i++) 'L$i'};
@@ -705,8 +705,8 @@ void main() {
         isScreenCaptured: false,
       );
       await coordinator.flushWatchTime(isSessionEnd: true);
-      expect(coordinator.isCompleted, isTrue);
-      expect(autoCompletedCount, equals(1));
+      expect(coordinator.isCompleted, isFalse);
+      expect(autoCompletedCount, equals(0));
     });
 
     // 12. Revoked course entitlement stops queued sync & local stale entitlement

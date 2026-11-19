@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import 'api_exceptions.dart';
 import 'api_response.dart';
 import 'auth_interceptor.dart';
+import 'safe_http_logger.dart';
 
 /// Central HTTP networking client wrapping [Dio] with automatic error mapping,
 /// timeout configurations, token injection, and typed envelope parsing.
@@ -14,31 +15,21 @@ class ApiClient {
     Dio? dio,
     required AuthInterceptor authInterceptor,
     String? baseUrl,
-  }) : _dio = dio ??
-            Dio(
-              BaseOptions(
-                baseUrl: baseUrl ?? AppConfig.apiBaseUrl,
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(seconds: 15),
-                sendTimeout: const Duration(seconds: 15),
-                headers: {
-                  'Accept': 'application/json',
-                },
-              ),
-            ) {
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               baseUrl: baseUrl ?? AppConfig.apiBaseUrl,
+               connectTimeout: const Duration(seconds: 15),
+               receiveTimeout: const Duration(seconds: 15),
+               sendTimeout: const Duration(seconds: 15),
+               headers: {'Accept': 'application/json'},
+             ),
+           ) {
     _dio.interceptors.add(authInterceptor);
 
     if (kDebugMode) {
-      _dio.interceptors.add(
-        LogInterceptor(
-          request: true,
-          requestHeader: false,
-          requestBody: false,
-          responseHeader: false,
-          responseBody: false,
-          error: true,
-        ),
-      );
+      _dio.interceptors.add(SafeHttpLogger());
     }
   }
 
