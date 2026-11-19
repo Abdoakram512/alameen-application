@@ -37,17 +37,21 @@ class CourseLevel extends Equatable {
         .toList();
     parsedLessons.sort((a, b) => a.order.compareTo(b.order));
 
+    final order = (json['sort_order'] is num)
+        ? (json['sort_order'] as num).toInt()
+        : ((json['order'] is num) ? (json['order'] as num).toInt() : 1);
+
+    // مبدأ أمني صارم: Fail Closed
+    // إذا لم يحدد الخادم صراحةً حقل is_accessible، يُتاح المستوى الأول فقط افتراضياً، وتُقفل كافة المستويات اللاحقة
     final accessible = json.containsKey('is_accessible')
         ? json['is_accessible'] == true
-        : true;
+        : (order <= 1);
 
     return CourseLevel(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? json['title_ar']?.toString() ?? '',
       description: json['description']?.toString() ?? json['description_ar']?.toString() ?? '',
-      order: (json['sort_order'] is num)
-          ? (json['sort_order'] as num).toInt()
-          : ((json['order'] is num) ? (json['order'] as num).toInt() : 1),
+      order: order,
       isAccessible: accessible,
       lessons: parsedLessons,
     );
@@ -63,12 +67,19 @@ class CourseLevel extends Equatable {
         .toList();
     parsedLessons.sort((a, b) => a.order.compareTo(b.order));
 
+    final order = (map['order'] is num) ? (map['order'] as num).toInt() : 1;
+    final accessible = map.containsKey('is_accessible')
+        ? map['is_accessible'] == true
+        : (map.containsKey('isAccessible')
+            ? map['isAccessible'] == true
+            : (order <= 1));
+
     return CourseLevel(
       id: map['id']?.toString() ?? '',
       title: map['title']?.toString() ?? '',
       description: map['description']?.toString() ?? '',
-      order: (map['order'] is num) ? (map['order'] as num).toInt() : 1,
-      isAccessible: map['isAccessible'] != false && map['is_accessible'] != false,
+      order: order,
+      isAccessible: accessible,
       lessons: parsedLessons,
     );
   }

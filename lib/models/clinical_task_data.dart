@@ -35,6 +35,28 @@ class StudentAssignmentsData extends Equatable {
     );
   }
 
+  /// التكليفات التي لم يقم الطالب بتسليمها بعد
+  List<Assignment> get pendingTasks {
+    final submittedTaskIds = submissions.map((s) => s.assignmentId).toSet();
+    return tasks.where((t) => !submittedTaskIds.contains(t.id)).toList();
+  }
+
+  /// التسليمات المعتمدة والمرصودة
+  List<AssignmentSubmission> get gradedSubmissions {
+    return submissions.where((s) => s.isGraded && s.score != null).toList();
+  }
+
+  /// متوسط درجات التكليفات المعتمدة
+  int? get averageScore {
+    final graded = gradedSubmissions;
+    if (graded.isEmpty) return null;
+    final total = graded.map((s) => s.score!).reduce((a, b) => a + b);
+    return (total / graded.length).round();
+  }
+
+  int get pendingCount => pendingTasks.length;
+  int get submittedCount => submissions.length;
+
   @override
   List<Object?> get props => [tasks, submissions];
 }

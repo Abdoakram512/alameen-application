@@ -134,11 +134,7 @@ class StudentProfileScreen extends StatelessWidget {
             final enrolledCourses = <Course>[];
             if (coursesState is CoursesLoaded && currentUser != null) {
               enrolledCourses.addAll(
-                coursesState.allCourses.where(
-                  (c) => c.isDetailedFromAuthServer
-                      ? c.hasEnrolled
-                      : (c.hasEnrolled || currentUser.isEnrolled(c.id)),
-                ),
+                coursesState.allCourses.where((c) => c.hasEnrolled),
               );
             }
 

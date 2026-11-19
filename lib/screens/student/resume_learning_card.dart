@@ -74,10 +74,7 @@ class _ResumeLearningCardState extends State<ResumeLearningCard> {
     final lesson = found.first;
 
     final isExpired = widget.user.isCourseExpired(course.id);
-    final isEnrolled = !isExpired &&
-        (course.isDetailedFromAuthServer
-            ? course.hasEnrolled
-            : (course.hasEnrolled || widget.user.isEnrolled(course.id)));
+    final isEnrolled = !isExpired && course.hasEnrolled;
 
     final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(
       course: course,

@@ -17,6 +17,7 @@ import 'package:secure_screen_app/models/course.dart';
 import 'package:secure_screen_app/models/course_access_mode.dart';
 import 'package:secure_screen_app/models/payment_receipt_model.dart';
 import 'package:secure_screen_app/models/user_profile.dart';
+import 'package:secure_screen_app/repositories/student_courses_repository.dart';
 import 'package:secure_screen_app/repositories/student_payment_repository.dart';
 
 class MockHttpClientAdapter implements HttpClientAdapter {
@@ -66,6 +67,7 @@ class InMemoryTokenStorage implements SecureTokenStorage {
 }
 
 class MockStudentPaymentRepository extends Mock implements StudentPaymentRepository {}
+class MockStudentCoursesRepository extends Mock implements StudentCoursesRepository {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -377,12 +379,17 @@ void main() {
 
   group('P4 AccessCubit Business Logic & Corrective Regression Tests', () {
     late MockStudentPaymentRepository mockPaymentRepo;
+    late MockStudentCoursesRepository mockCoursesRepo;
     late AccessCubit cubit;
     late File tempFile;
 
     setUp(() async {
       mockPaymentRepo = MockStudentPaymentRepository();
-      cubit = AccessCubit(paymentRepository: mockPaymentRepo);
+      mockCoursesRepo = MockStudentCoursesRepository();
+      cubit = AccessCubit(
+        paymentRepository: mockPaymentRepo,
+        coursesRepository: mockCoursesRepo,
+      );
       tempFile = File('${Directory.systemTemp.path}/receipt_cubit_test.jpg');
       await tempFile.writeAsBytes([0xFF, 0xD8, 0xFF]);
     });
@@ -413,6 +420,8 @@ void main() {
       );
 
       // Server returns empty receipts list (no confirmed enrollment)
+      when(() => mockCoursesRepo.getCourseDetails('100'))
+          .thenAnswer((_) async => freeCourse.copyWith(hasEnrolled: false));
       when(() => mockPaymentRepo.getStudentReceipts())
           .thenAnswer((_) async => []);
 
@@ -461,6 +470,8 @@ void main() {
         createdAt: DateTime.now(),
       );
 
+      when(() => mockCoursesRepo.getCourseDetails('100'))
+          .thenAnswer((_) async => freeCourse.copyWith(hasEnrolled: true));
       when(() => mockPaymentRepo.getStudentReceipts())
           .thenAnswer((_) async => [serverReceipt]);
 

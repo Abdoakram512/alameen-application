@@ -297,13 +297,9 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
               final isExpired =
                   currentUser != null && currentUser.isCourseExpired(course.id);
 
-              // صلاحية الاشتراك تصدر حصرياً من Laravel (has_enrolled عند جلب تفاصيل الطالب)،
-              // ولا يُسمح لأي بيانات محلية قديمة بتجاوز رفض الخادم.
-              final isEnrolled = !isExpired &&
-                  (course.isDetailedFromAuthServer
-                      ? course.hasEnrolled
-                      : (course.hasEnrolled ||
-                          (currentUser?.isEnrolled(course.id) ?? false)));
+              // صلاحية الاشتراك تصدر حصرياً من خادم Laravel عبر حقل has_enrolled الموثق،
+              // ولا يُسمح لأي بيانات محلية قديمة أو إيصالات سداد بتجاوز قرار الخادم
+              final isEnrolled = !isExpired && course.hasEnrolled;
 
               final allIds = course.allLessonIds;
               final completedSet = CourseProgressPolicy.effectiveCompletedLessonIds(

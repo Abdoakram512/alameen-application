@@ -29,7 +29,7 @@ class StudentHomeScreen extends StatelessWidget {
     if (c.accessMode == CourseAccessMode.closed) return false;
     if (c.accessMode == CourseAccessMode.assignedOnly) {
       if (user == null) return false;
-      return c.hasEnrolled || user.isEnrolled(c.id);
+      return c.hasEnrolled;
     }
     return true;
   }
@@ -79,13 +79,7 @@ class StudentHomeScreen extends StatelessWidget {
               }.toList();
               final enrolledCount = currentUser == null
                   ? 0
-                  : allCourses
-                        .where(
-                          (c) => c.isDetailedFromAuthServer
-                              ? c.hasEnrolled
-                              : (c.hasEnrolled || currentUser.isEnrolled(c.id)),
-                        )
-                        .length;
+                  : allCourses.where((c) => c.hasEnrolled).length;
 
               return RefreshIndicator(
                 color: AppColors.primary,
@@ -138,14 +132,13 @@ class StudentHomeScreen extends StatelessWidget {
                                 for (final course in filteredCourses)
                                   StudentCourseCard(
                                     course: course,
-                                    isEnrolled:
-                                        currentUser?.isEnrolled(course.id) ??
-                                            false,
-                                    progress: currentUser
-                                            ?.calculateCourseProgress(
+                                    isEnrolled: course.hasEnrolled,
+                                    progress: (course.serverProgressPercent != null)
+                                        ? (course.serverProgressPercent! / 100.0).clamp(0.0, 1.0)
+                                        : (currentUser?.calculateCourseProgress(
                                               course.allLessonIds,
                                             ) ??
-                                        0.0,
+                                            0.0),
                                     onTap: () =>
                                         context.go('/course/${course.id}'),
                                   ),
