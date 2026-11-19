@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -26,6 +27,15 @@ class NotificationService {
     if (_initialized) return;
 
     try {
+      // 0. تهيئة Firebase الأساسية بأمان إذا لم تكن مهيأة مسبقاً
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp();
+        }
+      } catch (e) {
+        debugPrint('Firebase init in NotificationService non-fatal: $e');
+      }
+
       // 1. طلب الصلاحيات
       final settings = await _fcm.requestPermission(
         alert: true,
@@ -135,6 +145,9 @@ class NotificationService {
   /// يتم الاحتفاظ بالتوكن في التخزين المحلي لاستخدامه فور توفر نقطة النهاية الرسمية في الخادم.
   Future<void> syncFCMToken(String uid) async {
     try {
+      if (!_initialized) {
+        await initialize();
+      }
       // ignore: deprecated_member_use
       final token = await _fcm.getToken();
       if (token != null && token.isNotEmpty) {
