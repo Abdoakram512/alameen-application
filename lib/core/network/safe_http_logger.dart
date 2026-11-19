@@ -1,12 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../logging/app_logger.dart';
 
-/// Metadata-only logging: never inspects headers, payloads, filenames or errors.
-/// Unknown URL segments are hidden because they may contain personal data.
+/// Metadata-only HTTP logger powered by [AppLogger] and [Interceptor].
+/// Never logs sensitive headers, raw tokens, payloads or query parameters.
 class SafeHttpLogger extends Interceptor {
-  SafeHttpLogger({void Function(String)? output})
-    : _output = output ?? debugPrint;
-  final void Function(String) _output;
+  SafeHttpLogger({void Function(String)? output}) : _output = output;
+
+  final void Function(String)? _output;
   static const _clockKey = 'safeHttpStopwatch';
   static const _routes = {
     'api',
@@ -55,11 +56,30 @@ class SafeHttpLogger extends Interceptor {
     if (!kDebugMode) return;
     final clock = options.extra[_clockKey];
     final elapsed = clock is Stopwatch ? clock.elapsedMilliseconds : 0;
-    _output(
-      '\x1B[${color}mHTTP $event ${options.method} ${_path(options)} '
-      'status=${status ?? "-"} ${elapsed}ms '
-      '${kind ?? ""} headers/body/query/files=[redacted]\x1B[0m',
-    );
+    final message =
+        '\x1B[${color}mHTTP $event ${options.method} ${_path(options)} '
+        'status=${status ?? "-"} ${elapsed}ms '
+        '${kind ?? ""} headers/body/query/files=[redacted]\x1B[0m';
+
+    if (_output != null) {
+      _output(message);
+    } else {
+      final summary =
+          'HTTP $event ${options.method} ${_path(options)} status=${status ?? "-"} (${elapsed}ms)';
+      switch (event) {
+        case 'REQUEST':
+          AppLogger.d(summary);
+          break;
+        case 'RESPONSE':
+          AppLogger.i(summary);
+          break;
+        case 'ERROR':
+          AppLogger.e(summary);
+          break;
+        default:
+          AppLogger.i(summary);
+      }
+    }
   }
 
   @override

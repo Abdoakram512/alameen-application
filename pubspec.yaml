@@ -66,6 +66,7 @@ dependencies:
   phosphor_flutter: ^2.1.0
   pdf: ^3.11.1
   printing: ^5.13.2
+  logger: ^2.8.0
 
 dev_dependencies:
   flutter_test:

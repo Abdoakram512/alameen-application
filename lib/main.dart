@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'core/config/app_config.dart';
+import 'core/logging/app_logger.dart';
 import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/onboarding/onboarding_screen.dart';
@@ -68,8 +69,8 @@ Future<void> _initializeNotifications() async {
 Future<void> _initFirebase() async {
   try {
     await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase init check: $e');
+  } catch (e, stack) {
+    AppLogger.w('Firebase init check: $e', e, stack);
   }
 }
 
@@ -79,8 +80,8 @@ Future<void> _enableScreenProtection() async {
     await ScreenProtector.protectDataLeakageWithColor(
       AppConfig.securityShieldColor,
     );
-  } catch (e) {
-    debugPrint('ScreenProtector init: $e');
+  } catch (e, stack) {
+    AppLogger.w('ScreenProtector init: $e', e, stack);
   }
 }
 
