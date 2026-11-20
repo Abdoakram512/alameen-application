@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -364,7 +365,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('من نحن'), findsOneWidget);
+      expect(find.text('about_us.title'.tr()), findsOneWidget);
       expect(find.text('مركز الأمين الدولي'), findsOneWidget);
       expect(find.text('مرحباً بكم في الصرح التدريبي الرائد.'), findsOneWidget);
     });
@@ -392,7 +393,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('الأسئلة الشائعة'), findsOneWidget);
+      expect(find.text('faqs.title'.tr()), findsOneWidget);
       expect(find.text('هل الشهادة معتمدة من سنتر الأمين؟'), findsOneWidget);
     });
 
@@ -417,7 +418,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('سياسة الخصوصية'), findsOneWidget);
+      expect(find.text('privacy_policy.title'.tr()), findsOneWidget);
       expect(find.text('سياسة الخصوصية وحماية البيانات'), findsOneWidget);
       expect(find.text('حماية تامة للبيانات وحقوق الملكية الفكرية.'), findsOneWidget);
     });

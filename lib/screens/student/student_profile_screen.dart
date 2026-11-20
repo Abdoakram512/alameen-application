@@ -251,7 +251,7 @@ class StudentProfileScreen extends StatelessWidget {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'شهاداتي المعتمدة',
+                                            'certificates.title'.tr(),
                                             style: AppTextStyles.bodyMedium.copyWith(
                                               fontWeight: FontWeight.bold,
                                               color: AppColors.textPrimary,
@@ -259,7 +259,7 @@ class StudentProfileScreen extends StatelessWidget {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            'استعراض وتوثيق وتحميل شهادات إتمام الدورات التدريبية',
+                                            'certificates.subtitle'.tr(),
                                             style: AppTextStyles.caption.copyWith(
                                               color: AppColors.textSecondary,
                                             ),
@@ -314,14 +314,14 @@ class StudentProfileScreen extends StatelessWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'خدمة الدعم الفني المباشر',
+                                          'support.title'.tr(),
                                           style: AppTextStyles.bodyMedium.copyWith(
                                             fontWeight: FontWeight.bold,
                                             color: AppColors.textPrimary,
                                           ),
                                         ),
                                         Text(
-                                          'فريق مركز الأمين متاح للرد على استفساراتك',
+                                          'support.subtitle'.tr(),
                                           style: AppTextStyles.caption,
                                         ),
                                       ],

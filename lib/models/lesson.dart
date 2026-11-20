@@ -291,7 +291,7 @@ class Lesson extends Equatable {
       muxPlaybackId: map['muxPlaybackId']?.toString() ?? '',
       muxAssetId: map['muxAssetId'] as String?,
       order: (map['order'] is num) ? (map['order'] as num).toInt() : 1,
-      isFreePreview: map['isFreePreview'] == true,
+      isFreePreview: map['isFreePreview'] == true || map['is_free'] == true || map['is_free_preview'] == true,
       isCompleted: map['isCompleted'] == true || map['is_completed'] == true,
       type: map['type']?.toString() ?? 'video',
       assignmentId: map['assignmentId'] as String?,

@@ -24,8 +24,14 @@ import '../../../../widgets/language_switch_button.dart';
 class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? displayName;
   final String? photoUrl;
+  final StudentNotificationsRepository? notificationsRepository;
 
-  const StudentHomeAppBar({super.key, this.displayName, this.photoUrl});
+  const StudentHomeAppBar({
+    super.key,
+    this.displayName,
+    this.photoUrl,
+    this.notificationsRepository,
+  });
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -124,10 +130,9 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
           },
         ),
         // جرس الإشعارات والتنبيهات المربوط بـ Laravel Notifications REST API
-        if (sl.isRegistered<StudentNotificationsRepository>())
+        if ((notificationsRepository ?? (sl.isRegistered<StudentNotificationsRepository>() ? sl<StudentNotificationsRepository>() : null)) != null)
           ValueListenableBuilder<int>(
-            valueListenable:
-                sl<StudentNotificationsRepository>().unreadCountListenable,
+            valueListenable: (notificationsRepository ?? sl<StudentNotificationsRepository>()).unreadCountListenable,
             builder: (context, unreadCount, _) {
               return IconButton(
                 tooltip: 'الإشعارات والتنبيهات',

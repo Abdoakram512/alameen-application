@@ -72,6 +72,9 @@ class AssignmentsCubit extends Cubit<AssignmentsState> {
   }) async {
     final currentState = state;
     if (currentState is AssignmentsLoaded && !isClosed) {
+      if (currentState.isSubmitting) {
+        throw const ApiException('طلب تسليم التكليف قيد المعالجة بالفعل.');
+      }
       emit(currentState.copyWith(isSubmitting: true));
     }
 

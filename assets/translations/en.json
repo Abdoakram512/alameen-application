@@ -8,7 +8,6 @@
   "previous": "Previous",
   "saving": "Saving...",
   "onboarding_start_now": "Start Now",
-  
   "auth": {
     "login_title": "Student Sign In",
     "email": "Email Address",
@@ -35,7 +34,6 @@
     "sign_out_confirm": "Are you sure you want to sign out from your account?",
     "auth_footer_trust": "Secure & encrypted login via Firebase and Google Auth"
   },
-
   "validation": {
     "email_required": "Please enter your email address",
     "email_invalid": "Please enter a valid email address",
@@ -48,7 +46,6 @@
     "phone_required": "Please enter your phone number",
     "phone_invalid": "Phone number is invalid"
   },
-
   "dialogs": {
     "ok": "Got It",
     "retry": "Try Again",
@@ -64,7 +61,6 @@
     "reset_link_sent_title": "Link Sent",
     "reset_link_sent_desc": "Password reset instructions have been sent to your email. Please check your inbox or spam folder."
   },
-
   "courses": {
     "all_courses": "All Available Courses",
     "my_courses": "Enrolled Courses",
@@ -86,7 +82,6 @@
     "request_pending": "Your request is pending administrative review",
     "request_approved": "Already enrolled in this course"
   },
-
   "assignments": {
     "title": "Practical Tasks & Assignments",
     "tasks_count": "Tasks",
@@ -96,7 +91,6 @@
     "status_pending": "Pending Grading",
     "status_graded": "Graded"
   },
-
   "profile": {
     "title": "Student Profile",
     "student_id": "Student ID",
@@ -109,7 +103,6 @@
     "google_linked": "Linked with Google",
     "verified_account": "Verified Student Account"
   },
-
   "security": {
     "recording_detected_title": "🚨 Screen Recording Detected!",
     "recording_detected_desc": "Elameen Center app is protected against recording and media copying.\nA screen recording tool is currently active. Playback has been halted to protect intellectual property.",
@@ -117,7 +110,6 @@
     "verify_and_continue": "Verify & Continue",
     "verified_success": "Verified successfully. Welcome back to Elameen Center!"
   },
-
   "requests": {
     "sheet_title": "Request Course Enrollment",
     "sheet_subtitle": "Select your payment method and attach transfer receipt for instant activation",
@@ -132,7 +124,6 @@
     "submitting": "Submitting request and verifying receipt...",
     "cash_center_note": "When paying in cash, please visit the center cash desk to activate your course immediately."
   },
-
   "nav": {
     "courses": "Courses",
     "assignments": "Assignments",
@@ -140,7 +131,6 @@
     "profile": "Profile",
     "center_brand": "Elameen Center"
   },
-
   "player": {
     "lesson_completed_title": "Lecture Completed Successfully ✓",
     "lesson_auto_track_title": "Automated Lecture Tracker",
@@ -153,7 +143,6 @@
     "open_error": "Failed to open lecture, please try again.",
     "saved_position_hint": "Your playback position is saved automatically on this device."
   },
-
   "home": {
     "welcome_back": "Welcome back",
     "available_courses": "Available Courses",
@@ -165,7 +154,6 @@
     "all_categories": "All",
     "student_fallback": "Elameen Center Trainee"
   },
-
   "course_details": {
     "title": "Course Details",
     "not_found": "The requested course is currently unavailable.",
@@ -176,6 +164,38 @@
     "open_course_desc": "This course is open to all students for free without needing payment or approvals.",
     "start_open_course": "Start Course Now for Free",
     "locked_for_subscribers": "This lecture is available to course subscribers. Request enrollment to unlock."
+  },
+  "about_us": {
+    "title": "About Us",
+    "contact_us": "Contact & Inquiries",
+    "whatsapp": "WhatsApp"
+  },
+  "faqs": {
+    "title": "Frequently Asked Questions",
+    "subtitle": "Answers to the most common inquiries",
+    "support_note": "Didn't find an answer? Our support team is always ready to assist.",
+    "chat_whatsapp": "Chat with Support via WhatsApp"
+  },
+  "privacy_policy": {
+    "title": "Privacy Policy",
+    "security_note": "Your data is encrypted and protected following the highest security and privacy standards"
+  },
+  "analytics": {
+    "title": "My Analytics & Progress",
+    "subtitle": "Live analytics for your attendance, watch time, and learning progress",
+    "login_required": "Please sign in first to access your personalized learning analytics",
+    "record_title": "Achievements & Training Hours Log"
+  },
+  "certificates": {
+    "title": "Certified Certificates",
+    "subtitle": "Review, verify, and download course completion certificates",
+    "certificate_issued": "Verified Official Certificate",
+    "download_pdf": "Download Certificate (PDF)"
+  },
+  "support": {
+    "title": "Direct Technical Support",
+    "subtitle": "Connect with administration and academic support to resolve inquiries",
+    "new_ticket": "New Support Ticket",
+    "my_tickets": "Previous Tickets"
   }
 }
-

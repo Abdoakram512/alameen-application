@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -23,9 +24,9 @@ class StudentAnalyticsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       appBar: AppBar(
-        title: const Text(
-          'تحليلي ومسار التعلم',
-          style: TextStyle(fontWeight: FontWeight.w800),
+        title: Text(
+          'analytics.title'.tr(),
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
         elevation: 0,
@@ -36,7 +37,7 @@ class StudentAnalyticsScreen extends StatelessWidget {
           final currentUser =
               authState is Authenticated ? authState.user : null;
           if (currentUser == null) {
-            return const Center(child: Text('يرجى تسجيل الدخول أولاً'));
+            return Center(child: Text('analytics.login_required'.tr()));
           }
 
           return BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(

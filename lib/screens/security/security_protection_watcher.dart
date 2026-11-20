@@ -103,8 +103,8 @@ class SecurityProtectionWatcherState extends State<SecurityProtectionWatcher>
       // 4. فحص استباقي فوري: هل يوجد مسجل شاشة يعمل مسبقاً قبل فتح التطبيق؟
       await _checkScreenRecordingStatus();
 
-      // 5. فحص دوري خفيف في الخلفية دون استهلاك الـ Main Thread (المستمع الأصلي Event-driven نشط بالفعل)
-      _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      // 5. فحص دوري آمن ومستمر لحماية المحتوى التعليمي ومنع أي ثغرة زمنية لتسجيل الشاشة
+      _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) {
         _checkScreenRecordingStatus();
       });
     } catch (e) {

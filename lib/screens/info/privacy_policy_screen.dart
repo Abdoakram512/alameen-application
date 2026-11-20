@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -56,7 +57,7 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
       child: Scaffold(
         backgroundColor: AppColors.scaffoldBackground,
         appBar: AppBar(
-          title: const Text('سياسة الخصوصية'),
+          title: Text('privacy_policy.title'.tr()),
           centerTitle: true,
         ),
         body: BlocBuilder<ContentCubit, ContentState>(

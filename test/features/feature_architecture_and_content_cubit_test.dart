@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secure_screen_app/features/features.dart';
@@ -196,7 +197,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('من نحن'), findsOneWidget);
+      expect(find.text('about_us.title'.tr()), findsOneWidget);
       expect(find.text('مركز الأمين التخصصي'), findsOneWidget);
       expect(find.text('نص تفصيلي عن الرؤية والأهداف.'), findsOneWidget);
 
@@ -224,7 +225,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('الأسئلة الشائعة'), findsOneWidget);
+      expect(find.text('faqs.title'.tr()), findsOneWidget);
       expect(find.text('كيف أسجل في دورة؟'), findsOneWidget);
 
       await cubit.close();
@@ -252,7 +253,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('سياسة الخصوصية'), findsOneWidget);
+      expect(find.text('privacy_policy.title'.tr()), findsOneWidget);
       expect(find.text('بنود الخصوصية والحماية'), findsOneWidget);
       expect(find.text('تفاصيل حماية بيانات المتدربين.'), findsOneWidget);
 
