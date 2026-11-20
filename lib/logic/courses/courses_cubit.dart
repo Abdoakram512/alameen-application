@@ -48,11 +48,17 @@ class CoursesCubit extends Cubit<CoursesState> {
 
     // 1. استرجاع الكاش المحلي فوراً (Zero Latency) لمنع شاشة اللودينج المعطلة
     if (_cachedCourses.isEmpty && !forceRefresh) {
-      final local = await _coursesRepository.getCachedCourses();
-      if (local != null && local.isNotEmpty && _cachedCourses.isEmpty) {
-        _updateCourses(local);
-      } else if (_cachedCourses.isEmpty) {
-        emit(CoursesLoading());
+      try {
+        final local = await _coursesRepository.getCachedCourses();
+        if (local != null && local.isNotEmpty && _cachedCourses.isEmpty) {
+          _updateCourses(local);
+        } else if (_cachedCourses.isEmpty) {
+          emit(CoursesLoading());
+        }
+      } catch (_) {
+        if (_cachedCourses.isEmpty) {
+          emit(CoursesLoading());
+        }
       }
     } else if (_cachedCourses.isEmpty) {
       emit(CoursesLoading());

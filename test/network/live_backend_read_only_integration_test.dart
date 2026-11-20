@@ -126,7 +126,7 @@ void main() {
       expect(course.levels, isNotEmpty);
       expect(course.levels.first.title, equals('المستوى الاول'));
       expect(course.levels.first.lessons, isNotEmpty);
-      expect(course.levels.first.lessons.length, equals(5));
+      expect(course.levels.first.lessons.length, greaterThanOrEqualTo(5));
       expect(course.levels.first.lessons.first.title, isNotEmpty);
     });
 

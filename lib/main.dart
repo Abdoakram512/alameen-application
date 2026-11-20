@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,6 +20,16 @@ import 'screens/security/security_protection_watcher.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFFFAFCFF),
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
 
   // 1. تهيئة التدويل وحقن التبعيات الأساسية قبل الإقلاع
   await EasyLocalization.ensureInitialized();

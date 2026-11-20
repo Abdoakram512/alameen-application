@@ -17,6 +17,18 @@ class AppDirectionalIcons {
     return isRtl ? PhosphorIconsRegular.caretLeft : PhosphorIconsRegular.caretRight;
   }
 
+  /// سهم تفاصيل القائمة للخلف (يمين في العربية، يسار في الإنجليزية)
+  static IconData backCaret(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return isRtl ? PhosphorIconsRegular.caretRight : PhosphorIconsRegular.caretLeft;
+  }
+
+  /// سهم تفاصيل القائمة للأمام (يسار في العربية، يمين في الإنجليزية)
+  static IconData forwardCaret(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return isRtl ? PhosphorIconsRegular.caretLeft : PhosphorIconsRegular.caretRight;
+  }
+
   /// سهم التقدم للأمام
   static IconData forwardIcon(BuildContext context) {
     final isRtl = Directionality.of(context) == TextDirection.rtl;

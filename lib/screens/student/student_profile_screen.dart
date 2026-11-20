@@ -267,10 +267,10 @@ class StudentProfileScreen extends StatelessWidget {
                                         ],
                                       ),
                                     ),
-                                    const Icon(
-                                      Icons.arrow_forward_ios_rounded,
+                                    Icon(
+                                      AppDirectionalIcons.chevronDetail(context),
                                       size: 16,
-                                      color: Color(0xFFC5A059),
+                                      color: const Color(0xFFC5A059),
                                     ),
                                   ],
                                 ),

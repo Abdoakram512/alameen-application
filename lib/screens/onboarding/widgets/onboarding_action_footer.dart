@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_directional_icons.dart';
 import 'onboarding_progress_dots.dart';
 
 /// تذييل شاشة التعريف مع مؤشر التقدم الحلقي المرسوم بـ CustomPainter وأزرار واضحة التسلسل.
@@ -24,6 +26,16 @@ class OnboardingActionFooter extends StatelessWidget {
     required this.onPrimaryPressed,
     required this.onSignInPressed,
   });
+
+  String _safeTr(String key, String fallback) {
+    try {
+      final val = key.tr();
+      if (val.isEmpty || val == key) return fallback;
+      return val;
+    } catch (_) {
+      return fallback;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,8 +92,8 @@ class OnboardingActionFooter extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Icon(
-                      PhosphorIconsRegular.caretRight,
+                    child: Icon(
+                      AppDirectionalIcons.backCaret(context),
                       size: 19,
                     ),
                   ),
@@ -110,10 +122,10 @@ class OnboardingActionFooter extends StatelessWidget {
                             duration: const Duration(milliseconds: 220),
                             child: Text(
                               isSaving
-                                  ? 'جارٍ الحفظ...'
+                                  ? _safeTr('saving', 'جارٍ الحفظ...')
                                   : isLastSlide
-                                      ? 'ابدأ الآن'
-                                      : 'التالي',
+                                      ? _safeTr('onboarding_start_now', 'ابدأ الآن')
+                                      : _safeTr('next', 'التالي'),
                               key: ValueKey<String>(
                                 '$isSaving-$isLastSlide',
                               ),
@@ -145,7 +157,7 @@ class OnboardingActionFooter extends StatelessWidget {
                             child: Icon(
                               isLastSlide
                                   ? PhosphorIconsRegular.rocketLaunch
-                                  : PhosphorIconsRegular.arrowLeft,
+                                  : AppDirectionalIcons.forwardIcon(context),
                               size: 14,
                               color: Colors.white,
                             ),

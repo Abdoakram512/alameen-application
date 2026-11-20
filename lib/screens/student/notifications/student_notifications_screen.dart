@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_directional_icons.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_view.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
@@ -403,8 +404,8 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
                                     ),
                                   ),
                                   const SizedBox(width: 3),
-                                  const Icon(
-                                    PhosphorIconsRegular.arrowLeft,
+                                  Icon(
+                                    AppDirectionalIcons.forwardIcon(context),
                                     size: 12,
                                     color: AppColors.primary,
                                   ),

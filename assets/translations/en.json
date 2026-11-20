@@ -4,6 +4,10 @@
   "student_portal": "Student Portal • Encrypted Lectures Platform",
   "security_shield_desc": "Hardware Encrypted Protection Against Screen Capture & Recording",
   "splash_loading": "Initializing security & lecture resources...",
+  "next": "Next",
+  "previous": "Previous",
+  "saving": "Saving...",
+  "onboarding_start_now": "Start Now",
   
   "auth": {
     "login_title": "Student Sign In",

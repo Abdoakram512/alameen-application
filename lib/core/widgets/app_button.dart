@@ -83,6 +83,7 @@ class AppButton extends StatelessWidget {
       content = Row(
         mainAxisSize: isFullWidth ? MainAxisSize.max : MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (icon != null) ...[
             icon!,
@@ -93,10 +94,21 @@ class AppButton extends StatelessWidget {
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.bodyLarge.copyWith(
+              textAlign: TextAlign.center,
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+              ),
+              strutStyle: const StrutStyle(
+                fontSize: 14,
+                height: 1.1,
+                forceStrutHeight: true,
+              ),
+              style: AppTextStyles.button.copyWith(
                 color: foregroundColor,
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
+                height: 1.1,
               ),
             ),
           ),
@@ -108,6 +120,7 @@ class AppButton extends StatelessWidget {
       backgroundColor: backgroundColor,
       foregroundColor: foregroundColor,
       elevation: 0,
+      alignment: Alignment.center,
       shadowColor: Colors.transparent,
       padding: padding ?? const EdgeInsets.symmetric(horizontal: 16),
       shape: RoundedRectangleBorder(

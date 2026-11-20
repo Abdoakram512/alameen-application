@@ -7,6 +7,7 @@ import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_cached_image.dart';
+import '../../../../core/widgets/app_directional_icons.dart';
 import '../../../../core/widgets/app_lottie_box.dart';
 import '../../../../models/course.dart';
 import '../../../../models/user_profile.dart';
@@ -165,8 +166,8 @@ class _EnrolledCourseCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(
-                          PhosphorIconsRegular.caretLeft,
+                        Icon(
+                          AppDirectionalIcons.chevronDetail(context),
                           size: 16,
                           color: AppColors.textMuted,
                         ),
