@@ -22,34 +22,24 @@ class StudentStatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 430;
 
-    String safeTr(String key, String fallback) {
-      try {
-        final val = key.tr();
-        if (val.isEmpty || val == key) return fallback;
-        return val;
-      } catch (_) {
-        return fallback;
-      }
-    }
-
     final cards = [
       _StatTile(
         icon: PhosphorIconsRegular.graduationCap,
         accentColor: AppColors.primary,
         value: '$enrolledCount',
-        label: safeTr('profile.enrolled_courses', 'دورات مشترك بها'),
+        label: 'profile.enrolled_courses'.tr(),
       ),
       _StatTile(
         icon: PhosphorIconsRegular.checkCircle,
         accentColor: AppColors.success,
         value: '$completedLessonsCount',
-        label: safeTr('profile.completed_lessons', 'محاضرة مكتملة'),
+        label: 'profile.completed_lessons'.tr(),
       ),
       _StatTile(
         icon: PhosphorIconsRegular.clockCountdown,
         accentColor: const Color(0xFF1D4ED8),
         value: watchTimeFormatted,
-        label: safeTr('profile.total_watch_time', 'وقت التعلم المسجل'),
+        label: 'profile.total_watch_time'.tr(),
       ),
     ];
 

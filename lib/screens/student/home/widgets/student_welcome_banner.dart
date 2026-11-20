@@ -15,16 +15,6 @@ class StudentWelcomeBanner extends StatelessWidget {
     required this.enrolledCount,
   });
 
-  String _safeTr(String key, String fallback, {List<String>? args}) {
-    try {
-      final val = key.tr(args: args);
-      if (val.isEmpty || val == key) return fallback;
-      return val;
-    } catch (_) {
-      return fallback;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -57,7 +47,7 @@ class StudentWelcomeBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _safeTr('app_name', 'مركز الأمين للتخاطب'),
+                  'app_name'.tr(),
                   style: AppTextStyles.heading3.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w800,
@@ -65,7 +55,7 @@ class StudentWelcomeBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _safeTr('app_tagline', 'بوابة المتدرب التفاعلية'),
+                  'app_tagline'.tr(),
                   style: AppTextStyles.bodyMedium,
                 ),
                 const SizedBox(height: 10),
@@ -75,9 +65,7 @@ class StudentWelcomeBanner extends StatelessWidget {
                   children: [
                     _MetricChip(
                       icon: PhosphorIconsRegular.books,
-                      label: _safeTr(
-                        'home.courses_available_count',
-                        '$totalCourses دورة متاحة',
+                      label: 'home.courses_available_count'.tr(
                         args: ['$totalCourses'],
                       ),
                       bgColor: AppColors.primaryLight,
@@ -86,9 +74,7 @@ class StudentWelcomeBanner extends StatelessWidget {
                     if (enrolledCount > 0)
                       _MetricChip(
                         icon: PhosphorIconsFill.sealCheck,
-                        label: _safeTr(
-                          'home.courses_enrolled_count',
-                          '$enrolledCount مشترك بها',
+                        label: 'home.courses_enrolled_count'.tr(
                           args: ['$enrolledCount'],
                         ),
                         bgColor: AppColors.successLight,

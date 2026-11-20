@@ -27,16 +27,6 @@ class OnboardingActionFooter extends StatelessWidget {
     required this.onSignInPressed,
   });
 
-  String _safeTr(String key, String fallback) {
-    try {
-      final val = key.tr();
-      if (val.isEmpty || val == key) return fallback;
-      return val;
-    } catch (_) {
-      return fallback;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
@@ -122,10 +112,10 @@ class OnboardingActionFooter extends StatelessWidget {
                             duration: const Duration(milliseconds: 220),
                             child: Text(
                               isSaving
-                                  ? _safeTr('saving', 'جارٍ الحفظ...')
+                                  ? 'saving'.tr()
                                   : isLastSlide
-                                      ? _safeTr('onboarding_start_now', 'ابدأ الآن')
-                                      : _safeTr('next', 'التالي'),
+                                      ? 'onboarding_start_now'.tr()
+                                      : 'next'.tr(),
                               key: ValueKey<String>(
                                 '$isSaving-$isLastSlide',
                               ),

@@ -9,16 +9,6 @@ import '../onboarding/widgets/onboarding_backdrop_painter.dart';
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
-  String _safeTr(String key, String fallback) {
-    try {
-      final val = key.tr();
-      if (val.isEmpty || val == key) return fallback;
-      return val;
-    } catch (_) {
-      return fallback;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,7 +45,7 @@ class SplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      _safeTr('app_name', 'مركز الأمين للتخاطب'),
+                      'app_name'.tr(),
                       textAlign: TextAlign.center,
                       style: AppTextStyles.displayLarge.copyWith(
                         fontSize: 26,
@@ -64,7 +54,7 @@ class SplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _safeTr('app_tagline', 'بوابة المتدرب التفاعلية'),
+                      'app_tagline'.tr(),
                       textAlign: TextAlign.center,
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontSize: 14,
@@ -79,7 +69,7 @@ class SplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _safeTr('splash_loading', 'جاري تهيئة بوابة مركز الأمين للتخاطب...'),
+                      'splash_loading'.tr(),
                       textAlign: TextAlign.center,
                       style: AppTextStyles.caption,
                     ),

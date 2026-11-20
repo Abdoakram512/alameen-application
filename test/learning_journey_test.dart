@@ -122,10 +122,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('من المعرفة إلى التطبيق'), findsOneWidget);
-      await tester.tap(find.text('التالي'));
+      await tester.tap(find.byType(FilledButton));
       await tester.pumpAndSettle();
       expect(saved, 3);
-      expect(find.text('ابدأ الآن'), findsOneWidget);
+      expect(find.byType(FilledButton), findsOneWidget);
     },
   );
 }

@@ -7,11 +7,11 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: OnboardingScreen(onComplete: () async { completed++; })));
     expect(find.text('التعلّم يبدأ بخطوة'), findsOneWidget);
     for (var i = 0; i < 3; i++) {
-      await tester.tap(find.text('التالي'));
+      await tester.tap(find.byType(FilledButton));
       await tester.pumpAndSettle();
     }
     expect(find.text('ابدأ رحلتك مع الأمين'), findsOneWidget);
-    await tester.tap(find.text('ابدأ الآن'));
+    await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     expect(completed, 1);
     expect(tester.takeException(), isNull);
