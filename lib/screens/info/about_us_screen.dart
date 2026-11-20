@@ -35,9 +35,7 @@ class _AboutUsScreenState extends State<AboutUsScreen> {
       _cubit = sl<ContentCubit>();
       _ownsCubit = true;
     } else {
-      _cubit = ContentCubit(
-        repository: sl<StudentContentRepository>(),
-      );
+      _cubit = ContentCubit(repository: sl<StudentContentRepository>());
       _ownsCubit = true;
     }
     _cubit.loadAboutUs();

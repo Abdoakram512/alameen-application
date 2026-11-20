@@ -16,11 +16,13 @@ import '../../../repositories/student_assignments_repository.dart';
 class SubmitAssignmentSheet extends StatefulWidget {
   final Assignment assignment;
   final UserModel user;
+  final StudentAssignmentsRepository? repository;
 
   const SubmitAssignmentSheet({
     super.key,
     required this.assignment,
     required this.user,
+    this.repository,
   });
 
   @override
@@ -36,7 +38,7 @@ class _SubmitAssignmentSheetState extends State<SubmitAssignmentSheet> {
   String _statusMessage = 'جاري إرسال تسليم التكليف...';
 
   StudentAssignmentsRepository get _repository =>
-      sl<StudentAssignmentsRepository>();
+      widget.repository ?? sl<StudentAssignmentsRepository>();
 
   @override
   void dispose() {

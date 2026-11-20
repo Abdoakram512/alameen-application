@@ -236,6 +236,7 @@ Future<void> initDependencies() async {
       () => AuthCubit(
         authRepository: sl<StudentAuthRepository>(),
         profileRepository: sl<StudentProfileRepository>(),
+        localCache: sl<CourseLocalCache>(),
       ),
     );
   }

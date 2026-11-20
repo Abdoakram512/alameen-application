@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../core/di/injection_container.dart';
 import '../../models/course.dart';
 import '../../models/course_level.dart';
 import '../../models/lesson.dart';
 import '../../models/student_courses_data.dart';
 import '../../models/student_dashboard_data.dart';
-import '../../repositories/impl/student_courses_repository_impl.dart';
 import '../../repositories/student_courses_repository.dart';
 import '../auth/auth_cubit.dart';
 import 'courses_state.dart';
@@ -23,12 +21,8 @@ class CoursesCubit extends Cubit<CoursesState> {
   int _sessionGeneration = 0;
   final Map<String, Future<Course?>> _detailRequests = {};
 
-  CoursesCubit({StudentCoursesRepository? coursesRepository})
-    : _coursesRepository =
-          coursesRepository ??
-          (sl.isRegistered<StudentCoursesRepository>()
-              ? sl<StudentCoursesRepository>()
-              : StudentCoursesRepositoryImpl()),
+  CoursesCubit({required StudentCoursesRepository coursesRepository})
+    : _coursesRepository = coursesRepository,
       super(CoursesLoading()) {
     loadCourses();
   }

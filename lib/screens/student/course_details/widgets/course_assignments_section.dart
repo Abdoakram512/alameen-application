@@ -14,6 +14,7 @@ class CourseAssignmentsSection extends StatefulWidget {
   final String? studentId;
   final bool isEnrolled;
   final Future<void> Function(Assignment) onSubmitTap;
+  final StudentAssignmentsRepository? repository;
 
   const CourseAssignmentsSection({
     super.key,
@@ -21,6 +22,7 @@ class CourseAssignmentsSection extends StatefulWidget {
     required this.studentId,
     required this.isEnrolled,
     required this.onSubmitTap,
+    this.repository,
   });
 
   @override
@@ -50,7 +52,7 @@ class _CourseAssignmentsSectionState extends State<CourseAssignmentsSection> {
   void _load() {
     _data = widget.studentId == null || !widget.isEnrolled
         ? Future.value(const StudentAssignmentsData())
-        : sl<StudentAssignmentsRepository>().getAssignments();
+        : (widget.repository ?? sl<StudentAssignmentsRepository>()).getAssignments();
   }
 
   @override
