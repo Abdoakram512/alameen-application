@@ -18,6 +18,7 @@ import 'package:secure_screen_app/logic/auth/auth_state.dart';
 import 'package:secure_screen_app/logic/content/content_cubit.dart';
 import 'package:secure_screen_app/logic/content/content_state.dart';
 import 'package:secure_screen_app/logic/courses/courses_cubit.dart';
+import 'package:secure_screen_app/models/about_us_data.dart';
 import 'package:secure_screen_app/models/assignment_submission.dart';
 import 'package:secure_screen_app/models/clinical_task_data.dart';
 import 'package:secure_screen_app/models/course.dart';
@@ -136,7 +137,7 @@ void main() {
     // -------------------------------------------------------------------------
     test('Scenario 3: Completing async request after Cubit is closed drops emission safely', () async {
       final mockContentRepo = MockContentRepository();
-      final aboutCompleter = Completer<Map<String, String>>();
+      final aboutCompleter = Completer<AboutUsData>();
 
       when(() => mockContentRepo.getAboutUs()).thenAnswer((_) => aboutCompleter.future);
 
@@ -148,7 +149,7 @@ void main() {
       expect(contentCubit.isClosed, isTrue);
 
       // Async response arrives after disposal
-      aboutCompleter.complete({'title': 'العنوان', 'content': 'المحتوى'});
+      aboutCompleter.complete(const AboutUsData(title: 'العنوان', content: 'المحتوى'));
       await Future<void>.delayed(Duration.zero);
 
       // No unhandled exception or StateError thrown
@@ -311,7 +312,7 @@ void main() {
         write: (k, v) async => storage[k] = v,
         send: (event) async {
           await Future<void>.delayed(const Duration(milliseconds: 5));
-          sentEvents.add(event);
+          sentEvents.add(event.toMap());
         },
       );
 

@@ -46,20 +46,10 @@ class GoogleSignInButton extends StatelessWidget {
               child: Text(
                 label,
                 textAlign: TextAlign.center,
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-                strutStyle: const StrutStyle(
-                  fontSize: 14,
-                  height: 1.1,
-                  forceStrutHeight: true,
-                ),
                 style: AppTextStyles.button.copyWith(
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                   fontSize: 14,
-                  height: 1.1,
                 ),
               ),
             ),

@@ -154,9 +154,9 @@ class UserModel extends Equatable {
     return UserModel(
       uid: resolvedUid,
       id: numericId,
-      displayName: json['name']?.toString() ?? json['displayName']?.toString() ?? 'طالب الأمين سنتر',
+      displayName: json['name']?.toString() ?? 'طالب الأمين سنتر',
       email: json['email']?.toString() ?? '',
-      photoUrl: json['avatar_url']?.toString() ?? json['avatarUrl']?.toString() ?? json['photoUrl']?.toString() ?? '',
+      photoUrl: json['avatar_url']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       role: json['role']?.toString() ?? 'student',
       status: statusStr,

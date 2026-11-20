@@ -86,7 +86,7 @@ void main() {
       testQueue = WatchQueue(
         read: (k) async => inMemoryStore[k],
         write: (k, v) async => inMemoryStore[k] = v,
-        send: (event) => mockWatchRepo.recordQueueEvent(event),
+        send: (event) => mockWatchRepo.recordQueueEvent(event.toMap()),
       );
     });
 

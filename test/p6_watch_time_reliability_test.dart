@@ -33,7 +33,7 @@ void main() {
         read: (k) async => storage[k],
         write: (k, v) async => storage[k] = v,
         send: (evt) async {
-          flushedEvents.add(evt);
+          flushedEvents.add(evt.toMap());
         },
       );
 

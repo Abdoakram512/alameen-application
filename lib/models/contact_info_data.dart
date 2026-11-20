@@ -15,10 +15,10 @@ class ContactInfoData extends Equatable {
 
   factory ContactInfoData.fromJson(Map<String, dynamic> json) {
     return ContactInfoData(
-      email: json['contactEmail']?.toString() ?? json['email']?.toString(),
-      phone: json['contactPhone']?.toString() ?? json['phone']?.toString(),
-      whatsapp: json['whatsappUrl']?.toString() ?? json['whatsapp']?.toString(),
-      address: json['contactAddress']?.toString() ?? json['address']?.toString(),
+      email: (json['email'] ?? json['contactEmail'])?.toString(),
+      phone: (json['phone'] ?? json['contactPhone'])?.toString(),
+      whatsapp: (json['whatsapp'] ?? json['whatsappUrl'])?.toString(),
+      address: (json['address'] ?? json['contactAddress'])?.toString(),
     );
   }
 

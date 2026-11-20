@@ -138,7 +138,7 @@ void main() {
               persistentStorage[key] = val;
             },
             send: (event) async {
-              sentEvents.add(Map<String, dynamic>.from(event));
+              sentEvents.add(Map<String, dynamic>.from(event.toMap()));
               if (networkShouldFail) {
                 throw Exception('Simulated network timeout (transient failure)');
               }
@@ -215,7 +215,7 @@ void main() {
           persistentStorage[key] = val;
         },
         send: (event) async {
-          sentEvents.add(event);
+          sentEvents.add(event.toMap());
         },
       );
 

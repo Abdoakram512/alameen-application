@@ -251,9 +251,8 @@ class Lesson extends Equatable {
     return Lesson(
       id: json['id']?.toString() ?? '',
       slug: json['slug']?.toString(),
-      title: json['title']?.toString() ?? json['title_ar']?.toString() ?? '',
-      description:
-          json['description']?.toString() ?? json['description_ar']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
       duration: durationStr,
       durationSeconds: durSec > 0 ? durSec : null,
       muxPlaybackId: json['mux_playback_id']?.toString() ?? '',

@@ -4,7 +4,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../core/di/injection_container.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/feedback/app_error_state.dart';
@@ -15,20 +14,20 @@ import '../../features/payments/domain/entities/receipt_status.dart';
 import '../../features/payments/presentation/cubits/receipt_submission/receipt_submission_cubit.dart';
 import '../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import '../../features/payments/presentation/cubits/receipts/receipts_state.dart';
-import '../../logic/assignments/assignments_cubit.dart';
-import '../../logic/assignments/assignments_state.dart';
+// import '../../logic/assignments/assignments_cubit.dart';
+// import '../../logic/assignments/assignments_state.dart';
 import '../../logic/auth/auth_cubit.dart';
 import '../../logic/auth/auth_state.dart';
 import '../../logic/courses/courses_cubit.dart';
 import '../../logic/courses/courses_state.dart';
-import '../../models/assignment.dart';
+// import '../../models/assignment.dart';
 import '../../models/course.dart';
 import '../../models/course_access_mode.dart';
 import '../../models/course_progress_policy.dart';
 import '../../models/learning_history.dart';
 import '../../models/lesson.dart';
 import '../../models/user_profile.dart';
-import '../../repositories/student_assignments_repository.dart';
+// import '../../repositories/student_assignments_repository.dart';
 // import 'course_details/widgets/course_assignments_section.dart';
 import 'course_details/widgets/course_certificate_card.dart';
 import 'course_details/widgets/course_curriculum_section.dart';
@@ -36,16 +35,14 @@ import 'course_details/widgets/course_enrollment_status_card.dart';
 import 'course_details/widgets/course_header_banner.dart';
 import 'video_player_screen.dart';
 import 'widgets/request_access_sheet.dart';
-import 'widgets/submit_assignment_sheet.dart';
+// import 'widgets/submit_assignment_sheet.dart';
 
 class CourseDetailsScreen extends StatefulWidget {
   final String courseId;
-  final AssignmentsCubit? assignmentsCubit;
 
   const CourseDetailsScreen({
     super.key,
     required this.courseId,
-    this.assignmentsCubit,
   });
 
   @override
@@ -53,26 +50,13 @@ class CourseDetailsScreen extends StatefulWidget {
 }
 
 class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
-  late final AssignmentsCubit _assignmentsCubit;
-  bool _ownsAssignmentsCubit = false;
+  // Assignments disabled/commented out per specification
   bool _loadingDetails = true;
   bool _detailsFailed = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.assignmentsCubit != null) {
-      _assignmentsCubit = widget.assignmentsCubit!;
-    } else if (sl.isRegistered<AssignmentsCubit>()) {
-      _assignmentsCubit = sl<AssignmentsCubit>();
-      _ownsAssignmentsCubit = true;
-    } else {
-      _assignmentsCubit = AssignmentsCubit(
-        repository: sl<StudentAssignmentsRepository>(),
-      );
-      _ownsAssignmentsCubit = true;
-    }
-
     unawaited(_refreshCourseDetailsAndReceipts());
   }
 
@@ -95,13 +79,10 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    if (_ownsAssignmentsCubit) {
-      _assignmentsCubit.close();
-    }
-    super.dispose();
-  }
+  // @override
+  // void dispose() {
+  //   super.dispose();
+  // }
 
   Future<void> _showRequestAccessModal(
     BuildContext context,
@@ -135,24 +116,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
     }
   }
 
-  Future<void> _showSubmitAssignmentModal(
-    BuildContext context,
-    Assignment assignment,
-    UserModel user,
-  ) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (_) => SubmitAssignmentSheet(assignment: assignment, user: user),
-    );
-    if (mounted) {
-      // _assignmentsCubit.loadAssignments(reset: false);
-    }
-  }
+  // Future<void> _showSubmitAssignmentModal(...) commented out per specifications
 
   Future<void> _openLesson(
     BuildContext context,
@@ -194,38 +158,8 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
       return;
     }
 
-    if (lesson.isAssignmentLesson) {
-      if (currentUser != null) {
-        await _assignmentsCubit.loadAssignments(reset: false);
-        if (!context.mounted) return;
-        final loadedAssignments = _assignmentsCubit.state is AssignmentsLoaded
-            ? (_assignmentsCubit.state as AssignmentsLoaded).data.tasks
-            : const <Assignment>[];
-        Assignment? matched;
-        for (final a in loadedAssignments) {
-          if ((lesson.assignmentId != null &&
-                  lesson.assignmentId!.isNotEmpty &&
-                  a.id == lesson.assignmentId) ||
-              a.lessonId == lesson.id) {
-            matched = a;
-            break;
-          }
-        }
-        if (matched != null) {
-          _showSubmitAssignmentModal(context, matched, currentUser);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'لا يوجد تكليف معتمد من الخادم مرتبط بهذه المحاضرة حالياً.',
-              ),
-              backgroundColor: Color(0xFFB45309),
-            ),
-          );
-        }
-      }
-      return;
-    }
+    // Assignment modal handling commented out per specification:
+    // if (lesson.isAssignmentLesson) { ... }
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(

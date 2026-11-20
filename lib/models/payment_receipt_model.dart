@@ -69,17 +69,17 @@ class PaymentReceiptModel extends PaymentReceipt {
         ? idRaw.toInt()
         : (int.tryParse(idRaw?.toString() ?? '') ?? 0);
 
-    final dynamic userIdRaw = json['user_id'] ?? json['userId'];
+    final dynamic userIdRaw = json['user_id'];
     final int? userId = (userIdRaw is num)
         ? userIdRaw.toInt()
         : int.tryParse(userIdRaw?.toString() ?? '');
 
-    final dynamic courseIdRaw = json['course_id'] ?? json['courseId'];
+    final dynamic courseIdRaw = json['course_id'];
     final int courseId = (courseIdRaw is num)
         ? courseIdRaw.toInt()
         : (int.tryParse(courseIdRaw?.toString() ?? '') ?? 0);
 
-    final rawMethod = (json['payment_method'] ?? json['paymentMethod'])?.toString();
+    final rawMethod = json['payment_method']?.toString();
     final PaymentMethod method =
         PaymentMethod.tryParse(rawMethod) ?? PaymentMethod.vodafoneCash;
     final String methodLabel =
@@ -87,31 +87,21 @@ class PaymentReceiptModel extends PaymentReceipt {
             ? json['payment_method_label'].toString()
             : method.displayLabelAr;
 
-    final String sender = (json['sender_identifier'] ??
-                json['sender_account'] ??
-                json['sender_name'] ??
-                json['senderNumberOrRef'])
-            ?.toString() ??
-        '';
+    final String sender = json['sender_identifier']?.toString() ?? '';
 
-    final String? ref =
-        json['transaction_reference']?.toString() ??
-            json['transactionReference']?.toString();
+    final String? ref = json['transaction_reference']?.toString();
 
-    final dynamic amountRaw =
-        json['amount_paid'] ?? json['amount'] ?? json['amountPaid'];
+    final dynamic amountRaw = json['amount_paid'];
     final double amount = (amountRaw is num)
         ? amountRaw.toDouble()
         : (double.tryParse(amountRaw?.toString() ?? '') ?? 0.0);
 
-    final String? receiptUrl =
-        (json['receipt_image_url'] ?? json['receiptUrl'])?.toString();
+    final String? receiptUrl = json['receipt_image_url']?.toString();
 
     final ReceiptStatus status =
         ReceiptStatus.fromApiValue(json['status']?.toString());
 
-    final String? adminNotes =
-        (json['admin_notes'] ?? json['adminNotes'])?.toString();
+    final String? adminNotes = json['admin_notes']?.toString();
 
     DateTime? parseDate(dynamic val) {
       if (val == null) return null;
@@ -121,9 +111,8 @@ class PaymentReceiptModel extends PaymentReceipt {
     }
 
     final DateTime createdAt =
-        parseDate(json['created_at'] ?? json['requestedAt']) ?? DateTime.now();
-    final DateTime? reviewedAt =
-        parseDate(json['reviewed_at'] ?? json['reviewedAt']);
+        parseDate(json['created_at']) ?? DateTime.now();
+    final DateTime? reviewedAt = parseDate(json['reviewed_at']);
     final DateTime? updatedAt = parseDate(json['updated_at']);
 
     String? courseTitle;
@@ -133,8 +122,7 @@ class PaymentReceiptModel extends PaymentReceipt {
       courseTitle = cMap['title']?.toString();
       courseSlug = cMap['slug']?.toString();
     } else {
-      courseTitle =
-          json['course_title']?.toString() ?? json['courseTitle']?.toString();
+      courseTitle = json['course_title']?.toString();
       courseSlug = json['course_slug']?.toString();
     }
 

@@ -111,11 +111,11 @@ class AssignmentSubmission extends Equatable {
     }
 
     final idVal = json['id']?.toString() ?? '';
-    final taskIdVal = json['task_id']?.toString() ?? json['assignment_id']?.toString() ?? '';
-    final userIdVal = json['user_id']?.toString() ?? json['student_id']?.toString() ?? '';
+    final taskIdVal = json['task_id']?.toString() ?? '';
+    final userIdVal = json['user_id']?.toString() ?? '';
     final audioUrl = json['audio_recording_url']?.toString() ?? '';
-    final studentNotes = json['student_notes']?.toString() ?? json['solution_text']?.toString() ?? '';
-    final feedback = json['clinical_feedback']?.toString() ?? json['admin_feedback']?.toString() ?? '';
+    final studentNotes = json['student_notes']?.toString() ?? '';
+    final feedback = json['clinical_feedback']?.toString() ?? '';
     final statusVal = json['status']?.toString() ?? 'pending';
     final scoreVal = json['score'] != null ? int.tryParse(json['score'].toString()) : null;
     final maxScoreVal = json['max_score'] != null
@@ -131,7 +131,7 @@ class AssignmentSubmission extends Equatable {
     return AssignmentSubmission(
       id: idVal,
       assignmentId: taskIdVal,
-      assignmentTitle: json['task_title']?.toString() ?? json['assignment_title']?.toString() ?? '',
+      assignmentTitle: json['task_title']?.toString() ?? '',
       courseId: json['course_id']?.toString() ?? '',
       studentId: userIdVal,
       studentName: json['student_name']?.toString() ?? '',
@@ -145,8 +145,8 @@ class AssignmentSubmission extends Equatable {
       maxScore: maxScoreVal,
       adminFeedback: feedback.isNotEmpty
           ? (graderName != null && graderName.isNotEmpty ? '$feedback ($graderName)' : feedback)
-          : (json['admin_feedback']?.toString() ?? ''),
-      submittedAt: parseDate(json['created_at'] ?? json['submitted_at']),
+          : '',
+      submittedAt: parseDate(json['created_at']),
       gradedAt: gradedAtDate,
     );
   }

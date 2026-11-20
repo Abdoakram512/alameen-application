@@ -46,7 +46,7 @@ void main() {
       final queue = WatchQueue(
         read: (k) async => storage[k],
         write: (k, v) async => storage[k] = v,
-        send: simulateRecordWatchEvent,
+        send: (event) => simulateRecordWatchEvent(event.toMap()),
       );
 
       // Student watches 600 seconds total (two 300s checkpoints)

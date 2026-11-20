@@ -2,13 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 
-enum AppButtonVariant {
-  primary,
-  secondary,
-  outlined,
-  danger,
-  text,
-}
+enum AppButtonVariant { primary, secondary, outlined, danger, text }
 
 class AppButton extends StatelessWidget {
   final String text;
@@ -44,11 +38,15 @@ class AppButton extends StatelessWidget {
 
     switch (variant) {
       case AppButtonVariant.primary:
-        backgroundColor = isEnabled ? AppColors.primary : AppColors.primary.withValues(alpha: 0.5);
+        backgroundColor = isEnabled
+            ? AppColors.primary
+            : AppColors.primary.withValues(alpha: 0.5);
         foregroundColor = Colors.white;
         break;
       case AppButtonVariant.secondary:
-        backgroundColor = isEnabled ? AppColors.primaryLight : AppColors.primaryLight.withValues(alpha: 0.5);
+        backgroundColor = isEnabled
+            ? AppColors.primaryLight
+            : AppColors.primaryLight.withValues(alpha: 0.5);
         foregroundColor = AppColors.primary;
         break;
       case AppButtonVariant.outlined:
@@ -60,7 +58,9 @@ class AppButton extends StatelessWidget {
         );
         break;
       case AppButtonVariant.danger:
-        backgroundColor = isEnabled ? AppColors.error : AppColors.error.withValues(alpha: 0.5);
+        backgroundColor = isEnabled
+            ? AppColors.error
+            : AppColors.error.withValues(alpha: 0.5);
         foregroundColor = Colors.white;
         break;
       case AppButtonVariant.text:
@@ -85,30 +85,17 @@ class AppButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (icon != null) ...[
-            icon!,
-            const SizedBox(width: 8),
-          ],
+          if (icon != null) ...[icon!, const SizedBox(width: 8)],
           Flexible(
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
-              ),
-              strutStyle: const StrutStyle(
-                fontSize: 14,
-                height: 1.1,
-                forceStrutHeight: true,
-              ),
               style: AppTextStyles.button.copyWith(
                 color: foregroundColor,
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
-                height: 1.1,
               ),
             ),
           ),

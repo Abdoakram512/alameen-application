@@ -13,7 +13,11 @@ import 'package:secure_screen_app/logic/auth/auth_cubit.dart';
 import 'package:secure_screen_app/logic/auth/auth_state.dart';
 import 'package:secure_screen_app/logic/courses/courses_cubit.dart';
 import 'package:secure_screen_app/logic/courses/courses_state.dart';
+import 'package:secure_screen_app/models/about_us_data.dart';
 import 'package:secure_screen_app/models/course.dart';
+import 'package:secure_screen_app/models/faq_item.dart';
+import 'package:secure_screen_app/models/landing_page_cms_data.dart';
+import 'package:secure_screen_app/models/privacy_policy_data.dart';
 import 'package:secure_screen_app/models/user_profile.dart';
 import 'package:secure_screen_app/repositories/impl/student_content_repository_impl.dart';
 import 'package:secure_screen_app/repositories/impl/student_courses_repository_impl.dart';
@@ -100,7 +104,7 @@ void main() {
     test('1. CMS Repository getAboutUs() parses from Laravel API (/public/home) without Firestore', () async {
       final mockCoursesRemote = MockCoursesRemoteDataSource();
       when(() => mockCoursesRemote.getLandingPageData()).thenAnswer(
-        (_) async => {
+        (_) async => LandingPageCmsData.fromJson({
           'hero': {
             'headline': 'مركز الأمين الدولي للتخاطب',
             'subheadline': 'الريادة والتميز في التأهيل',
@@ -109,7 +113,7 @@ void main() {
             {'title': 'الاعتماد الأكاديمي', 'description': 'شهادات موثقة'},
             {'title': 'التطبيق العملي', 'description': 'تدريب سريري مباشر'},
           ],
-        },
+        }),
       );
 
       final repo = StudentContentRepositoryImpl(
@@ -126,7 +130,7 @@ void main() {
     test('2. CMS Repository getFaqs() parses FAQ list from Laravel API without Firestore', () async {
       final mockCoursesRemote = MockCoursesRemoteDataSource();
       when(() => mockCoursesRemote.getLandingPageData()).thenAnswer(
-        (_) async => {
+        (_) async => LandingPageCmsData.fromJson({
           'faq': [
             {
               'question': 'هل التدريب معتمد من المركز؟',
@@ -137,7 +141,7 @@ void main() {
               'answer': 'صلاحية غير محدودة لمدة عام كامل.',
             },
           ],
-        },
+        }),
       );
 
       final repo = StudentContentRepositoryImpl(
@@ -347,10 +351,10 @@ void main() {
     testWidgets('AboutUsScreen renders verified content without Firestore', (tester) async {
       final mockContentRepo = MockStudentContentRepository();
       when(() => mockContentRepo.getAboutUs()).thenAnswer(
-        (_) async => {
-          'title': 'مركز الأمين الدولي',
-          'content': 'مرحباً بكم في الصرح التدريبي الرائد.',
-        },
+        (_) async => const AboutUsData(
+          title: 'مركز الأمين الدولي',
+          content: 'مرحباً بكم في الصرح التدريبي الرائد.',
+        ),
       );
 
       if (sl.isRegistered<StudentContentRepository>()) {
@@ -373,11 +377,11 @@ void main() {
     testWidgets('FaqsScreen renders FAQ items without Firestore', (tester) async {
       final mockContentRepo = MockStudentContentRepository();
       when(() => mockContentRepo.getFaqs()).thenAnswer(
-        (_) async => [
-          {
-            'question': 'هل الشهادة معتمدة من سنتر الأمين؟',
-            'answer': 'نعم، معتمدة وموثقة برقم كودي.',
-          },
+        (_) async => const [
+          FaqItem(
+            question: 'هل الشهادة معتمدة من سنتر الأمين؟',
+            answer: 'نعم، معتمدة وموثقة برقم كودي.',
+          ),
         ],
       );
 
@@ -400,10 +404,10 @@ void main() {
     testWidgets('PrivacyPolicyScreen renders verified legal text without Firestore', (tester) async {
       final mockContentRepo = MockStudentContentRepository();
       when(() => mockContentRepo.getPrivacyPolicy()).thenAnswer(
-        (_) async => {
-          'title': 'سياسة الخصوصية وحماية البيانات',
-          'content': 'حماية تامة للبيانات وحقوق الملكية الفكرية.',
-        },
+        (_) async => const PrivacyPolicyData(
+          title: 'سياسة الخصوصية وحماية البيانات',
+          content: 'حماية تامة للبيانات وحقوق الملكية الفكرية.',
+        ),
       );
 
       if (sl.isRegistered<StudentContentRepository>()) {

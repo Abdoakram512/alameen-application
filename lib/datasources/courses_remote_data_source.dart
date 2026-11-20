@@ -4,6 +4,7 @@ import '../core/network/api_exceptions.dart';
 import '../models/bootstrap_data.dart';
 import '../models/contact_info_data.dart';
 import '../models/course.dart';
+import '../models/landing_page_cms_data.dart';
 import '../models/student_courses_data.dart';
 import '../models/student_dashboard_data.dart';
 
@@ -28,7 +29,7 @@ abstract class CoursesRemoteDataSource {
   Future<BootstrapData> getBootstrapConfig();
 
   /// Fetch landing page CMS data.
-  Future<Map<String, dynamic>> getLandingPageData();
+  Future<LandingPageCmsData> getLandingPageData();
 
   /// Fetch official contact and support channels.
   Future<ContactInfoData> getContactInfo();
@@ -176,16 +177,16 @@ class CoursesRemoteDataSourceImpl implements CoursesRemoteDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> getLandingPageData() async {
+  Future<LandingPageCmsData> getLandingPageData() async {
     try {
       final response = await _apiClient.get('/public/home');
       final data = response.data;
 
       if (data is Map<String, dynamic> && data['data'] is Map) {
-        return Map<String, dynamic>.from(data['data'] as Map);
+        return LandingPageCmsData.fromJson(Map<String, dynamic>.from(data['data'] as Map));
       }
 
-      return const {};
+      return const LandingPageCmsData();
     } on DioException catch (e) {
       throw ApiException.fromDioException(e);
     }

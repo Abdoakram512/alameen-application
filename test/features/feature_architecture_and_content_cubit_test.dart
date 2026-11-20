@@ -3,57 +3,87 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secure_screen_app/core/di/injection_container.dart';
 import 'package:secure_screen_app/features/features.dart';
+import 'package:secure_screen_app/models/about_us_data.dart';
 import 'package:secure_screen_app/models/bootstrap_data.dart';
+import 'package:secure_screen_app/models/faq_item.dart';
+import 'package:secure_screen_app/models/landing_page_cms_data.dart';
+import 'package:secure_screen_app/models/privacy_policy_data.dart';
 
 class MockStudentContentRepository implements StudentContentRepository {
-  final Map<String, String>? aboutUsData;
-  final List<Map<String, String>>? faqsData;
-  final Map<String, String>? privacyData;
+  final AboutUsData? aboutUsData;
+  final List<FaqItem>? faqsData;
+  final PrivacyPolicyData? privacyData;
   final bool shouldFail;
 
   MockStudentContentRepository({
-    this.aboutUsData,
-    this.faqsData,
-    this.privacyData,
+    dynamic aboutUsData,
+    dynamic faqsData,
+    dynamic privacyData,
     this.shouldFail = false,
-  });
+  })  : aboutUsData = aboutUsData is AboutUsData
+            ? aboutUsData
+            : (aboutUsData is Map<String, dynamic>
+                ? AboutUsData.fromJson(aboutUsData)
+                : (aboutUsData is Map<String, String>
+                    ? AboutUsData(
+                        title: aboutUsData['title'] ?? '',
+                        content: aboutUsData['content'] ?? '')
+                    : null)),
+        faqsData = faqsData is List<FaqItem>
+            ? faqsData
+            : (faqsData is List
+                ? faqsData
+                    .map((e) => e is FaqItem
+                        ? e
+                        : FaqItem.fromJson(Map<String, dynamic>.from(e as Map)))
+                    .toList()
+                : null),
+        privacyData = privacyData is PrivacyPolicyData
+            ? privacyData
+            : (privacyData is Map<String, dynamic>
+                ? PrivacyPolicyData.fromJson(privacyData)
+                : (privacyData is Map<String, String>
+                    ? PrivacyPolicyData(
+                        title: privacyData['title'] ?? '',
+                        content: privacyData['content'] ?? '')
+                    : null));
 
   @override
   Future<BootstrapData?> getBootstrapConfig() async => null;
 
   @override
-  Future<Map<String, dynamic>?> getLandingPageData() async => null;
+  Future<LandingPageCmsData?> getLandingPageData() async => null;
 
   @override
-  Future<Map<String, String>> getAboutUs() async {
+  Future<AboutUsData> getAboutUs() async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     if (shouldFail) throw Exception('Network simulated failure');
     return aboutUsData ??
-        {
-          'title': 'مركز الأمين التجريبي',
-          'content': 'محتوى تجريبي عن مركز الأمين.',
-        };
+        const AboutUsData(
+          title: 'مركز الأمين التجريبي',
+          content: 'محتوى تجريبي عن مركز الأمين.',
+        );
   }
 
   @override
-  Future<List<Map<String, String>>> getFaqs() async {
+  Future<List<FaqItem>> getFaqs() async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     if (shouldFail) throw Exception('Network simulated failure');
     return faqsData ??
-        [
-          {'question': 'سؤال تجريبي؟', 'answer': 'إجابة تجريبية.'},
+        const [
+          FaqItem(question: 'سؤال تجريبي؟', answer: 'إجابة تجريبية.'),
         ];
   }
 
   @override
-  Future<Map<String, String>> getPrivacyPolicy() async {
+  Future<PrivacyPolicyData> getPrivacyPolicy() async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     if (shouldFail) throw Exception('Network simulated failure');
     return privacyData ??
-        {
-          'title': 'سياسة الخصوصية التجريبية',
-          'content': 'نص سياسة الخصوصية التجريبي.',
-        };
+        const PrivacyPolicyData(
+          title: 'سياسة الخصوصية التجريبية',
+          content: 'نص سياسة الخصوصية التجريبي.',
+        );
   }
 
   @override

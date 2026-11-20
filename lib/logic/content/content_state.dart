@@ -1,5 +1,8 @@
 import 'package:equatable/equatable.dart';
+import '../../models/about_us_data.dart';
 import '../../models/contact_info_data.dart';
+import '../../models/faq_item.dart';
+import '../../models/privacy_policy_data.dart';
 
 abstract class ContentState extends Equatable {
   const ContentState();
@@ -17,20 +20,19 @@ class ContentLoading extends ContentState {
 }
 
 class ContentAboutLoaded extends ContentState {
-  final String title;
-  final String content;
+  final AboutUsData aboutUs;
 
-  const ContentAboutLoaded({
-    required this.title,
-    required this.content,
-  });
+  const ContentAboutLoaded({required this.aboutUs});
+
+  String get title => aboutUs.title;
+  String get content => aboutUs.content;
 
   @override
-  List<Object?> get props => [title, content];
+  List<Object?> get props => [aboutUs];
 }
 
 class ContentFaqsLoaded extends ContentState {
-  final List<Map<String, String>> faqs;
+  final List<FaqItem> faqs;
 
   const ContentFaqsLoaded({required this.faqs});
 
@@ -39,16 +41,15 @@ class ContentFaqsLoaded extends ContentState {
 }
 
 class ContentPrivacyLoaded extends ContentState {
-  final String title;
-  final String content;
+  final PrivacyPolicyData privacyPolicy;
 
-  const ContentPrivacyLoaded({
-    required this.title,
-    required this.content,
-  });
+  const ContentPrivacyLoaded({required this.privacyPolicy});
+
+  String get title => privacyPolicy.title;
+  String get content => privacyPolicy.content;
 
   @override
-  List<Object?> get props => [title, content];
+  List<Object?> get props => [privacyPolicy];
 }
 
 class ContentContactLoaded extends ContentState {

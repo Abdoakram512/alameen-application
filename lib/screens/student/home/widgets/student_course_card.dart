@@ -114,9 +114,10 @@ class StudentCourseCard extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         course.title,
@@ -124,8 +125,8 @@ class StudentCourseCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.heading3.copyWith(
                           fontWeight: FontWeight.w800,
-                          fontSize: 17,
-                          height: 1.5,
+                          fontSize: 16,
+                          height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -135,9 +136,9 @@ class StudentCourseCard extends StatelessWidget {
                             .trim(),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodyMedium,
+                        style: AppTextStyles.bodyMedium.copyWith(fontSize: 13),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Wrap(
                         spacing: 12,
                         runSpacing: 6,
@@ -162,7 +163,7 @@ class StudentCourseCard extends StatelessWidget {
                         ],
                       ),
                       if (isEnrolled) ...[
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [

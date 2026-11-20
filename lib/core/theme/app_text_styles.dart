@@ -71,9 +71,11 @@ class AppTextStyles {
   );
 
   static const TextStyle button = TextStyle(
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: FontWeight.w700,
     color: Colors.white,
+    height: 1.0,
+    leadingDistribution: TextLeadingDistribution.even,
     fontFamilyFallback: fontFallbacks,
   );
 

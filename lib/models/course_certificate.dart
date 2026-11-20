@@ -67,12 +67,8 @@ class CourseCertificate extends Equatable {
         idStr;
 
     // استخراج معلومات الدورة التدريبية إن وُجدت كمصفوفة فرعية أو حقل مباشر
-    String resolvedCourseId = json['course_id']?.toString() ??
-        json['courseId']?.toString() ??
-        '';
-    String resolvedCourseTitle = json['course_title']?.toString() ??
-        json['courseTitle']?.toString() ??
-        '';
+    String resolvedCourseId = json['course_id']?.toString() ?? '';
+    String resolvedCourseTitle = json['course_title']?.toString() ?? '';
     if (json['course'] is Map) {
       final courseMap = json['course'] as Map;
       if (resolvedCourseId.isEmpty) {
@@ -93,15 +89,9 @@ class CourseCertificate extends Equatable {
       resolvedUserId = int.tryParse(json['user_id'].toString());
     }
 
-    String resolvedStudentId = resolvedUserId?.toString() ??
-        json['studentId']?.toString() ??
-        '';
-    String resolvedStudentName = json['student_name']?.toString() ??
-        json['studentName']?.toString() ??
-        '';
-    String resolvedStudentEmail = json['student_email']?.toString() ??
-        json['studentEmail']?.toString() ??
-        '';
+    String resolvedStudentId = resolvedUserId?.toString() ?? '';
+    String resolvedStudentName = json['student_name']?.toString() ?? '';
+    String resolvedStudentEmail = json['student_email']?.toString() ?? '';
 
     if (json['user'] is Map) {
       final userMap = json['user'] as Map;
@@ -136,15 +126,11 @@ class CourseCertificate extends Equatable {
       studentEmail: resolvedStudentEmail,
       certificateCode: code,
       issuedAt: parseDate(json['issued_at'] ?? json['created_at']),
-      completionPercentage: (json['completion_percentage'] as num?)?.toDouble() ??
-          (json['completionPercentage'] as num?)?.toDouble() ??
-          (json['progress'] as num?)?.toDouble() ??
-          100.0,
+      completionPercentage: ((json['completion_percentage'] ?? json['completionPercentage']) as num?)?.toDouble() ?? 100.0,
       verificationUrl: verUrl,
       fileUrl: json['file_url']?.toString(),
       fileType: json['file_type']?.toString() ?? 'pdf',
-      signatoryName: json['signatory_name']?.toString() ??
-          json['instructorName']?.toString(),
+      signatoryName: json['signatory_name']?.toString(),
       signatoryTitle: json['signatory_title']?.toString(),
     );
   }

@@ -463,7 +463,7 @@ void main() {
               type: DioExceptionType.connectionTimeout,
             );
           }
-          sentEvents.add(event);
+          sentEvents.add(event.toMap());
         },
       );
 

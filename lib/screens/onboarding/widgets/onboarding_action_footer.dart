@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_directional_icons.dart';
 import 'onboarding_progress_dots.dart';
 
@@ -106,6 +107,7 @@ class OnboardingActionFooter extends StatelessWidget {
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Flexible(
                           child: AnimatedSwitcher(
@@ -119,9 +121,8 @@ class OnboardingActionFooter extends StatelessWidget {
                               key: ValueKey<String>(
                                 '$isSaving-$isLastSlide',
                               ),
-                              style: TextStyle(
+                              style: AppTextStyles.button.copyWith(
                                 fontSize: compact ? 14 : 15,
-                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),

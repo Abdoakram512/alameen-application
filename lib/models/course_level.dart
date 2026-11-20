@@ -47,8 +47,8 @@ class CourseLevel extends Equatable {
 
     return CourseLevel(
       id: json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? json['title_ar']?.toString() ?? '',
-      description: json['description']?.toString() ?? json['description_ar']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
       order: order,
       isAccessible: accessible,
       lessons: parsedLessons,

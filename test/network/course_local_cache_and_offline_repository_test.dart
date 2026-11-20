@@ -6,6 +6,7 @@ import 'package:secure_screen_app/datasources/courses_remote_data_source.dart';
 import 'package:secure_screen_app/models/bootstrap_data.dart';
 import 'package:secure_screen_app/models/contact_info_data.dart';
 import 'package:secure_screen_app/models/course.dart';
+import 'package:secure_screen_app/models/landing_page_cms_data.dart';
 import 'package:secure_screen_app/models/student_courses_data.dart';
 import 'package:secure_screen_app/models/student_dashboard_data.dart';
 import 'package:secure_screen_app/repositories/impl/student_courses_repository_impl.dart';
@@ -50,7 +51,7 @@ class MockFailingCoursesRemoteDataSource implements CoursesRemoteDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> getLandingPageData() async {
+  Future<LandingPageCmsData> getLandingPageData() async {
     callCount++;
     throw const NetworkTimeoutException('Network unavailable');
   }
@@ -89,7 +90,7 @@ class MockSuccessCoursesRemoteDataSource implements CoursesRemoteDataSource {
       const BootstrapData(siteName: 'Test Academy', siteTagline: 'Tagline');
 
   @override
-  Future<Map<String, dynamic>> getLandingPageData() async => {};
+  Future<LandingPageCmsData> getLandingPageData() async => const LandingPageCmsData();
 
   @override
   Future<ContactInfoData> getContactInfo() async =>

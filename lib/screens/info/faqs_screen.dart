@@ -12,6 +12,7 @@ import '../../core/widgets/app_error_view.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../logic/content/content_cubit.dart';
 import '../../logic/content/content_state.dart';
+import '../../models/faq_item.dart';
 
 class FaqsScreen extends StatefulWidget {
   const FaqsScreen({super.key});
@@ -73,7 +74,7 @@ class _FaqsScreenState extends State<FaqsScreen> {
 
             final items = (state is ContentFaqsLoaded)
                 ? state.faqs
-                : const <Map<String, String>>[];
+                : const <FaqItem>[];
 
             if (items.isEmpty) {
               return const Center(
@@ -156,7 +157,7 @@ class _FaqsScreenState extends State<FaqsScreen> {
                                 iconColor: AppColors.primary,
                                 collapsedIconColor: AppColors.textSecondary,
                                 title: Text(
-                                  item['question'] ?? '',
+                                  item.question,
                                   style: AppTextStyles.bodyMedium.copyWith(
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.textPrimary,
@@ -169,7 +170,7 @@ class _FaqsScreenState extends State<FaqsScreen> {
                                     child: Align(
                                       alignment: Alignment.centerRight,
                                       child: Text(
-                                        item['answer'] ?? '',
+                                        item.answer,
                                         style: AppTextStyles.bodySmall.copyWith(
                                           color: AppColors.textSecondary,
                                           height: 1.6,

@@ -168,7 +168,7 @@ class StudentHomeScreen extends StatelessWidget {
                                 maxCrossAxisExtent: 440,
                                 mainAxisSpacing: 16,
                                 crossAxisSpacing: 16,
-                                childAspectRatio: 0.94,
+                                childAspectRatio: 0.80,
                               ),
                           delegate: SliverChildBuilderDelegate((
                             context,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secure_screen_app/models/watch_progress_event.dart';
 import 'package:secure_screen_app/services/watch_queue.dart';
 void main() {
   test('Failed event survives restart with the same id', () async {
@@ -22,7 +23,7 @@ void main() {
   });
   test('Concurrent enqueue does not overwrite events or mix accounts', () async {
     final store = <String,String>{};
-    final sent = <Map<String,dynamic>>[];
+    final sent = <WatchProgressEvent>[];
     final queue = WatchQueue(read:(key) async=>store[key], write:(key,value) async {store[key]=value;},send:(event) async {sent.add(event);});
     await Future.wait([
       queue.enqueue(uid:'a',courseId:'c',lessonId:'l1',seconds:10),

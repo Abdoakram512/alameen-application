@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/app_directional_icons.dart';
 import '../../../../models/video_quality.dart';
 
 /// طبقة أزرار التحكم المتجاوبة في مشغل المحاضرات (تدعم الوضع العادي وملء الشاشة).
@@ -74,8 +73,8 @@ class VideoControlsOverlay extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: onExitTopBar,
-                  icon: Icon(
-                    AppDirectionalIcons.backIcon(context),
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
                     color: Colors.white,
                   ),
                   tooltip: 'رجوع',

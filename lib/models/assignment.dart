@@ -126,14 +126,8 @@ class Assignment extends Equatable {
     final idVal = json['id']?.toString() ?? '';
     final courseIdStr = json['course_id']?.toString() ?? '';
     final videoIdStr = json['video_id']?.toString() ?? '';
-    final titleStr = json['title']?.toString() ??
-        json['title_ar']?.toString() ??
-        json['title_en']?.toString() ??
-        '';
-    final instructionsStr = json['instructions']?.toString() ??
-        json['instructions_ar']?.toString() ??
-        json['instructions_en']?.toString() ??
-        '';
+    final titleStr = json['title']?.toString() ?? '';
+    final instructionsStr = json['instructions']?.toString() ?? '';
     final maxScoreVal = (json['max_score'] is num)
         ? (json['max_score'] as num).toInt()
         : 100;

@@ -16,10 +16,7 @@ class ContentCubit extends Cubit<ContentState> {
     try {
       final data = await _repository.getAboutUs();
       if (isClosed) return;
-      emit(ContentAboutLoaded(
-        title: data['title'] ?? 'مركز الأمين للتخاطب والتأهيل',
-        content: data['content'] ?? '',
-      ));
+      emit(ContentAboutLoaded(aboutUs: data));
     } catch (e) {
       if (isClosed) return;
       emit(ContentError('تعذر تحميل بيانات من نحن: $e'));
@@ -45,10 +42,7 @@ class ContentCubit extends Cubit<ContentState> {
     try {
       final data = await _repository.getPrivacyPolicy();
       if (isClosed) return;
-      emit(ContentPrivacyLoaded(
-        title: data['title'] ?? 'سياسة الخصوصية وسرية المعلومات',
-        content: data['content'] ?? '',
-      ));
+      emit(ContentPrivacyLoaded(privacyPolicy: data));
     } catch (e) {
       if (isClosed) return;
       emit(ContentError('تعذر تحميل سياسة الخصوصية: $e'));

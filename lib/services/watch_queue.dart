@@ -3,17 +3,19 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/network/api_exceptions.dart';
+import '../models/watch_progress_event.dart';
 import '../repositories/student_watch_repository.dart';
 
 /// طابور متين ومستقل لكل حساب طالب لمزامنة تقدم المشاهدة بدون فقدان أو تداخل بين الحسابات.
 ///
 /// ملاحظة معمارية: نقطة نهاية Laravel (`POST /student/courses/{slug}/lessons/{lesson}/progress`)
-/// تستقبل `watched_seconds` و `position_seconds` بدون مفتاح تكرار (`idempotency_key`) من الخادم حالياً؛
-/// لذا يحافظ الطابور على ثبات معرّف الحدث محلياً، ويفرز الأحداث لكل مستخدم، ويزيل أحداث الدورات التي رُفضت بـ 403.
+/// تستقبل `watched_seconds` و `position_seconds`؛
+/// ويحافظ الطابور على ثبات معرّف الحدث محلياً بنموذج WatchProgressEvent منمط 100%،
+/// ويفرز الأحداث لكل مستخدم، ويزيل أحداث الدورات التي رُفضت بـ 403.
 class WatchQueue {
   final Future<String?> Function(String key) read;
   final Future<void> Function(String key, String value) write;
-  final Future<void> Function(Map<String, dynamic> event) send;
+  final Future<void> Function(WatchProgressEvent event) send;
   final void Function(String courseId)? onEnrollmentRevoked;
   Future<void> _tail = Future.value();
 
@@ -36,29 +38,12 @@ class WatchQueue {
       write: prefs.setString,
       onEnrollmentRevoked: onEnrollmentRevoked,
       send: (event) async {
-        final rawCourseSlug = event['courseSlug']?.toString().trim() ?? '';
-        final courseKey = rawCourseSlug.isNotEmpty
-            ? rawCourseSlug
-            : (event['courseId']?.toString() ?? '');
-        final rawLessonSlug = event['lessonSlug']?.toString().trim() ?? '';
-        final lessonKey = rawLessonSlug.isNotEmpty
-            ? rawLessonSlug
-            : (event['lessonId']?.toString() ?? '');
-
-        final watchedSec = (event['watchedSeconds'] as num?)?.toInt() ??
-            (event['sessionSeconds'] as num?)?.toInt() ??
-            (event['seconds'] as num?)?.toInt() ??
-            0;
-        final posSec = (event['positionSeconds'] as num?)?.toInt() ??
-            (event['maxPlayheadSeconds'] as num?)?.toInt() ??
-            0;
-
         await repository.recordLessonProgress(
-          courseSlugOrId: courseKey,
-          lessonSlugOrId: lessonKey,
-          watchedSeconds: watchedSec,
-          positionSeconds: posSec,
-          isCompleted: event['isCompleted'] as bool?,
+          courseSlugOrId: event.courseKey,
+          lessonSlugOrId: event.lessonKey,
+          watchedSeconds: event.effectiveWatchedSeconds,
+          positionSeconds: event.effectivePositionSeconds,
+          isCompleted: event.isCompleted,
         );
       },
     );
@@ -90,7 +75,7 @@ class WatchQueue {
 
   String _key(String uid) => storageKeyForUser(uid);
 
-  Future<List<Map<String, dynamic>>> _load(String uid) async {
+  Future<List<WatchProgressEvent>> _load(String uid) async {
     if (!isValidUid(uid)) return [];
     final raw = await read(_key(uid));
     if (raw == null || raw.trim().isEmpty) return [];
@@ -99,11 +84,16 @@ class WatchQueue {
       if (decoded is! List) return [];
       return decoded
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map((item) =>
+              WatchProgressEvent.fromMap(Map<String, dynamic>.from(item)))
           .toList();
     } catch (_) {
       return [];
     }
+  }
+
+  Future<void> _save(String uid, List<WatchProgressEvent> events) async {
+    await write(_key(uid), jsonEncode(events.map((e) => e.toMap()).toList()));
   }
 
   /// مسح الطابور المحلي لمستخدم محدد (يُستدعى عند تسجيل الخروج أو حذف الحساب لمنع التسرب).
@@ -163,33 +153,33 @@ class WatchQueue {
           return;
         }
         final events = await _load(uid);
-        events.add({
-          'id':
+        events.add(WatchProgressEvent(
+          id:
               '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}',
-          'uid': uid,
-          'courseId': courseId,
-          'lessonId': lessonId,
-          'courseSlug': ?courseSlug,
-          'lessonSlug': ?lessonSlug,
-          'watchedSeconds': ?watchedSeconds,
-          'positionSeconds': ?positionSeconds,
-          'seconds': seconds,
-          'sessionSeconds': ?sessionSeconds,
-          'isSessionEnd': ?isSessionEnd,
-          'studentName': ?studentName,
-          'studentEmail': ?studentEmail,
-          'lessonTitle': ?lessonTitle,
-          'ipAddress': ?ipAddress,
-          'networkType': ?networkType,
-          'devicePlatform': ?devicePlatform,
-          'totalDurationSeconds': ?totalDurationSeconds,
-          'maxPlayheadSeconds': ?maxPlayheadSeconds,
-          'completionPercentage': ?completionPercentage,
-          'isCompleted': ?isCompleted,
-          'sessionId': ?sessionId,
-          'coverageRanges': ?coverageRanges,
-        });
-        await write(_key(uid), jsonEncode(events));
+          uid: uid,
+          courseId: courseId,
+          lessonId: lessonId,
+          courseSlug: courseSlug,
+          lessonSlug: lessonSlug,
+          seconds: seconds,
+          watchedSeconds: watchedSeconds ?? 0,
+          positionSeconds: positionSeconds ?? 0,
+          sessionSeconds: sessionSeconds,
+          isSessionEnd: isSessionEnd,
+          studentName: studentName,
+          studentEmail: studentEmail,
+          lessonTitle: lessonTitle,
+          ipAddress: ipAddress,
+          networkType: networkType,
+          devicePlatform: devicePlatform,
+          totalDurationSeconds: totalDurationSeconds,
+          maxPlayheadSeconds: maxPlayheadSeconds,
+          completionPercentage: completionPercentage,
+          isCompleted: isCompleted,
+          sessionId: sessionId,
+          coverageRanges: coverageRanges,
+        ));
+        await _save(uid, events);
       });
 
   bool _isForbiddenError(Object error) {
@@ -214,25 +204,25 @@ class WatchQueue {
         while (events.isNotEmpty) {
           final current = events.first;
           // عزل صارم: لا يُسمح بإرسال حدث يخص حساباً آخر
-          if (current['uid']?.toString() != uid) {
+          if (current.uid != uid) {
             events.removeAt(0);
-            await write(_key(uid), jsonEncode(events));
+            await _save(uid, events);
             continue;
           }
 
           try {
             await send(current);
             events.removeAt(0);
-            await write(_key(uid), jsonEncode(events));
+            await _save(uid, events);
           } catch (e) {
             if (_isForbiddenError(e)) {
               // تم إلغاء أو انتهاء صلاحية الاشتراك لهذه الدورة على الخادم:
               // إزالة أحداث هذه الدورة فوراً حتى لا تعطل بقية الدورات ولا تستنزف البطارية.
-              final revokedCourseId = current['courseId']?.toString() ?? '';
+              final revokedCourseId = current.courseId;
               events.removeWhere(
-                (item) => item['courseId']?.toString() == revokedCourseId,
+                (item) => item.courseId == revokedCourseId,
               );
-              await write(_key(uid), jsonEncode(events));
+              await _save(uid, events);
               if (revokedCourseId.isNotEmpty) {
                 onEnrollmentRevoked?.call(revokedCourseId);
               }

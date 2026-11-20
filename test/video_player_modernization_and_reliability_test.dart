@@ -73,7 +73,7 @@ void main() {
       testWatchQueue = WatchQueue(
         read: (k) async => store[k],
         write: (k, v) async => store[k] = v,
-        send: (event) => mockWatchRepo.recordEventMap(event),
+        send: (event) => mockWatchRepo.recordEventMap(event.toMap()),
       );
     });
 

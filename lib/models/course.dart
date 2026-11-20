@@ -114,8 +114,8 @@ class Course extends Equatable {
   factory Course.fromLaravelSummaryJson(Map<String, dynamic> json) {
     final id = json['id']?.toString() ?? '';
     final slug = json['slug']?.toString() ?? id;
-    final title = json['title']?.toString() ?? json['title_ar']?.toString() ?? '';
-    final description = json['description']?.toString() ?? json['description_ar']?.toString() ?? '';
+    final title = json['title']?.toString() ?? '';
+    final description = json['description']?.toString() ?? '';
     final price = (json['price'] is num)
         ? (json['price'] as num).toDouble()
         : (double.tryParse(json['price']?.toString() ?? '') ?? 0.0);

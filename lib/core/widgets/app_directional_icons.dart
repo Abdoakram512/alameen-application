@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-/// موجه الأيقونات الذكي لضبط اتجاه الأسهم وعلامات الصح وفقاً للـ RTL / LTR
+/// موجه الأيقونات الذكي لضبط اتجاه الأسهم وعلامات الصح وفقاً للملاحة الطبيعية
 class AppDirectionalIcons {
   AppDirectionalIcons._();
 
-  /// أيقونة الرجوع المتوافقة مع اتجاه الواجهة (يمين في العربية، يسار في الإنجليزية)
+  /// أيقونة الرجوع القياسية (تشير دائماً لليسار في مشغلات الفيديو والواجهات لمنع الانعكاس غير المرغوب)
   static IconData backIcon(BuildContext context) {
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
-    return isRtl ? PhosphorIconsRegular.arrowRight : PhosphorIconsRegular.arrowLeft;
+    return PhosphorIconsRegular.arrowLeft;
   }
 
   /// سهم تفاصيل القائمة (مؤشر الدخول للعناصر الفرعية: يسار في العربي، يمين في الإنجليزي)
@@ -17,22 +16,19 @@ class AppDirectionalIcons {
     return isRtl ? PhosphorIconsRegular.caretLeft : PhosphorIconsRegular.caretRight;
   }
 
-  /// سهم تفاصيل القائمة للخلف (يمين في العربية، يسار في الإنجليزية)
+  /// سهم تفاصيل القائمة للخلف (يشير لليسار)
   static IconData backCaret(BuildContext context) {
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
-    return isRtl ? PhosphorIconsRegular.caretRight : PhosphorIconsRegular.caretLeft;
+    return PhosphorIconsRegular.caretLeft;
   }
 
-  /// سهم تفاصيل القائمة للأمام (يسار في العربية، يمين في الإنجليزية)
+  /// سهم تفاصيل القائمة للأمام (يشير لليمين)
   static IconData forwardCaret(BuildContext context) {
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
-    return isRtl ? PhosphorIconsRegular.caretLeft : PhosphorIconsRegular.caretRight;
+    return PhosphorIconsRegular.caretRight;
   }
 
-  /// سهم التقدم للأمام
+  /// سهم التقدم للأمام (يشير دائماً للأمام / اليمين لعلامات التالي والروابط)
   static IconData forwardIcon(BuildContext context) {
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
-    return isRtl ? PhosphorIconsRegular.arrowLeft : PhosphorIconsRegular.arrowRight;
+    return PhosphorIconsRegular.arrowRight;
   }
 
   /// علامة الصح القياسية (✓) محمية دائماً من الانعكاس المعكوس

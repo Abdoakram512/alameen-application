@@ -271,9 +271,12 @@ class _ResumeActionButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       icon: const Icon(Icons.play_arrow_rounded, size: 20),
-      label: const Text(
+      label: Text(
         'متابعة المحاضرة',
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+        style: AppTextStyles.button.copyWith(
+          color: AppColors.primary,
+          fontSize: 13.5,
+        ),
       ),
       onPressed: onPressed,
     );
