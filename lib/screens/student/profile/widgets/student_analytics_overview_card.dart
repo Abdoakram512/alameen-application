@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../../../core/di/injection_container.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../models/assignment_submission.dart';
@@ -17,13 +19,11 @@ import 'student_weekly_activity_card.dart';
 class StudentAnalyticsOverviewCard extends StatefulWidget {
   final UserModel? currentUser;
   final List<Course> enrolledCourses;
-  final StudentAssignmentsRepository? assignmentsRepository;
 
   const StudentAnalyticsOverviewCard({
     super.key,
     required this.currentUser,
     required this.enrolledCourses,
-    this.assignmentsRepository,
   });
 
   @override
@@ -51,12 +51,12 @@ class _StudentAnalyticsOverviewCardState
 
   void _loadSubmissions() {
     final uid = widget.currentUser?.uid;
-    if (uid != null && uid.isNotEmpty && widget.assignmentsRepository != null) {
-      _submissionsFuture = widget.assignmentsRepository!
+    if (uid != null && uid.isNotEmpty) {
+      _submissionsFuture = sl<StudentAssignmentsRepository>()
           .getAssignments()
           .then((data) => data.submissions);
     } else {
-      _submissionsFuture = Future.value(const <AssignmentSubmission>[]);
+      _submissionsFuture = null;
     }
   }
 

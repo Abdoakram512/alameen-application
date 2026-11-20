@@ -10,12 +10,9 @@ import '../../core/widgets/app_error_view.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../logic/content/content_cubit.dart';
 import '../../logic/content/content_state.dart';
-import '../../repositories/student_content_repository.dart';
 
 class PrivacyPolicyScreen extends StatefulWidget {
-  final ContentCubit? cubit;
-
-  const PrivacyPolicyScreen({super.key, this.cubit});
+  const PrivacyPolicyScreen({super.key});
 
   @override
   State<PrivacyPolicyScreen> createState() => _PrivacyPolicyScreenState();
@@ -28,15 +25,12 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.cubit != null) {
-      _cubit = widget.cubit!;
-    } else if (sl.isRegistered<ContentCubit>()) {
+    if (sl.isRegistered<ContentCubit>()) {
       _cubit = sl<ContentCubit>();
-      _ownsCubit = true;
     } else {
-      _cubit = ContentCubit(repository: sl<StudentContentRepository>());
-      _ownsCubit = true;
+      _cubit = ContentCubit();
     }
+    _ownsCubit = true;
     _cubit.loadPrivacyPolicy();
   }
 

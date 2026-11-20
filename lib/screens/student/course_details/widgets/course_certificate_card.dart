@@ -16,7 +16,6 @@ class CourseCertificateCard extends StatefulWidget {
   final UserModel? user;
   final int completedLessonsCount;
   final int totalLessonsCount;
-  final StudentCertificatesRepository? repository;
 
   const CourseCertificateCard({
     super.key,
@@ -24,7 +23,6 @@ class CourseCertificateCard extends StatefulWidget {
     required this.user,
     required this.completedLessonsCount,
     required this.totalLessonsCount,
-    this.repository,
   });
 
   @override
@@ -37,10 +35,9 @@ class _CourseCertificateCardState extends State<CourseCertificateCard> {
   bool _hasChecked = false;
 
   StudentCertificatesRepository get _repository =>
-      widget.repository ??
-      (sl.isRegistered<StudentCertificatesRepository>()
+      sl.isRegistered<StudentCertificatesRepository>()
           ? sl<StudentCertificatesRepository>()
-          : StudentCertificatesRepositoryImpl());
+          : StudentCertificatesRepositoryImpl();
 
   @override
   void initState() {

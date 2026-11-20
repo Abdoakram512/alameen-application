@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_loading_indicator.dart';
@@ -16,6 +17,7 @@ import '../../../../features/payments/presentation/cubits/receipts/receipts_cubi
 import '../../../../features/payments/presentation/cubits/receipts/receipts_state.dart';
 import '../../../../logic/auth/auth_cubit.dart';
 import '../../../../logic/auth/auth_state.dart';
+import '../../../../repositories/student_notifications_repository.dart';
 import '../../../../widgets/language_switch_button.dart';
 
 /// الشريط العلوي لبوابة المتدرب مع عداد فعلي لحالة طلبات الالتحاق (بدلاً من الأرقام الوهمية).
@@ -125,18 +127,49 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
             );
           },
         ),
-        // زر الإشعارات والتنبيهات
-        IconButton(
-          tooltip: 'الإشعارات والتنبيهات',
-          icon: const Icon(
-            PhosphorIconsRegular.bell,
-            color: AppColors.primary,
-            size: 23,
+        // جرس الإشعارات والتنبيهات المربوط بـ Laravel Notifications REST API
+        if (sl.isRegistered<StudentNotificationsRepository>())
+          ValueListenableBuilder<int>(
+            valueListenable:
+                sl<StudentNotificationsRepository>().unreadCountListenable,
+            builder: (context, unreadCount, _) {
+              return IconButton(
+                tooltip: 'الإشعارات والتنبيهات',
+                icon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  backgroundColor: AppColors.primary,
+                  textColor: Colors.white,
+                  label: Text(
+                    unreadCount > 99 ? '99+' : '$unreadCount',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  child: const Icon(
+                    PhosphorIconsRegular.bell,
+                    color: AppColors.primary,
+                    size: 23,
+                  ),
+                ),
+                onPressed: () {
+                  context.push('/notifications');
+                },
+              );
+            },
+          )
+        else
+          IconButton(
+            tooltip: 'الإشعارات والتنبيهات',
+            icon: const Icon(
+              PhosphorIconsRegular.bell,
+              color: AppColors.primary,
+              size: 23,
+            ),
+            onPressed: () {
+              context.push('/notifications');
+            },
           ),
-          onPressed: () {
-            context.push('/notifications');
-          },
-        ),
         const SizedBox(width: 8),
       ],
     );

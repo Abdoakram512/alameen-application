@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secure_screen_app/core/di/injection_container.dart';
 import 'package:secure_screen_app/features/features.dart';
 import 'package:secure_screen_app/models/bootstrap_data.dart';
 
@@ -184,12 +185,16 @@ void main() {
         },
       );
       final cubit = ContentCubit(repository: repo);
+      if (sl.isRegistered<ContentCubit>()) {
+        sl.unregister<ContentCubit>();
+      }
+      sl.registerSingleton<ContentCubit>(cubit);
 
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Directionality(
             textDirection: TextDirection.rtl,
-            child: AboutUsScreen(cubit: cubit),
+            child: AboutUsScreen(),
           ),
         ),
       );
@@ -202,6 +207,9 @@ void main() {
       expect(find.text('نص تفصيلي عن الرؤية والأهداف.'), findsOneWidget);
 
       await cubit.close();
+      if (sl.isRegistered<ContentCubit>()) {
+        sl.unregister<ContentCubit>();
+      }
     });
 
     testWidgets('FaqsScreen renders FAQ items loaded from ContentCubit',
@@ -212,12 +220,16 @@ void main() {
         ],
       );
       final cubit = ContentCubit(repository: repo);
+      if (sl.isRegistered<ContentCubit>()) {
+        sl.unregister<ContentCubit>();
+      }
+      sl.registerSingleton<ContentCubit>(cubit);
 
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Directionality(
             textDirection: TextDirection.rtl,
-            child: FaqsScreen(cubit: cubit),
+            child: FaqsScreen(),
           ),
         ),
       );
@@ -229,6 +241,9 @@ void main() {
       expect(find.text('كيف أسجل في دورة؟'), findsOneWidget);
 
       await cubit.close();
+      if (sl.isRegistered<ContentCubit>()) {
+        sl.unregister<ContentCubit>();
+      }
     });
 
     testWidgets('PrivacyPolicyScreen renders policy loaded from ContentCubit',
@@ -240,12 +255,16 @@ void main() {
         },
       );
       final cubit = ContentCubit(repository: repo);
+      if (sl.isRegistered<ContentCubit>()) {
+        sl.unregister<ContentCubit>();
+      }
+      sl.registerSingleton<ContentCubit>(cubit);
 
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Directionality(
             textDirection: TextDirection.rtl,
-            child: PrivacyPolicyScreen(cubit: cubit),
+            child: PrivacyPolicyScreen(),
           ),
         ),
       );
@@ -258,6 +277,9 @@ void main() {
       expect(find.text('تفاصيل حماية بيانات المتدربين.'), findsOneWidget);
 
       await cubit.close();
+      if (sl.isRegistered<ContentCubit>()) {
+        sl.unregister<ContentCubit>();
+      }
     });
   });
 }

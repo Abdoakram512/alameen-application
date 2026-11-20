@@ -43,8 +43,6 @@ class VideoPlayerScreen extends StatefulWidget {
   final UserModel? currentUser;
   final List<Lesson> playlist;
   final List<CourseLevel> levels;
-  final StudentLearningRepository? learningRepository;
-  final StudentAssignmentsRepository? assignmentsRepository;
 
   const VideoPlayerScreen({
     super.key,
@@ -56,8 +54,6 @@ class VideoPlayerScreen extends StatefulWidget {
     this.currentUser,
     this.playlist = const [],
     this.levels = const [],
-    this.learningRepository,
-    this.assignmentsRepository,
   });
 
   @override
@@ -115,10 +111,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final _preferences = SharedPreferencesAsync();
 
   StudentLearningRepository get _learningRepository =>
-      widget.learningRepository ??
-      (sl.isRegistered<StudentLearningRepository>()
+      sl.isRegistered<StudentLearningRepository>()
           ? sl<StudentLearningRepository>()
-          : StudentLearningRepositoryImpl());
+          : StudentLearningRepositoryImpl();
 
   String get _effectiveCourseSlug =>
       (widget.courseSlug != null && widget.courseSlug!.trim().isNotEmpty)
@@ -234,10 +229,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final uid = widget.currentUser?.uid;
     if (uid == null) return;
     try {
-      final assignmentsRepo = widget.assignmentsRepository ??
-          (sl.isRegistered<StudentAssignmentsRepository>()
-              ? sl<StudentAssignmentsRepository>()
-              : null);
+      final assignmentsRepo = sl.isRegistered<StudentAssignmentsRepository>()
+          ? sl<StudentAssignmentsRepository>()
+          : null;
       if (assignmentsRepo == null) return;
       final subs = await assignmentsRepo
           .getAssignments()
@@ -786,10 +780,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final assignmentId = widget.lesson.assignmentId;
     if (user == null || assignmentId == null || assignmentId.isEmpty) return;
     try {
-      final assignmentsRepo = widget.assignmentsRepository ??
-          (sl.isRegistered<StudentAssignmentsRepository>()
-              ? sl<StudentAssignmentsRepository>()
-              : null);
+      final assignmentsRepo = sl.isRegistered<StudentAssignmentsRepository>()
+          ? sl<StudentAssignmentsRepository>()
+          : null;
       if (assignmentsRepo == null) return;
       final assignment = await assignmentsRepo.getAssignment(
         assignmentId,

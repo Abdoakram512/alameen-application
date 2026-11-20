@@ -233,19 +233,13 @@ Future<void> initDependencies() async {
   // 4. Cubits
   if (!sl.isRegistered<AuthCubit>()) {
     sl.registerFactory<AuthCubit>(
-      () => AuthCubit(
-        authRepository: sl<StudentAuthRepository>(),
-        profileRepository: sl<StudentProfileRepository>(),
-        localCache: sl<CourseLocalCache>(),
-      ),
+      () => AuthCubit(),
     );
   }
 
   if (!sl.isRegistered<CoursesCubit>()) {
     sl.registerFactory<CoursesCubit>(
-      () => CoursesCubit(
-        coursesRepository: sl<StudentCoursesRepository>(),
-      ),
+      () => CoursesCubit(),
     );
   }
 
@@ -316,9 +310,7 @@ Future<void> initDependencies() async {
 
   if (!sl.isRegistered<ContentCubit>()) {
     sl.registerFactory<ContentCubit>(
-      () => ContentCubit(
-        repository: sl<StudentContentRepository>(),
-      ),
+      () => ContentCubit(),
     );
   }
 }

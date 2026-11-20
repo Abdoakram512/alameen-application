@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/di/injection_container.dart';
 import '../../core/network/api_exceptions.dart';
 import '../../core/storage/course_local_cache.dart';
 import '../../models/course.dart';
 import '../../models/student_courses_data.dart';
 import '../../models/student_dashboard_data.dart';
 import '../../repositories/student_auth_repository.dart';
+import '../../repositories/student_certificates_repository.dart';
+import '../../repositories/student_notifications_repository.dart';
 import '../../repositories/student_profile_repository.dart';
+import '../../repositories/student_support_repository.dart';
 import '../../services/watch_queue.dart';
+import '../assignments/assignments_cubit.dart';
 import 'auth_state.dart';
 
 class AuthCubit extends Cubit<AuthState> {
@@ -17,12 +22,18 @@ class AuthCubit extends Cubit<AuthState> {
   final CourseLocalCache? _localCache;
 
   AuthCubit({
-    required StudentAuthRepository authRepository,
+    StudentAuthRepository? authRepository,
     StudentProfileRepository? profileRepository,
     CourseLocalCache? localCache,
-  })  : _authRepository = authRepository,
-        _profileRepository = profileRepository,
-        _localCache = localCache,
+  })  : _authRepository = authRepository ?? sl<StudentAuthRepository>(),
+        _profileRepository = profileRepository ??
+            (sl.isRegistered<StudentProfileRepository>()
+                ? sl<StudentProfileRepository>()
+                : null),
+        _localCache = localCache ??
+            (sl.isRegistered<CourseLocalCache>()
+                ? sl<CourseLocalCache>()
+                : null),
         super(AuthInitial()) {
     restoreSession();
   }
@@ -90,6 +101,9 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
+        if (sl.isRegistered<AssignmentsCubit>()) {
+          sl<AssignmentsCubit>().clear();
+        }
         emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
@@ -174,6 +188,9 @@ class AuthCubit extends Cubit<AuthState> {
           ),
         );
       } else if (result.isAuthenticated && result.user != null) {
+        if (sl.isRegistered<AssignmentsCubit>()) {
+          sl<AssignmentsCubit>().clear();
+        }
         emit(Authenticated(result.user!));
       } else {
         emit(Unauthenticated());
@@ -320,10 +337,30 @@ class AuthCubit extends Cubit<AuthState> {
     final outgoingUid = state is Authenticated ? (state as Authenticated).user.uid : null;
     emit(Unauthenticated());
     try {
-      if (outgoingUid != null && outgoingUid.isNotEmpty) {
-        await WatchQueue.clearStorageForUser(outgoingUid);
+      if (sl.isRegistered<AssignmentsCubit>()) {
+        sl<AssignmentsCubit>().clear();
       }
-      await _localCache?.clearAllUserCaches();
+      if (outgoingUid != null && outgoingUid.isNotEmpty) {
+        if (sl.isRegistered<WatchQueue>()) {
+          await sl<WatchQueue>().clearUser(outgoingUid);
+        } else {
+          await WatchQueue.clearStorageForUser(outgoingUid);
+        }
+      }
+      final cache = _localCache ??
+          (sl.isRegistered<CourseLocalCache>()
+              ? sl<CourseLocalCache>()
+              : null);
+      await cache?.clearAllUserCaches();
+      if (sl.isRegistered<StudentCertificatesRepository>()) {
+        sl<StudentCertificatesRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentNotificationsRepository>()) {
+        sl<StudentNotificationsRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentSupportRepository>()) {
+        sl<StudentSupportRepository>().clearCache();
+      }
       await _authRepository.logout().timeout(const Duration(seconds: 4));
     } catch (_) {}
   }
@@ -343,7 +380,10 @@ class AuthCubit extends Cubit<AuthState> {
     final trimmedPhone = phone.trim();
 
     // Primary & Sole Remote Source: REST API update
-    final profileRepo = _profileRepository;
+    final profileRepo = _profileRepository ??
+        (sl.isRegistered<StudentProfileRepository>()
+            ? sl<StudentProfileRepository>()
+            : null);
     if (profileRepo != null) {
       try {
         await profileRepo.updateStudentProfile(
@@ -387,7 +427,10 @@ class AuthCubit extends Cubit<AuthState> {
     if (current is! Authenticated) return;
     emit(AuthLoading());
     try {
-      final profileRepo = _profileRepository;
+      final profileRepo = _profileRepository ??
+          (sl.isRegistered<StudentProfileRepository>()
+              ? sl<StudentProfileRepository>()
+              : null);
       if (profileRepo != null) {
         try {
           await profileRepo.deleteStudentAccount(
@@ -397,8 +440,28 @@ class AuthCubit extends Cubit<AuthState> {
         } catch (_) {}
       }
 
-      await WatchQueue.clearStorageForUser(current.user.uid);
-      await _localCache?.clearAllUserCaches();
+      if (sl.isRegistered<AssignmentsCubit>()) {
+        sl<AssignmentsCubit>().clear();
+      }
+      if (sl.isRegistered<WatchQueue>()) {
+        await sl<WatchQueue>().clearUser(current.user.uid);
+      } else {
+        await WatchQueue.clearStorageForUser(current.user.uid);
+      }
+      final cache = _localCache ??
+          (sl.isRegistered<CourseLocalCache>()
+              ? sl<CourseLocalCache>()
+              : null);
+      await cache?.clearAllUserCaches();
+      if (sl.isRegistered<StudentCertificatesRepository>()) {
+        sl<StudentCertificatesRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentNotificationsRepository>()) {
+        sl<StudentNotificationsRepository>().clearCache();
+      }
+      if (sl.isRegistered<StudentSupportRepository>()) {
+        sl<StudentSupportRepository>().clearCache();
+      }
       await _authRepository.logout();
       emit(Unauthenticated());
     } catch (e) {

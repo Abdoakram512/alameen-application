@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/di/injection_container.dart';
 import '../../models/course.dart';
 import '../../models/course_level.dart';
 import '../../models/lesson.dart';
@@ -21,8 +22,8 @@ class CoursesCubit extends Cubit<CoursesState> {
   int _sessionGeneration = 0;
   final Map<String, Future<Course?>> _detailRequests = {};
 
-  CoursesCubit({required StudentCoursesRepository coursesRepository})
-    : _coursesRepository = coursesRepository,
+  CoursesCubit({StudentCoursesRepository? coursesRepository})
+    : _coursesRepository = coursesRepository ?? sl<StudentCoursesRepository>(),
       super(CoursesLoading()) {
     loadCourses();
   }

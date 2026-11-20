@@ -1,12 +1,13 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/di/injection_container.dart';
 import '../../repositories/student_content_repository.dart';
 import 'content_state.dart';
 
 class ContentCubit extends Cubit<ContentState> {
   final StudentContentRepository _repository;
 
-  ContentCubit({required StudentContentRepository repository})
-      : _repository = repository,
+  ContentCubit({StudentContentRepository? repository})
+      : _repository = repository ?? sl<StudentContentRepository>(),
         super(const ContentInitial());
 
   Future<void> loadAboutUs() async {

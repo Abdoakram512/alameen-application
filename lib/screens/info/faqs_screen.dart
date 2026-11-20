@@ -12,12 +12,9 @@ import '../../core/widgets/app_error_view.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../logic/content/content_cubit.dart';
 import '../../logic/content/content_state.dart';
-import '../../repositories/student_content_repository.dart';
 
 class FaqsScreen extends StatefulWidget {
-  final ContentCubit? cubit;
-
-  const FaqsScreen({super.key, this.cubit});
+  const FaqsScreen({super.key});
 
   @override
   State<FaqsScreen> createState() => _FaqsScreenState();
@@ -30,15 +27,12 @@ class _FaqsScreenState extends State<FaqsScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.cubit != null) {
-      _cubit = widget.cubit!;
-    } else if (sl.isRegistered<ContentCubit>()) {
+    if (sl.isRegistered<ContentCubit>()) {
       _cubit = sl<ContentCubit>();
-      _ownsCubit = true;
     } else {
-      _cubit = ContentCubit(repository: sl<StudentContentRepository>());
-      _ownsCubit = true;
+      _cubit = ContentCubit();
     }
+    _ownsCubit = true;
     _cubit.loadFaqs();
   }
 
