@@ -28,6 +28,7 @@ import '../screens/student/student_home_screen.dart';
 import '../screens/student/student_profile_screen.dart';
 import '../screens/student/support/student_support_tickets_screen.dart';
 import '../screens/student/support/ticket_conversation_screen.dart';
+import 'student_feature_scope.dart';
 import 'student_route_policy.dart';
 
 GoRouter createStudentRouter(AuthCubit authCubit) {
@@ -115,15 +116,19 @@ GoRouter createStudentRouter(AuthCubit authCubit) {
         ),
       GoRoute(
         path: '/',
-        builder: (context, state) => const StudentMainNavigationScaffold(),
+        builder: (context, state) => const StudentFeatureScope(
+          child: StudentMainNavigationScaffold(),
+        ),
         routes: [
           GoRoute(
             path: 'course/:id',
             builder: (context, state) {
               final courseId = state.pathParameters['id'] ?? '';
-              return BlocProvider<ReceiptSubmissionCubit>(
-                create: (_) => sl<ReceiptSubmissionCubit>(),
-                child: CourseDetailsScreen(courseId: courseId),
+              return StudentFeatureScope(
+                child: BlocProvider<ReceiptSubmissionCubit>(
+                  create: (_) => sl<ReceiptSubmissionCubit>(),
+                  child: CourseDetailsScreen(courseId: courseId),
+                ),
               );
             },
           ),

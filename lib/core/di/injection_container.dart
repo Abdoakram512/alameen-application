@@ -232,19 +232,19 @@ Future<void> initDependencies() async {
 
   // 4. Cubits
   if (!sl.isRegistered<AuthCubit>()) {
-    sl.registerFactory<AuthCubit>(
+    sl.registerLazySingleton<AuthCubit>(
       () => AuthCubit(),
     );
   }
 
   if (!sl.isRegistered<CoursesCubit>()) {
-    sl.registerFactory<CoursesCubit>(
+    sl.registerLazySingleton<CoursesCubit>(
       () => CoursesCubit(),
     );
   }
 
   if (!sl.isRegistered<ReceiptsCubit>()) {
-    sl.registerFactory<ReceiptsCubit>(
+    sl.registerLazySingleton<ReceiptsCubit>(
       () => ReceiptsCubit(
         repository: sl<StudentPaymentRepository>(),
       ),
@@ -260,7 +260,7 @@ Future<void> initDependencies() async {
   }
 
   if (!sl.isRegistered<CourseEntitlementCubit>()) {
-    sl.registerFactory<CourseEntitlementCubit>(
+    sl.registerLazySingleton<CourseEntitlementCubit>(
       () => CourseEntitlementCubit(
         coursesRepository: sl<StudentCoursesRepository>(),
       ),

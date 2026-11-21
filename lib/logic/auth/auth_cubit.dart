@@ -7,6 +7,8 @@ import '../../core/storage/course_local_cache.dart';
 import '../../models/course.dart';
 import '../../models/student_courses_data.dart';
 import '../../models/student_dashboard_data.dart';
+import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
+import '../../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import '../../repositories/student_auth_repository.dart';
 import '../../repositories/student_certificates_repository.dart';
 import '../../repositories/student_notifications_repository.dart';
@@ -14,6 +16,7 @@ import '../../repositories/student_profile_repository.dart';
 import '../../repositories/student_support_repository.dart';
 import '../../services/watch_queue.dart';
 import '../assignments/assignments_cubit.dart';
+import '../courses/courses_cubit.dart';
 import 'auth_state.dart';
 
 class AuthCubit extends Cubit<AuthState> {
@@ -340,6 +343,15 @@ class AuthCubit extends Cubit<AuthState> {
       if (sl.isRegistered<AssignmentsCubit>()) {
         sl<AssignmentsCubit>().clear();
       }
+      if (sl.isRegistered<CoursesCubit>()) {
+        sl<CoursesCubit>().clearStudentSession();
+      }
+      if (sl.isRegistered<CourseEntitlementCubit>()) {
+        sl<CourseEntitlementCubit>().clear();
+      }
+      if (sl.isRegistered<ReceiptsCubit>()) {
+        sl<ReceiptsCubit>().clear();
+      }
       if (outgoingUid != null && outgoingUid.isNotEmpty) {
         if (sl.isRegistered<WatchQueue>()) {
           await sl<WatchQueue>().clearUser(outgoingUid);
@@ -442,6 +454,15 @@ class AuthCubit extends Cubit<AuthState> {
 
       if (sl.isRegistered<AssignmentsCubit>()) {
         sl<AssignmentsCubit>().clear();
+      }
+      if (sl.isRegistered<CoursesCubit>()) {
+        sl<CoursesCubit>().clearStudentSession();
+      }
+      if (sl.isRegistered<CourseEntitlementCubit>()) {
+        sl<CourseEntitlementCubit>().clear();
+      }
+      if (sl.isRegistered<ReceiptsCubit>()) {
+        sl<ReceiptsCubit>().clear();
       }
       if (sl.isRegistered<WatchQueue>()) {
         await sl<WatchQueue>().clearUser(current.user.uid);

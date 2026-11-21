@@ -8,11 +8,8 @@ import 'core/config/app_config.dart';
 import 'core/di/injection_container.dart';
 import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
-import 'features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
-import 'features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import 'logic/auth/auth_cubit.dart';
 import 'logic/auth/auth_state.dart';
-import 'logic/courses/courses_cubit.dart';
 import 'navigation/app_router.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/security/security_protection_watcher.dart';
@@ -126,110 +123,65 @@ class SecureStudentApp extends StatefulWidget {
 
 class _SecureStudentAppState extends State<SecureStudentApp> {
   late final AuthCubit _authCubit;
-  late final CoursesCubit _coursesCubit;
-  late final ReceiptsCubit _receiptsCubit;
-  late final CourseEntitlementCubit _courseEntitlementCubit;
   late final GoRouter _router;
-  String? _lastSyncedUid;
 
   @override
   void initState() {
     super.initState();
     _authCubit = sl<AuthCubit>();
-    _coursesCubit = sl<CoursesCubit>();
-    _receiptsCubit = sl<ReceiptsCubit>();
-    _courseEntitlementCubit = sl<CourseEntitlementCubit>();
     _router = createStudentRouter(_authCubit);
-
-    _syncSessionState(_authCubit.state);
-  }
-
-  void _syncSessionState(AuthState state) {
-    if (state is Authenticated) {
-      final uid = state.user.uid;
-      if (_lastSyncedUid != uid) {
-        if (_lastSyncedUid != null) _coursesCubit.clearStudentSession();
-        _lastSyncedUid = uid;
-
-        // الطلب الوحيد الضروري لإظهار حالة قفل الدورات والوصول في الشاشة الرئيسية
-        unawaited(
-          _courseEntitlementCubit.syncStudentEnrollments(studentId: uid),
-        );
-      }
-    } else if (state is Unauthenticated ||
-        state is AuthSuspended ||
-        state is AuthPendingApproval) {
-      _lastSyncedUid = null;
-      _courseEntitlementCubit.clear();
-      _coursesCubit.clearStudentSession();
-      _receiptsCubit.clear();
-    }
   }
 
   @override
   void dispose() {
     _router.dispose();
     _authCubit.close();
-    _coursesCubit.close();
-    _receiptsCubit.close();
-    _courseEntitlementCubit.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider<AuthCubit>.value(value: _authCubit),
-        BlocProvider<CoursesCubit>.value(value: _coursesCubit),
-        BlocProvider<ReceiptsCubit>.value(value: _receiptsCubit),
-        BlocProvider<CourseEntitlementCubit>.value(
-          value: _courseEntitlementCubit,
-        ),
-      ],
-      child: BlocListener<AuthCubit, AuthState>(
-        bloc: _authCubit,
-        listener: (context, authState) => _syncSessionState(authState),
-        child: MaterialApp.router(
-          key: ValueKey(context.locale.languageCode),
-          title: 'app_name'.tr(),
-          debugShowCheckedModeBanner: false,
-          routerConfig: _router,
-          localizationsDelegates: context.localizationDelegates,
-          supportedLocales: context.supportedLocales,
-          locale: context.locale,
-          builder: (context, child) {
-            return BlocBuilder<AuthCubit, AuthState>(
-              bloc: _authCubit,
-              builder: (context, authState) {
-                final studentId = authState is Authenticated
-                    ? authState.user.uid
-                    : null;
-                final apiClient = sl.isRegistered<ApiClient>()
-                    ? sl<ApiClient>()
-                    : null;
-                return SecurityProtectionWatcher(
-                  studentId: studentId,
-                  apiClient: apiClient,
-                  child: OnboardingGate(
-                    onSelectRegister: () {
-                      if (_authCubit.state is! Authenticated) {
-                        _router.go('/register');
-                      }
-                    },
-                    onSelectLogin: () {
-                      if (_authCubit.state is! Authenticated) {
-                        _router.go('/login');
-                      }
-                    },
-                    child: child ?? const SizedBox.shrink(),
-                  ),
-                );
-              },
-            );
-          },
-          theme: AppTheme.lightTheme,
-        ),
+    return BlocProvider<AuthCubit>.value(
+      value: _authCubit,
+      child: MaterialApp.router(
+        key: ValueKey(context.locale.languageCode),
+        title: 'app_name'.tr(),
+        debugShowCheckedModeBanner: false,
+        routerConfig: _router,
+        localizationsDelegates: context.localizationDelegates,
+        supportedLocales: context.supportedLocales,
+        locale: context.locale,
+        builder: (context, child) {
+          return BlocBuilder<AuthCubit, AuthState>(
+            bloc: _authCubit,
+            builder: (context, authState) {
+              final studentId = authState is Authenticated
+                  ? authState.user.uid
+                  : null;
+              final apiClient = sl.isRegistered<ApiClient>()
+                  ? sl<ApiClient>()
+                  : null;
+              return SecurityProtectionWatcher(
+                studentId: studentId,
+                apiClient: apiClient,
+                child: OnboardingGate(
+                  onSelectRegister: () {
+                    if (_authCubit.state is! Authenticated) {
+                      _router.go('/register');
+                    }
+                  },
+                  onSelectLogin: () {
+                    if (_authCubit.state is! Authenticated) {
+                      _router.go('/login');
+                    }
+                  },
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              );
+            },
+          );
+        },
+        theme: AppTheme.lightTheme,
       ),
     );
   }
