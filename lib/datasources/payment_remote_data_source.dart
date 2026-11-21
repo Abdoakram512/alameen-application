@@ -74,7 +74,11 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
         'payment_method': paymentMethod.apiValue,
         'sender_name': senderName.trim(),
         'sender_account': senderAccount.trim(),
+        'sender_identifier': senderAccount.trim().isNotEmpty
+            ? senderAccount.trim()
+            : senderName.trim(),
         'amount': cleanAmount,
+        'amount_paid': cleanAmount,
         if (transactionReference != null &&
             transactionReference.trim().isNotEmpty)
           'transaction_reference': transactionReference.trim(),

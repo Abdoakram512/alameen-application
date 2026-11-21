@@ -111,6 +111,11 @@ class SafeHttpLogger extends Interceptor {
       status: err.response?.statusCode,
       kind: err.type.name,
     );
+    if (kDebugMode && err.response?.data != null) {
+      AppLogger.e(
+        'Server Error Body [${err.response?.statusCode}]: ${err.response?.data}',
+      );
+    }
     handler.next(err);
   }
 }
