@@ -39,6 +39,7 @@ class SafeHttpLogger extends Interceptor {
   };
 
   String _path(RequestOptions options) {
+    if (kDebugMode) return options.path;
     final path = Uri.tryParse(options.path)?.path ?? '';
     return path
         .split('/')

@@ -23,6 +23,7 @@ class StudentPaymentRepositoryImpl implements StudentPaymentRepository {
     try {
       return await _remoteDataSource.submitCourseReceipt(
         courseSlug: input.effectiveCourseSlug,
+        courseId: input.courseId,
         paymentMethod: input.paymentMethod!,
         senderName: input.senderName,
         senderAccount: input.senderAccount,

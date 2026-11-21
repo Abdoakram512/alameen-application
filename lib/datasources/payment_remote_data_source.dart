@@ -13,6 +13,7 @@ abstract class PaymentRemoteDataSource {
   /// POST /student/courses/{slug}/receipt
   Future<PaymentReceiptModel> submitCourseReceipt({
     required String courseSlug,
+    String? courseId,
     required PaymentMethod paymentMethod,
     required String senderName,
     required String senderAccount,
@@ -35,6 +36,7 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
   @override
   Future<PaymentReceiptModel> submitCourseReceipt({
     required String courseSlug,
+    String? courseId,
     required PaymentMethod paymentMethod,
     required String senderName,
     required String senderAccount,
@@ -79,6 +81,8 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
             : senderName.trim(),
         'amount': cleanAmount,
         'amount_paid': cleanAmount,
+        if (courseId != null && courseId.trim().isNotEmpty)
+          'course_id': int.tryParse(courseId.trim()) ?? courseId.trim(),
         if (transactionReference != null &&
             transactionReference.trim().isNotEmpty)
           'transaction_reference': transactionReference.trim(),
