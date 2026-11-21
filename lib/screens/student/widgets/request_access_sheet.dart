@@ -198,61 +198,87 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
           child: Center(
             heightFactor: 1,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 540),
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
-                  top: 20,
-                  left: 20,
-                  right: 20,
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              constraints: BoxConstraints(
+                maxWidth: 540,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.90,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4.5,
+                      margin: const EdgeInsets.only(top: 14, bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                PhosphorIconsRegular.receipt,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                widget.isResubmission
-                                    ? (context.locale.languageCode == 'ar'
-                                          ? 'إعادة إرسال إيصال السداد'
-                                          : 'Resubmit Payment Receipt')
-                                    : 'requests.sheet_title'.tr(),
-                                style: AppTextStyles.heading3.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'dialogs.cancel'.tr(),
-                              icon: const Icon(
-                                PhosphorIconsRegular.x,
-                                size: 20,
-                              ),
-                              onPressed: isSubmitting
-                                  ? null
-                                  : () => Navigator.pop(context),
-                            ),
-                          ],
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            PhosphorIconsRegular.receipt,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            widget.isResubmission
+                                ? (context.locale.languageCode == 'ar'
+                                      ? 'إعادة إرسال إيصال السداد'
+                                      : 'Resubmit Payment Receipt')
+                                : 'requests.sheet_title'.tr(),
+                            style: AppTextStyles.heading3.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'dialogs.cancel'.tr(),
+                          icon: const Icon(
+                            PhosphorIconsRegular.x,
+                            size: 20,
+                          ),
+                          onPressed: isSubmitting
+                              ? null
+                              : () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: AppColors.divider),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        top: 16,
+                        left: 20,
+                        right: 20,
+                        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+                      ),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                         const SizedBox(height: 16),
                         Container(
                           width: double.infinity,
@@ -719,9 +745,11 @@ class _RequestAccessSheetState extends State<RequestAccessSheet> {
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
       },
     );
   }

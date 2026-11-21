@@ -29,6 +29,7 @@ class CreateTicketSheet extends StatefulWidget {
     return showModalBottomSheet<SupportTicket>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),

@@ -178,9 +178,11 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   void _showReceiptsStatusSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) {
         return BlocBuilder<ReceiptsCubit, ReceiptsState>(
@@ -196,20 +198,45 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
 
             return SafeArea(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                constraints: BoxConstraints(
+                  maxWidth: 560,
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4.5,
+                        margin: const EdgeInsets.only(top: 14, bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
+                      ),
+                      child: Row(
                         children: [
-                          const Icon(
-                            PhosphorIconsRegular.receipt,
-                            color: AppColors.primary,
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              PhosphorIconsRegular.receipt,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               'سجل إيصالات السداد المالي',
@@ -220,35 +247,41 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                           ),
                           IconButton(
                             onPressed: () => Navigator.pop(sheetContext),
-                            icon: const Icon(PhosphorIconsRegular.x, size: 19),
+                            icon: const Icon(PhosphorIconsRegular.x, size: 20),
                           ),
                         ],
                       ),
-                      const Divider(height: 20),
-                      if (isLoading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 32),
-                          child: Center(
-                            child: AppLoadingIndicator(
-                              message: 'جاري تحميل سجل إيصالات السداد...',
-                            ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Divider(height: 1, color: AppColors.divider),
+                    if (isLoading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 36),
+                        child: Center(
+                          child: AppLoadingIndicator(
+                            message: 'جاري تحميل سجل إيصالات السداد...',
                           ),
-                        )
-                      else if (sorted.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Text(
-                              'لا توجد إيصالات سداد مسجلة حالياً.',
-                              style: AppTextStyles.bodyMedium,
-                            ),
+                        ),
+                      )
+                    else if (sorted.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 32,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'لا توجد إيصالات سداد مسجلة حالياً.',
+                            style: AppTextStyles.bodyMedium,
                           ),
-                        )
-                      else
-                        Flexible(
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            itemCount: sorted.length,
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                          itemCount: sorted.length,
                             separatorBuilder: (_, _) =>
                                 const SizedBox(height: 10),
                             itemBuilder: (_, index) {
@@ -351,11 +384,10 @@ class StudentHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ],
                   ),
                 ),
-              ),
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    }
   }
-}
