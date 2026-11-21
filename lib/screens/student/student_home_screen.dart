@@ -9,6 +9,7 @@ import '../../core/widgets/app_empty_state.dart';
 import '../../core/widgets/app_error_view.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../core/widgets/app_section_header.dart';
+import '../../features/courses/domain/entities/course_entitlement.dart';
 import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_cubit.dart';
 import '../../features/courses/presentation/cubits/course_entitlement/course_entitlement_state.dart';
 import '../../logic/auth/auth_cubit.dart';
@@ -168,20 +169,38 @@ class StudentHomeScreen extends StatelessWidget {
                                 maxCrossAxisExtent: 440,
                                 mainAxisSpacing: 16,
                                 crossAxisSpacing: 16,
-                                childAspectRatio: 0.80,
+                                childAspectRatio: 0.89,
                               ),
                           delegate: SliverChildBuilderDelegate((
                             context,
                             index,
                           ) {
                             final course = filteredCourses[index];
+                            final entitlement =
+                                entitlementState.entitlementFor(course.id);
+                            final isExplicitlyDenied =
+                                entitlement.status ==
+                                    CourseAccessState.notEnrolled ||
+                                entitlement.status ==
+                                    CourseAccessState.forbidden ||
+                                entitlement.status ==
+                                    CourseAccessState.unauthorized;
+                            final isKnownEnrolled =
+                                course.hasEnrolled ||
+                                (currentUser != null &&
+                                    currentUser.enrolledCourseIds.contains(
+                                      course.id,
+                                    )) ||
+                                course.accessMode == CourseAccessMode.open;
+                            final isEnrolled =
+                                currentUser != null &&
+                                !currentUser.isCourseExpired(course.id) &&
+                                (entitlement.canAccessProtectedContent ||
+                                    (!isExplicitlyDenied && isKnownEnrolled));
+
                             return StudentCourseCard(
                               course: course,
-                              isEnrolled:
-                                  currentUser != null &&
-                                  entitlementState.isCourseAuthorized(
-                                    course.id,
-                                  ),
+                              isEnrolled: isEnrolled,
                               progress: (course.serverProgressPercent != null)
                                   ? (course.serverProgressPercent! / 100.0)
                                         .clamp(0.0, 1.0)

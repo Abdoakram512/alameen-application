@@ -80,11 +80,11 @@ class _DebugApiTestScreenState extends State<DebugApiTestScreen> {
         endpoint: '/student/receipts',
         icon: PhosphorIconsRegular.receipt,
       ),
-      ApiTestItem(
-        title: 'المهام والتطبيقات السريرية',
-        endpoint: '/student/assignments',
-        icon: PhosphorIconsRegular.microphone,
-      ),
+      // ApiTestItem(
+      //   title: 'المهام والتطبيقات السريرية',
+      //   endpoint: '/student/assignments',
+      //   icon: PhosphorIconsRegular.microphone,
+      // ),
       ApiTestItem(
         title: 'سجل الدرجات والتقييمات',
         endpoint: '/student/grades',

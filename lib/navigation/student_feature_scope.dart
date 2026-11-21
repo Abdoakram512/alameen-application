@@ -8,6 +8,7 @@ import '../features/payments/presentation/cubits/receipts/receipts_cubit.dart';
 import '../logic/auth/auth_cubit.dart';
 import '../logic/auth/auth_state.dart';
 import '../logic/courses/courses_cubit.dart';
+import '../logic/courses/courses_state.dart';
 
 /// نطاق ميزات الطالب المشتركة (Lazy on-demand scoped provider)
 /// يضمن:
@@ -27,6 +28,7 @@ class _StudentFeatureScopeState extends State<StudentFeatureScope> {
   late final ReceiptsCubit _receiptsCubit;
   late final CourseEntitlementCubit _courseEntitlementCubit;
   StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<CoursesState>? _coursesSubscription;
   String? _lastSyncedUid;
 
   @override
@@ -35,6 +37,17 @@ class _StudentFeatureScopeState extends State<StudentFeatureScope> {
     _coursesCubit = sl<CoursesCubit>();
     _receiptsCubit = sl<ReceiptsCubit>();
     _courseEntitlementCubit = sl<CourseEntitlementCubit>();
+
+    if (_coursesCubit.state is CoursesLoaded) {
+      _courseEntitlementCubit.seedInitialEntitlements(
+        (_coursesCubit.state as CoursesLoaded).allCourses,
+      );
+    }
+    _coursesSubscription = _coursesCubit.stream.listen((cState) {
+      if (cState is CoursesLoaded) {
+        _courseEntitlementCubit.seedInitialEntitlements(cState.allCourses);
+      }
+    });
 
     final authCubit = sl<AuthCubit>();
     _syncSession(authCubit.state);
@@ -66,6 +79,7 @@ class _StudentFeatureScopeState extends State<StudentFeatureScope> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    _coursesSubscription?.cancel();
     super.dispose();
   }
 

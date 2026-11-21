@@ -87,16 +87,21 @@ class PaymentReceiptModel extends PaymentReceipt {
             ? json['payment_method_label'].toString()
             : method.displayLabelAr;
 
-    final String sender = json['sender_identifier']?.toString() ?? '';
+    final String sender = json['sender_identifier']?.toString() ??
+        json['sender_name']?.toString() ??
+        json['sender_account']?.toString() ??
+        '';
 
     final String? ref = json['transaction_reference']?.toString();
 
-    final dynamic amountRaw = json['amount_paid'];
+    final dynamic amountRaw = json['amount_paid'] ?? json['amount'];
     final double amount = (amountRaw is num)
         ? amountRaw.toDouble()
         : (double.tryParse(amountRaw?.toString() ?? '') ?? 0.0);
 
-    final String? receiptUrl = json['receipt_image_url']?.toString();
+    final String? receiptUrl = json['receipt_image_url']?.toString() ??
+        json['receipt_url']?.toString() ??
+        json['receipt_image']?.toString();
 
     final ReceiptStatus status =
         ReceiptStatus.fromApiValue(json['status']?.toString());

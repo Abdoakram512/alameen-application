@@ -68,12 +68,13 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
       }
 
       final fileName = receiptFilePath.split(Platform.pathSeparator).last;
+      final cleanAmount = amount % 1 == 0 ? amount.toInt() : amount;
 
       final formMap = <String, dynamic>{
         'payment_method': paymentMethod.apiValue,
         'sender_name': senderName.trim(),
         'sender_account': senderAccount.trim(),
-        'amount': amount,
+        'amount': cleanAmount,
         if (transactionReference != null &&
             transactionReference.trim().isNotEmpty)
           'transaction_reference': transactionReference.trim(),
@@ -85,9 +86,10 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
       };
 
       final formData = FormData.fromMap(formMap);
+      final encodedSlug = Uri.encodeComponent(courseSlug.trim());
 
       final response = await _apiClient.postMultipart(
-        '/student/courses/$courseSlug/receipt',
+        '/student/courses/$encodedSlug/receipt',
         formData: formData,
       );
 
@@ -130,18 +132,30 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
       );
 
       final data = response.data;
-      if (data is Map<String, dynamic> && data['data'] is Map) {
-        final innerData = data['data'] as Map;
-        final list = innerData['receipts'];
-        if (list is List) {
-          return list
-              .map(
-                (item) => PaymentReceiptModel.fromJson(
-                  Map<String, dynamic>.from(item as Map),
-                ),
-              )
-              .toList();
+      List<dynamic>? rawList;
+
+      if (data is Map<String, dynamic>) {
+        final innerData = data['data'];
+        if (innerData is Map && innerData['receipts'] is List) {
+          rawList = innerData['receipts'] as List;
+        } else if (innerData is List) {
+          rawList = innerData;
+        } else if (data['receipts'] is List) {
+          rawList = data['receipts'] as List;
         }
+      } else if (data is List) {
+        rawList = data;
+      }
+
+      if (rawList != null) {
+        return rawList
+            .whereType<Map>()
+            .map(
+              (item) => PaymentReceiptModel.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .toList();
       }
 
       return const <PaymentReceiptModel>[];

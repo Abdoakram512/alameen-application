@@ -230,6 +230,27 @@ class CourseEntitlementCubit extends Cubit<CourseEntitlementState> {
     emit(state.copyWith(entitlements: Map.unmodifiable(updated)));
   }
 
+  /// مزامنة مبدئية فورية للأهلية استناداً إلى الدورات المحملة مسبقاً لمنع أي وميض قفل عند الفتح.
+  void seedInitialEntitlements(Iterable<Course> courses) {
+    if (isClosed) return;
+    final now = DateTime.now();
+    final updated = Map<String, CourseEntitlement>.from(state.entitlements);
+    var changed = false;
+    for (final course in courses) {
+      if (!updated.containsKey(course.id) && course.hasEnrolled) {
+        updated[course.id] = CourseEntitlement.enrolled(
+          course.id,
+          message: 'تم تأكيد اشتراكك في دورة "${course.title}".',
+          checkedAt: now,
+        );
+        changed = true;
+      }
+    }
+    if (changed) {
+      emit(state.copyWith(entitlements: Map.unmodifiable(updated)));
+    }
+  }
+
   /// تسجيل خطأ تحقق وارد من تحميل تفاصيل الدورة مع التمييز الصارم بين انقطاع الشبكة والمنع المؤكد.
   void recordVerificationFailure(String courseId, AppFailure failure) {
     if (isClosed) return;

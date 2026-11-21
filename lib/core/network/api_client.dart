@@ -128,15 +128,13 @@ class ApiClient {
     ProgressCallback? onSendProgress,
   }) async {
     try {
-      final multipartOptions = (options ?? Options()).copyWith(
-        contentType: 'multipart/form-data',
-      );
-
+      // Do not force manual contentType: 'multipart/form-data'.
+      // Dio automatically generates the correct Content-Type header with the unique multipart boundary.
       return await _dio.post(
         path,
         data: formData,
         queryParameters: queryParameters,
-        options: multipartOptions,
+        options: options,
         cancelToken: cancelToken,
         onSendProgress: onSendProgress,
       );

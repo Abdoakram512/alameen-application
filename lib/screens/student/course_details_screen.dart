@@ -241,8 +241,18 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
             return BlocBuilder<CourseEntitlementCubit, CourseEntitlementState>(
               builder: (context, entitlementState) {
                 final entitlement = entitlementState.entitlementFor(course.id);
-                final isEnrolled =
-                    !isExpired && entitlement.canAccessProtectedContent;
+                final isExplicitlyDenied =
+                    entitlement.status == CourseAccessState.notEnrolled ||
+                    entitlement.status == CourseAccessState.forbidden ||
+                    entitlement.status == CourseAccessState.unauthorized;
+                final isKnownEnrolled =
+                    course.hasEnrolled ||
+                    (currentUser != null &&
+                        currentUser.enrolledCourseIds.contains(course.id)) ||
+                    course.accessMode == CourseAccessMode.open;
+                final isEnrolled = !isExpired &&
+                    (entitlement.canAccessProtectedContent ||
+                        (!isExplicitlyDenied && isKnownEnrolled));
                 final isVerifying =
                     entitlement.status == CourseAccessState.loading;
 

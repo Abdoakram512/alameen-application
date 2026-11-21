@@ -56,11 +56,11 @@ class StudentCourseCard extends StatelessWidget {
                           cacheWidth: 480,
                           fit: BoxFit.cover,
                         ),
-                        Positioned(
+                        PositionedDirectional(
                           top: 10,
-                          right: 10,
-                          width: 120,
+                          start: 10,
                           child: Container(
+                            constraints: const BoxConstraints(maxWidth: 160),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 4,
@@ -83,9 +83,9 @@ class StudentCourseCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        Positioned(
+                        PositionedDirectional(
                           bottom: 10,
-                          left: 10,
+                          end: 10,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -96,6 +96,13 @@ class StudentCourseCard extends StatelessWidget {
                                   ? AppColors.success
                                   : AppColors.primary,
                               borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.18),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: Text(
                               isEnrolled
@@ -125,37 +132,38 @@ class StudentCourseCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.heading3.copyWith(
                           fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                          height: 1.4,
+                          fontSize: 15.5,
+                          height: 1.35,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 5),
                       Text(
                         course.description
                             .replaceAll(RegExp(r'\s+'), ' ')
                             .trim(),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodyMedium.copyWith(fontSize: 13),
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                          height: 1.35,
+                        ),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                      _MetaItem(
+                        icon: PhosphorIconsRegular.chalkboardTeacher,
+                        text: course.instructor,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
                         children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: _MetaItem(
-                              icon: PhosphorIconsRegular.chalkboardTeacher,
-                              text: course.instructor,
-                            ),
-                          ),
-                          if (course.levels.isNotEmpty)
+                          if (course.levels.isNotEmpty) ...[
                             _MetaItem(
                               icon: PhosphorIconsRegular.stack,
                               text: '${course.levels.length} مستويات',
                             ),
+                            const SizedBox(width: 14),
+                          ],
                           _MetaItem(
                             icon: PhosphorIconsRegular.playCircle,
                             text: '${course.totalLessonsCount} محاضرة',

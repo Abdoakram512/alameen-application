@@ -5,30 +5,34 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 class AppDirectionalIcons {
   AppDirectionalIcons._();
 
-  /// أيقونة الرجوع القياسية (تشير دائماً لليسار في مشغلات الفيديو والواجهات لمنع الانعكاس غير المرغوب)
+  /// أيقونة الرجوع القياسية
   static IconData backIcon(BuildContext context) {
-    return PhosphorIconsRegular.arrowLeft;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return isRtl ? PhosphorIconsRegular.arrowRight : PhosphorIconsRegular.arrowLeft;
   }
 
-  /// سهم تفاصيل القائمة (مؤشر الدخول للعناصر الفرعية: يسار في العربي، يمين في الإنجليزي)
+  /// سهم تفاصيل القائمة ومؤشر الدخول للعناصر الفرعية (موجه نحو اليمين بالعربية وفق التفضيل البصري الطبيعي)
   static IconData chevronDetail(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return isRtl ? PhosphorIconsRegular.caretRight : PhosphorIconsRegular.caretLeft;
+  }
+
+  /// سهم تفاصيل القائمة للخلف
+  static IconData backCaret(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return isRtl ? PhosphorIconsRegular.caretRight : PhosphorIconsRegular.caretLeft;
+  }
+
+  /// سهم تفاصيل القائمة للأمام
+  static IconData forwardCaret(BuildContext context) {
     final isRtl = Directionality.of(context) == TextDirection.rtl;
     return isRtl ? PhosphorIconsRegular.caretLeft : PhosphorIconsRegular.caretRight;
   }
 
-  /// سهم تفاصيل القائمة للخلف (يشير لليسار)
-  static IconData backCaret(BuildContext context) {
-    return PhosphorIconsRegular.caretLeft;
-  }
-
-  /// سهم تفاصيل القائمة للأمام (يشير لليمين)
-  static IconData forwardCaret(BuildContext context) {
-    return PhosphorIconsRegular.caretRight;
-  }
-
-  /// سهم التقدم للأمام (يشير دائماً للأمام / اليمين لعلامات التالي والروابط)
+  /// سهم التقدم للأمام (يسار في العربية لاتباع مسار التقدم الطبيعي، يمين في الإنجليزية)
   static IconData forwardIcon(BuildContext context) {
-    return PhosphorIconsRegular.arrowRight;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return isRtl ? PhosphorIconsRegular.arrowLeft : PhosphorIconsRegular.arrowRight;
   }
 
   /// علامة الصح القياسية (✓) محمية دائماً من الانعكاس المعكوس
